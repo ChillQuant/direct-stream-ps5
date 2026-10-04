@@ -27,7 +27,51 @@ ps5, playstation-5, ftp, ftp-streamer, parallel-download, direct-stream, zero-de
 
 ---
 
-## 2. GitHub Release Notes (v2.8.0)
+## 2. GitHub Release Notes (v2.8.1 Hotfix)
+
+### Tag Version
+```text
+v2.8.1
+```
+
+### Release Title
+```text
+DIRECT STREAM FOR PLAYSTATION 5 v2.8.1 — Windows Hotfix
+```
+
+### Release Description:
+```markdown
+## DIRECT STREAM FOR PLAYSTATION 5 (v2.8.1 Hotfix)
+
+This release resolves a critical startup crash on Windows environments in v2.8.0.
+
+### Fixes & Improvements in v2.8.1
+
+- **Fixed Windows Launch Crash**: Resolved an unguarded Unix `fcntl` import in `main()` that caused `ModuleNotFoundError: No module named 'fcntl'` when running `Launch Direct Stream for PlayStation 5.bat` or `run.bat`.
+- **Cross-Platform Single-Instance Locking**: Replaced `fcntl` with `_lock_instance()`:
+  - **Windows (`os.name == 'nt'`)**: Uses native `msvcrt` non-blocking byte-range file locking (`msvcrt.LK_NBLCK`).
+  - **macOS & Linux**: Uses POSIX `fcntl.flock()`.
+  - **Graceful Fallback**: Safely continues if locking primitives are unavailable.
+- **Single-Instance Dashboard Reuse**: Preserved existing dashboard reuse when relaunching the app.
+- **100% Pure Python**: Zero external pip dependencies required.
+
+---
+
+### Downloads & Installation
+
+| Package | Target Platform | Instructions |
+| :--- | :--- | :--- |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-Windows.zip`** | Windows 10 / 11 | Extract and run `Launch Direct Stream for PlayStation 5.bat` |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-macOS.zip`** | macOS (Apple Silicon & Intel) | Extract and open `PS5 Direct Streamer.app` |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-PurePython.zip`** | Linux / BSD / Cross-Platform | Extract and run `python3 ps5_streamer.py` |
+
+*Requires Python 3.9+ from [python.org](https://www.python.org/downloads/).*
+```
+
+---
+
+## 3. GitHub Release Notes (v2.8.0)
+
 
 ### Tag Version
 ```text
