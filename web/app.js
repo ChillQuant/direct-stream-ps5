@@ -272,6 +272,7 @@ function row(job, index) {
       <div class="queue-name">
         <svg><use href="#i-file"/></svg>
         <strong>${escaped(job.name)}</strong>
+        ${job.kind === 'multipart' ? '<span style="font-size:10px; padding:2px 6px; border-radius:4px; background:rgba(37,99,235,0.18); color:#60a5fa; border:1px solid rgba(96,165,250,0.3); font-weight:600; margin-left:6px; letter-spacing:0.02em;">STITCHED</span>' : ''}
       </div>
     </td>
     <td>${job.total ? bytes(job.total) : '—'}</td>
@@ -394,7 +395,7 @@ function render(s) {
   if ($('page-conn-msg')) $('page-conn-msg').textContent = s.connection.state === 'connected' ? 'PS5 ready for transfers' : (s.connection.message || 'Check IP and network');
 
   if ($('pipeline-settings')) $('pipeline-settings').textContent = `${s.settings.streams} streams · ${s.settings.buffer_mb} MiB RAM`;
-  if ($('source-mode')) $('source-mode').textContent = active?.kind === 'local' ? 'Local file · zero RAM copy' : 'Direct stream · async buffers';
+  if ($('source-mode')) $('source-mode').textContent = active?.kind === 'local' ? 'Local file · zero RAM copy' : (active?.kind === 'multipart' ? 'Multi-part stitch · direct PS5 stream' : 'Direct stream · async buffers');
 
   const lightbar = $('status-lightbar');
   if (lightbar) {
@@ -738,6 +739,50 @@ document.addEventListener('click', async e => {
   }
 });
 
+function parseMultipartInfo(filename) {
+  if (!filename || typeof filename !== 'string') return null;
+  const name = filename.split('/').pop().split('\\').pop();
+  let m = name.match(/^(.*?\.pkg)\.(\d{1,4})$/i);
+  if (m) return { base: m[1], num: parseInt(m[2], 10) };
+  m = name.match(/^(.*?)\.(\d{2,4})$/i);
+  if (m) {
+    let base = m[1];
+    if (!base.toLowerCase().endsWith('.pkg')) base += '.pkg';
+    return { base, num: parseInt(m[2], 10) };
+  }
+  m = name.match(/^(.*?)[._-]part(\d{1,4})\.pkg$/i);
+  if (m) return { base: m[1] + '.pkg', num: parseInt(m[2], 10) };
+  m = name.match(/^(.*?\.pkg)[._-]part(\d{1,4})$/i);
+  if (m) return { base: m[1], num: parseInt(m[2], 10) };
+  m = name.match(/^(.*?)[_.](\d{1,3})\.pkg$/i);
+  if (m) return { base: m[1] + '.pkg', num: parseInt(m[2], 10) };
+  return null;
+}
+
+function detectMultipartSequence(items) {
+  if (!items || items.length <= 1) return [false, '', items];
+  const parsed = [];
+  const baseNames = new Set();
+  for (const it of items) {
+    let raw = it.name || '';
+    if (!raw && it.source) {
+      try {
+        const u = new URL(it.source);
+        raw = decodeURIComponent(u.pathname.split('/').pop());
+      } catch (e) {
+        raw = it.source.split('/').pop().split('\\').pop();
+      }
+    }
+    const info = parseMultipartInfo(raw);
+    if (!info) return [false, '', items];
+    baseNames.add(info.base.toLowerCase());
+    parsed.push({ num: info.num, item: it, base: info.base });
+  }
+  if (baseNames.size !== 1) return [false, '', items];
+  parsed.sort((a, b) => a.num - b.num);
+  return [true, parsed[0].base, parsed.map(p => p.item)];
+}
+
 const updateAddPreview = () => {
   const isUrl = sourceKind === 'url';
   const val = isUrl ? $('source-urls')?.value.trim() : $('local-path')?.value.trim();
@@ -746,7 +791,25 @@ const updateAddPreview = () => {
     if ($('preview-filesize')) $('preview-filesize').textContent = 'Enter direct link or choose file';
     return;
   }
-  const first = val.split('\n')[0].trim();
+  const lines = val.split('\n').map(x => x.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    const items = lines.map(s => ({ source: s }));
+    const [isMulti, mergedName] = detectMultipartSequence(items);
+    if (isMulti) {
+      if ($('preview-filename')) $('preview-filename').textContent = `⚡ Multi-Part Sequence (${lines.length} parts)`;
+      if ($('preview-filesize')) $('preview-filesize').textContent = `Auto-stitching into ${mergedName} on PS5 (0 GB disk space used)`;
+      const ext = mergedName.toLowerCase().split('.').pop();
+      if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+        if ($('modal-dest-folder')) $('modal-dest-folder').value = '/data/ShadowMount';
+      }
+      return;
+    } else {
+      if ($('preview-filename')) $('preview-filename').textContent = `${lines.length} individual files`;
+      if ($('preview-filesize')) $('preview-filesize').textContent = 'Queued as separate transfers';
+      return;
+    }
+  }
+  const first = lines[0] || '';
   let name = '';
   if (isUrl) {
     try {
@@ -794,8 +857,12 @@ $('add-form').addEventListener('submit', async e => {
   e.preventDefault();
   const raw = sourceKind === 'url' ? $('source-urls').value : $('local-path').value;
   const sources = raw.split('\n').map(x => x.trim()).filter(Boolean);
-  if (sources.length > 1 && $('file-name').value.trim()) {
-    $('add-error').textContent = 'Leave Save as blank when adding multiple links.';
+  const items = sources.map(source => ({ source, name: $('file-name').value.trim() }));
+  const [isMulti, mergedName] = detectMultipartSequence(items);
+  const willStitch = isMulti && ($('combine-multipart')?.checked !== false);
+
+  if (sources.length > 1 && $('file-name').value.trim() && !willStitch) {
+    $('add-error').textContent = 'Leave Save as blank when adding multiple individual files.';
     return;
   }
   const destFolder = $('modal-dest-folder')?.value.trim();
@@ -805,7 +872,9 @@ $('add-form').addEventListener('submit', async e => {
     const r = await api('jobs', {
       kind: sourceKind,
       folder: destFolder,
-      items: sources.map(source => ({ source, name: $('file-name').value.trim(), folder: destFolder })),
+      items: items.map(it => ({ ...it, folder: destFolder })),
+      name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
+      combine_multipart: willStitch,
       overwrite: $('overwrite').checked
     });
     $('add-dialog').close();

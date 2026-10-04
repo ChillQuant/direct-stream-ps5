@@ -162,3 +162,69 @@ def get_captcha_hint_if_applicable(url: str) -> str | None:
                 "and select 'Copy download link'."
             )
     return None
+
+
+def parse_multipart_info(filename: str) -> tuple[str, int] | None:
+    """If filename matches a multi-part split pattern, returns (base_name, part_number)."""
+    if not filename or not isinstance(filename, str):
+        return None
+    name = Path(filename).name
+
+    # 1. Numbered split extension: e.g. Game.pkg.001, Game.pkg.002, Game.pkg.1
+    m = re.match(r"^(.*?\.pkg)\.(\d{1,4})$", name, re.I)
+    if m:
+        return m.group(1), int(m.group(2))
+
+    # 2. Raw numbered extension: e.g. Game.001, Game.002 -> Game.pkg
+    m = re.match(r"^(.*?)\.(\d{2,4})$", name, re.I)
+    if m:
+        base = m.group(1)
+        if not base.lower().endswith(".pkg"):
+            base += ".pkg"
+        return base, int(m.group(2))
+
+    # 3. Part in name before .pkg: e.g. Game.part01.pkg, Game_part1.pkg, Game-part02.pkg
+    m = re.match(r"^(.*?)[._-]part(\d{1,4})\.pkg$", name, re.I)
+    if m:
+        return m.group(1) + ".pkg", int(m.group(2))
+
+    # 4. Part after .pkg: e.g. Game.pkg.part1, Game.pkg_part02
+    m = re.match(r"^(.*?\.pkg)[._-]part(\d{1,4})$", name, re.I)
+    if m:
+        return m.group(1), int(m.group(2))
+
+    # 5. Numerical suffix before .pkg: e.g. Game_1.pkg, Game_2.pkg
+    m = re.match(r"^(.*?)[_.](\d{1,3})\.pkg$", name, re.I)
+    if m:
+        return m.group(1) + ".pkg", int(m.group(2))
+
+    return None
+
+
+def detect_multipart_sequence(items: list[dict]) -> tuple[bool, str, list[dict]]:
+    """If items form a valid multi-part sequence, returns (True, merged_name, sorted_items)."""
+    if not items or len(items) <= 1:
+        return False, "", items
+
+    parsed = []
+    base_names = set()
+    for item in items:
+        raw_name = item.get("name") or ""
+        if not raw_name:
+            src = item.get("source", "")
+            raw_name = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
+        info = parse_multipart_info(raw_name)
+        if not info:
+            return False, "", items
+        base, num = info
+        base_names.add(base.lower())
+        parsed.append((num, item, base))
+
+    if len(base_names) != 1:
+        return False, "", items
+
+    parsed.sort(key=lambda x: x[0])
+    merged_name = parsed[0][2]
+    sorted_items = [p[1] for p in parsed]
+    return True, merged_name, sorted_items
+

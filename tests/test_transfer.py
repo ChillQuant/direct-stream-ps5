@@ -12,7 +12,7 @@ import time
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, probe_source,
-    transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, connect_ftp, close_ftp)
+    transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, validate_multipart_source, connect_ftp, close_ftp)
 from ps5_streamer import Manager, Handler, validated_settings
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
@@ -33,7 +33,18 @@ class HTTPFixture(BaseHTTPRequestHandler):
             self.send_response(302); self.send_header('Location', '/file'); self.send_header('Content-Length','0'); self.end_headers(); return
         if path == '/html':
             self.send_response(200); self.send_header('Content-Type','text/html'); self.send_header('Content-Length','3'); self.end_headers(); self.wfile.write(b'bad'); return
-        raw = self.headers.get('Range',''); start, end = 0, len(PAYLOAD)-1
+        raw = self.headers.get('Range','');
+        full_data = PAYLOAD
+        if path.startswith('/multipart-'):
+            p_idx = int(path.split('-')[1])
+            part_sz = len(PAYLOAD) // 3
+            if p_idx == 1:
+                full_data = PAYLOAD[:part_sz]
+            elif p_idx == 2:
+                full_data = PAYLOAD[part_sz:2*part_sz]
+            else:
+                full_data = PAYLOAD[2*part_sz:]
+        start, end = 0, len(full_data)-1
         use_range = bool(raw) and path not in ('/no-range','/unknown')
         if path == '/ignore-resume' and raw and not raw.endswith('0-0'): use_range = False
         if use_range:
@@ -41,14 +52,14 @@ class HTTPFixture(BaseHTTPRequestHandler):
         if path == '/retry' and end-start>1 and HTTPFixture.retry_count == 0:
             HTTPFixture.retry_count += 1
             self.send_response(503);self.send_header('Content-Length','0');self.end_headers();return
-        body = PAYLOAD[start:end+1]
+        body = full_data[start:end+1]
         self.send_response(206 if use_range else 200)
         if use_range:
             bad = path == '/wrong-range' and end-start > 1
-            self.send_header('Content-Range', f'bytes {start+1 if bad else start}-{end}/{len(PAYLOAD)}')
+            self.send_header('Content-Range', f'bytes {start+1 if bad else start}-{end}/{len(full_data)}')
         self.send_header('Content-Type','application/octet-stream')
         if path == '/compressed' and end-start>1: self.send_header('Content-Encoding','gzip')
-        if path != '/no-validator': self.send_header('ETag', '"v2"' if path == '/changed' or (path == '/changes-during-read' and end-start>1) else '"fixture-v1"')
+        if path != '/no-validator': self.send_header('ETag', f'"mp-{path}"' if path.startswith('/multipart-') else ('"v2"' if path == '/changed' or (path == '/changes-during-read' and end-start>1) else '"fixture-v1"'))
         if path != '/unknown': self.send_header('Content-Length',str(len(body)))
         else: self.send_header('Connection','close'); self.close_connection=True
         self.end_headers()
@@ -289,4 +300,128 @@ class Integration(unittest.TestCase):
             self.assertEqual(j3.get("folder"), "/data/custom_dir")
             m.stop()
 
+    def test_multipart_local_upload_and_stitch(self):
+        part_sz = len(PAYLOAD) // 3
+        p1 = self.root / 'game.pkg.001'
+        p2 = self.root / 'game.pkg.002'
+        p3 = self.root / 'game.pkg.003'
+        p1.write_bytes(PAYLOAD[:part_sz])
+        p2.write_bytes(PAYLOAD[part_sz:2*part_sz])
+        p3.write_bytes(PAYLOAD[2*part_sz:])
+
+        j = {
+            'id': 'mp_local_test',
+            'name': 'game.pkg',
+            'kind': 'multipart',
+            'source': f'3 parts: game.pkg',
+            'parts': [
+                {'source': str(p1), 'kind': 'local', 'name': 'game.pkg.001'},
+                {'source': str(p2), 'kind': 'local', 'name': 'game.pkg.002'},
+                {'source': str(p3), 'kind': 'local', 'name': 'game.pkg.003'},
+            ],
+            'identity': None,
+            'transferred': 0,
+        }
+        events = self.run_job(j)
+        dest_file = self.root / 'target' / 'nested' / 'game.pkg'
+        self.assertTrue(dest_file.exists())
+        self.assertEqual(dest_file.read_bytes(), PAYLOAD)
+        self.assertFalse(self.partial(j).exists())
+        self.assertEqual(events[-1][0], 'complete')
+
+    def test_multipart_http_upload_and_stitch(self):
+        urls = [self.url('/multipart-1'), self.url('/multipart-2'), self.url('/multipart-3')]
+        j = {
+            'id': 'mp_http_test',
+            'name': 'webgame.pkg',
+            'kind': 'multipart',
+            'source': '3 parts: webgame.pkg',
+            'parts': [
+                {'source': urls[0], 'kind': 'url', 'name': 'webgame.pkg.001'},
+                {'source': urls[1], 'kind': 'url', 'name': 'webgame.pkg.002'},
+                {'source': urls[2], 'kind': 'url', 'name': 'webgame.pkg.003'},
+            ],
+            'identity': None,
+            'transferred': 0,
+        }
+        events = self.run_job(j)
+        dest_file = self.root / 'target' / 'nested' / 'webgame.pkg'
+        self.assertTrue(dest_file.exists())
+        self.assertEqual(dest_file.read_bytes(), PAYLOAD)
+        self.assertFalse(self.partial(j).exists())
+        self.assertEqual(events[-1][0], 'complete')
+        status_msgs = [v for e, v in events if e == 'status']
+        self.assertTrue(any('Part 1/3' in msg for msg in status_msgs))
+        self.assertTrue(any('Part 2/3' in msg for msg in status_msgs))
+        self.assertTrue(any('Part 3/3' in msg for msg in status_msgs))
+
+    def test_multipart_http_resume_in_middle_part(self):
+        urls = [self.url('/multipart-1'), self.url('/multipart-2'), self.url('/multipart-3')]
+        part_sz = len(PAYLOAD) // 3
+        resume_offset = part_sz + 12345
+        j = {
+            'id': 'mp_resume_test',
+            'name': 'resumed_game.pkg',
+            'kind': 'multipart',
+            'source': '3 parts: resumed_game.pkg',
+            'parts': [
+                {'source': urls[0], 'kind': 'url', 'name': 'resumed_game.pkg.001'},
+                {'source': urls[1], 'kind': 'url', 'name': 'resumed_game.pkg.002'},
+                {'source': urls[2], 'kind': 'url', 'name': 'resumed_game.pkg.003'},
+            ],
+            'identity': None,
+            'transferred': 0,
+            'stage_owned': True,
+        }
+        part_file = self.partial(j)
+        part_file.parent.mkdir(parents=True, exist_ok=True)
+        part_file.write_bytes(PAYLOAD[:resume_offset])
+
+        events = self.run_job(j)
+        dest_file = self.root / 'target' / 'nested' / 'resumed_game.pkg'
+        self.assertTrue(dest_file.exists())
+        self.assertEqual(dest_file.read_bytes(), PAYLOAD)
+        self.assertFalse(part_file.exists())
+
+    def test_multipart_manager_auto_sequence(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                m.configure(self.cfg)
+                r = m.add_jobs({
+                    'items': [
+                        {'source': self.url('/multipart-2'), 'name': 'Spiderman.pkg.002'},
+                        {'source': self.url('/multipart-1'), 'name': 'Spiderman.pkg.001'},
+                        {'source': self.url('/multipart-3'), 'name': 'Spiderman.pkg.003'},
+                    ]
+                })
+                self.assertEqual(r['count'], 1)
+                self.assertEqual(len(m.jobs), 1)
+                job = m.jobs[0]
+                self.assertEqual(job['kind'], 'multipart')
+                self.assertEqual(job['name'], 'Spiderman.pkg')
+                self.assertEqual(len(job['parts']), 3)
+                self.assertEqual([p['name'] for p in job['parts']], [
+                    'Spiderman.pkg.001', 'Spiderman.pkg.002', 'Spiderman.pkg.003'
+                ])
+            finally:
+                m.stop()
+
+    def test_validate_multipart_source(self):
+        urls = [self.url('/multipart-1'), self.url('/multipart-2'), self.url('/multipart-3')]
+        parts = [
+            {'source': urls[0], 'kind': 'url', 'name': 'game.pkg.001'},
+            {'source': urls[1], 'kind': 'url', 'name': 'game.pkg.002'},
+            {'source': urls[2], 'kind': 'url', 'name': 'game.pkg.003'},
+        ]
+        info = validate_multipart_source(parts, StopToken())
+        self.assertTrue(info['valid'])
+        self.assertEqual(info['parts_count'], 3)
+        self.assertEqual(info['size'], len(PAYLOAD))
+        self.assertEqual(info['filename'], 'game.pkg')
+        self.assertTrue(info['ranges'])
+        self.assertTrue(info['resumable'])
+>>>>>>> 7629ff9 (feat: add multi-part file stitching engine with zero-performance-drop pipeline)
+
 if __name__=='__main__':unittest.main()
+

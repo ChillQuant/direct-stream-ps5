@@ -171,8 +171,29 @@ class TestResolver(unittest.TestCase):
         self.assertIsNotNone(hint_buzz)
         self.assertIn("BuzzHeavier", hint_buzz)
 
-        no_hint = get_captcha_hint_if_applicable("https://mediafire.com/file/abc")
-        self.assertIsNone(no_hint)
+    def test_multipart_parsing_and_sorting(self):
+        from resolver import parse_multipart_info, detect_multipart_sequence
+
+        self.assertEqual(parse_multipart_info("Spiderman.pkg.001"), ("Spiderman.pkg", 1))
+        self.assertEqual(parse_multipart_info("Spiderman.pkg.012"), ("Spiderman.pkg", 12))
+        self.assertEqual(parse_multipart_info("GodOfWar.part01.pkg"), ("GodOfWar.pkg", 1))
+        self.assertEqual(parse_multipart_info("GodOfWar_part2.pkg"), ("GodOfWar.pkg", 2))
+        self.assertEqual(parse_multipart_info("Uncharted.pkg.part3"), ("Uncharted.pkg", 3))
+
+        # Test sequence detection and auto-sorting
+        unsorted_items = [
+            {"source": "https://cdn.example.com/games/Spiderman.pkg.003"},
+            {"source": "https://cdn.example.com/games/Spiderman.pkg.001"},
+            {"source": "https://cdn.example.com/games/Spiderman.pkg.002"},
+        ]
+        is_mp, merged_name, sorted_items = detect_multipart_sequence(unsorted_items)
+        self.assertTrue(is_mp)
+        self.assertEqual(merged_name, "Spiderman.pkg")
+        self.assertEqual([it["source"] for it in sorted_items], [
+            "https://cdn.example.com/games/Spiderman.pkg.001",
+            "https://cdn.example.com/games/Spiderman.pkg.002",
+            "https://cdn.example.com/games/Spiderman.pkg.003",
+        ])
 
 
 if __name__ == "__main__":

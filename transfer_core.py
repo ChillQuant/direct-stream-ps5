@@ -21,6 +21,8 @@ from resolver import (
     extract_download_link_from_html,
     parse_filename_from_headers,
     get_captcha_hint_if_applicable,
+    parse_multipart_info,
+    detect_multipart_sequence,
 )
 
 MIB = 1024 * 1024
@@ -157,24 +159,36 @@ def parse_range(headers, start, end, total=None):
 @dataclass
 class SourceInfo:
     kind: str
-    location: str
+    location: object
     size: object
     ranges: bool = False
     etag: str = ""
     modified: str = ""
     fingerprint: str = ""
     filename: str = ""
+    parts: list = None
 
     def identity(self):
+        if self.kind == "multipart" and self.parts:
+            return {
+                "kind": self.kind,
+                "size": self.size,
+                "fingerprint": self.fingerprint,
+                "parts": [p.identity() for p in self.parts],
+            }
         return {"kind": self.kind, "size": self.size, "etag": self.etag,
                 "modified": self.modified, "fingerprint": self.fingerprint}
 
     def resumable(self):
+        if self.kind == "multipart":
+            return bool(self.parts) and all(p.resumable() and p.size is not None for p in self.parts)
         return self.kind == "local" or (self.ranges and bool(self.etag or self.modified))
 
 
 def probe_source(kind, location, token, resolve_depth=0):
     token.check()
+    if kind == "multipart":
+        return probe_multipart_source(location, token)
     if kind == "local":
         path = os.path.abspath(os.path.expanduser(safe_text(location, "local path", 8192)))
         if not os.path.isfile(path):
@@ -233,6 +247,75 @@ def probe_source(kind, location, token, resolve_depth=0):
         filename = parse_filename_from_headers(h, response.geturl())
         return SourceInfo("url", valid_url(response.geturl()), size, ranges, etag,
                           h.get("Last-Modified", ""), filename=filename)
+
+
+def probe_multipart_source(parts, token, target_filename=None):
+    token.check()
+    if isinstance(parts, (str, bytes)):
+        parts = [parts]
+    if not parts:
+        raise TransferError("No parts provided for multi-part transfer.")
+
+    probed_parts = [None] * len(parts)
+    errors = [None] * len(parts)
+
+    def _probe_part(idx, item):
+        try:
+            token.check()
+            if isinstance(item, dict):
+                p_kind = item.get("kind", "url")
+                p_loc = item.get("source", "")
+            else:
+                p_loc = str(item)
+                p_kind = "local" if os.path.exists(p_loc) else "url"
+            probed_parts[idx] = probe_source(p_kind, p_loc, token)
+        except Exception as ex:
+            errors[idx] = ex
+
+    threads = [threading.Thread(target=_probe_part, args=(i, p), daemon=True) for i, p in enumerate(parts)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    token.check()
+    for i, err in enumerate(errors):
+        if err:
+            raise TransferError(f"Failed to inspect part {i + 1}: {err}")
+
+    for i, p in enumerate(probed_parts):
+        if p is None:
+            raise TransferError(f"Inspection timed out for part {i + 1}.")
+        if p.size is None:
+            raise TransferError(f"Part {i + 1} ({p.filename or 'part'}) has unknown size. Direct stitching requires exact part sizes.")
+
+    total_size = sum(p.size for p in probed_parts)
+    combined_fp = hashlib.sha256(
+        "".join(f"{p.size}:{p.fingerprint or p.etag or p.modified}" for p in probed_parts).encode()
+    ).hexdigest()
+
+    fname = target_filename
+    if not fname:
+        user_names = [p.get("name") for p in parts if isinstance(p, dict) and p.get("name")]
+        if user_names:
+            parsed = parse_multipart_info(user_names[0])
+            fname = parsed[0] if parsed else user_names[0]
+        else:
+            first_name = probed_parts[0].filename or ""
+            parsed = parse_multipart_info(first_name)
+            fname = parsed[0] if parsed else (first_name or "combined.pkg")
+    if not fname.lower().endswith(".pkg"):
+        fname += ".pkg"
+
+    return SourceInfo(
+        kind="multipart",
+        location=[p.location for p in probed_parts],
+        size=total_size,
+        ranges=all(p.ranges for p in probed_parts),
+        fingerprint=combined_fp,
+        filename=fname,
+        parts=probed_parts,
+    )
 
 
 class Meter:
@@ -536,7 +619,167 @@ class SequentialReader:
                 break
 
 
-def make_reader(source, offset, settings, token, meter):
+class MultiPartReader:
+    """Seamlessly streams multi-part split files (.001, .002... / .part1, .part2...)
+    into a single continuous byte stream for PS5 FTP.
+
+    Zero-Degradation Performance Architecture:
+    1. Zero local disk space: bytes flow through memory buffers directly to the PS5 FTP socket.
+    2. Overlapped pre-warming: when Part N is within 32 MiB of finishing, Part N+1's reader
+       is started in the background. Handshakes, HTTP GET range requests, and initial buffer
+       filling complete ahead of time.
+    3. Microsecond boundary transition: when Part N reaches EOF, Part N+1 is already hot and
+       buffered in RAM. The FTP socket continues receiving blocks without dropping speed.
+    4. Exact byte resume: maps any arbitrary PS5 file offset X to the correct part index and
+       local offset within that part.
+    """
+    def __init__(self, source, offset, settings, token, meter, on_part_change=None):
+        self.source = source
+        self.settings = settings
+        self.token = token
+        self.meter = meter
+        self.on_part_change = on_part_change
+        self.parts = source.parts or []
+        self.closed = threading.Event()
+        self.lock = threading.Lock()
+
+        # Cumulative start offsets for each part
+        self.offsets = []
+        cum = 0
+        for p in self.parts:
+            self.offsets.append(cum)
+            cum += p.size
+        self.total_size = cum
+
+        self.current_idx = len(self.parts)
+        self.current_reader = None
+        self.part_remaining = 0
+
+        self.next_reader = None
+        self.next_idx = None
+        self.prewarming = False
+        self.prewarm_thread = None
+        self.prewarm_error = None
+
+        self._init_at_offset(offset)
+
+    def _init_at_offset(self, offset):
+        if offset >= self.total_size or not self.parts:
+            self.current_idx = len(self.parts)
+            return
+
+        for i, cum in enumerate(self.offsets):
+            part_end = cum + self.parts[i].size
+            if cum <= offset < part_end:
+                self.current_idx = i
+                local_offset = offset - cum
+                self.part_remaining = self.parts[i].size - local_offset
+                if self.on_part_change:
+                    self.on_part_change(i, len(self.parts), self.parts[i].filename)
+                self.current_reader = make_reader(
+                    self.parts[i], local_offset, self.settings, self.token, self.meter
+                )
+                break
+
+    def _start_prewarm(self, target_idx):
+        self.prewarming = True
+        self.next_idx = target_idx
+
+        def _worker():
+            try:
+                self.token.check()
+                part = self.parts[target_idx]
+                reader = make_reader(part, 0, self.settings, self.token, self.meter)
+                with self.lock:
+                    if self.closed.is_set():
+                        reader.close()
+                        return
+                    self.next_reader = reader
+            except Exception as ex:
+                with self.lock:
+                    self.prewarm_error = ex
+            finally:
+                self.prewarming = False
+
+        self.prewarm_thread = threading.Thread(
+            target=_worker, daemon=True, name=f"prewarm-part-{target_idx}"
+        )
+        self.prewarm_thread.start()
+
+    def read(self, size=BLOCK):
+        while not self.closed.is_set():
+            self.token.check()
+            if self.current_idx >= len(self.parts):
+                return b""
+
+            if self.current_reader is None:
+                return b""
+
+            # Trigger background pre-warming of next part when nearing end of current part
+            if (
+                self.part_remaining <= 32 * MIB
+                and self.current_idx + 1 < len(self.parts)
+                and self.next_reader is None
+                and not self.prewarming
+            ):
+                self._start_prewarm(self.current_idx + 1)
+
+            block = self.current_reader.read(size)
+            if block:
+                self.part_remaining -= len(block)
+                return block
+
+            # Current part reached EOF
+            old_reader = self.current_reader
+            self.current_reader = None
+            threading.Thread(target=old_reader.close, daemon=True).start()
+
+            # Advance to next part
+            self.current_idx += 1
+            if self.current_idx >= len(self.parts):
+                return b""
+
+            if self.prewarm_thread and self.prewarm_thread.is_alive():
+                self.prewarm_thread.join(timeout=10)
+
+            with self.lock:
+                if self.prewarm_error:
+                    err = self.prewarm_error
+                    self.prewarm_error = None
+                    raise err
+
+                if self.next_reader is not None and self.next_idx == self.current_idx:
+                    self.current_reader = self.next_reader
+                    self.next_reader = None
+                    self.next_idx = None
+                else:
+                    part = self.parts[self.current_idx]
+                    self.current_reader = make_reader(
+                        part, 0, self.settings, self.token, self.meter
+                    )
+
+            self.part_remaining = self.parts[self.current_idx].size
+            if self.on_part_change:
+                self.on_part_change(self.current_idx, len(self.parts), self.parts[self.current_idx].filename)
+
+    def close(self):
+        self.closed.set()
+        with self.lock:
+            cur = self.current_reader
+            nxt = self.next_reader
+            self.current_reader = None
+            self.next_reader = None
+        if cur:
+            cur.close()
+        if nxt:
+            nxt.close()
+        if self.prewarm_thread and self.prewarm_thread.is_alive():
+            self.prewarm_thread.join(timeout=2)
+
+
+def make_reader(source, offset, settings, token, meter, on_part_change=None):
+    if source.kind == "multipart":
+        return MultiPartReader(source, offset, settings, token, meter, on_part_change=on_part_change)
     if source.kind == "url" and source.ranges and source.size is not None and settings["streams"] > 1:
         return ParallelReader(source, offset, settings["streams"], settings["buffer_mb"], settings["chunk_mb"], token, meter,
                               settings.get("_headers"))
@@ -639,6 +882,31 @@ def validate_source_url(url, token):
         }
 
 
+def validate_multipart_source(parts, token):
+    """Probe all parts in a multi-part sequence to verify availability, sizes, and resume support."""
+    try:
+        src = probe_multipart_source(parts, token)
+        return {
+            "valid": True,
+            "ranges": src.ranges,
+            "resumable": src.resumable(),
+            "size": src.size,
+            "filename": src.filename,
+            "parts_count": len(src.parts),
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "valid": False,
+            "ranges": False,
+            "resumable": False,
+            "size": None,
+            "filename": "",
+            "parts_count": 0,
+            "error": str(e)
+        }
+
+
 def windowed_rates(hist, now, snap, window=15.0):
     """Upload/download rates over the last few seconds, so bursty chunk delivery
     doesn't make the dashboard (or the ETA) swing between 0 and the burst speed."""
@@ -653,7 +921,10 @@ def windowed_rates(hist, now, snap, window=15.0):
 def transfer(job, settings, token, report, save):
     """One transfer attempt. Partial files are uniquely owned by the persisted job ID."""
     report("status", "Inspecting source")
-    source = probe_source(job["kind"], job["source"], token)
+    if job.get("kind") == "multipart":
+        source = probe_multipart_source(job.get("parts") or job["source"], token, target_filename=job.get("name"))
+    else:
+        source = probe_source(job["kind"], job["source"], token)
     if source.kind == "url" and source.location != job["source"]:
         job["source"] = source.location
     if source.filename and job.get("name") in ("download.bin", "file", "view", "uc", ""):
@@ -707,11 +978,15 @@ def transfer(job, settings, token, report, save):
             except OSError:
                 pass
             data_socket.settimeout(30)
-            reader = make_reader(source, offset, settings, token, meter)
 
-            # Pre-buffer a cushion of data (e.g. 16-64 MiB) for URL streams before sending to PS5.
+            def on_part_change(idx, total, part_name):
+                report("status", f"Streaming Part {idx+1}/{total} ({part_name})")
+
+            reader = make_reader(source, offset, settings, token, meter, on_part_change=on_part_change)
+
+            # Pre-buffer a cushion of data (e.g. 16-64 MiB) for URL/multipart streams before sending to PS5.
             # This prevents the initial starve-and-burst (sawtooth) cycle on cold start.
-            if source.kind == "url" and source.size and (source.size - offset) > 16 * MIB:
+            if source.kind in ("url", "multipart") and source.size and (source.size - offset) > 16 * MIB:
                 prebuffer_target = min(64 * MIB, max(16 * MIB, (settings["buffer_mb"] * MIB) // 4))
                 t_pre = time.monotonic()
                 report("status", "Pre-buffering pipeline…")
@@ -827,6 +1102,10 @@ def transfer(job, settings, token, report, save):
         # Recheck local metadata after read to catch concurrent edits.
         if source.kind == "local" and probe_source("local", source.location, token).identity() != source.identity():
             raise TransferError("Local file changed while uploading. Partial retained; restart with a stable file.")
+        elif source.kind == "multipart":
+            for p in (source.parts or []):
+                if p.kind == "local" and probe_source("local", p.location, token).identity() != p.identity():
+                    raise TransferError(f"Local part {p.filename} changed while uploading. Partial retained; restart with a stable file.")
         # Check again in case another client created the final name during this transfer.
         if not job.get("overwrite") and remote_size(ftp, name) is not None:
             raise TransferError("Destination appeared during upload. Verified partial retained to avoid replacing it.")

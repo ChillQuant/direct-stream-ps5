@@ -27,8 +27,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp,
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
-    valid_name, valid_url, check_ftp_storage, validate_source_url, MIB)
-from resolver import pre_resolve_url
+    valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source, MIB)
+from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info
 
 VERSION = "2.8.6"
 BASE = Path(__file__).resolve().parent
@@ -288,27 +288,64 @@ class Manager:
 
     def add_jobs(self, data):
         kind = data.get("kind", "url")
-        if kind not in ("url", "local"):
+        if kind not in ("url", "local", "multipart"):
             raise TransferError("Choose a direct link or a local file.")
         items = data.get("items", [])
         if not isinstance(items, list) or not 1 <= len(items) <= 100:
             raise TransferError("Add between 1 and 100 files at a time.")
-        new = []
-        for item in items:
-            src = item.get("source", "").strip()
-            if kind == "url":
-                src = pre_resolve_url(src)
-                valid_url(src)
-                default = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
-            else:
-                src = os.path.abspath(os.path.expanduser(safe_text(src, "local file path", 8192)))
-                if not os.path.isfile(src):
-                    raise TransferError("Local file not found. Use Choose file or enter its full path.")
-                default = Path(src).name
-            name = valid_name(item.get("name") or default or "download.bin")
-            new.append({"id": secrets.token_hex(6), "name": name, "source": src, "kind": kind,
-                "state": "queued", "detail": "Waiting to start", "total": None, "transferred": 0,
-                "overwrite": bool(data.get("overwrite", False)), "created": time.time(), "identity": None})
+
+        combine = data.get("combine_multipart")
+        is_seq, detected_name, sorted_items = detect_multipart_sequence(items)
+        if kind == "multipart" or (combine is not False and is_seq) or (combine is True and len(items) > 1):
+            use_items = sorted_items if is_seq else items
+            target_name = valid_name(data.get("name") or (items[0].get("name") if len(items) == 1 else "") or detected_name or "combined.pkg")
+            parts_list = []
+            for it in use_items:
+                src = it.get("source", "").strip()
+                p_kind = it.get("kind", kind if kind in ("url", "local") else ("local" if os.path.exists(src) else "url"))
+                if p_kind == "url":
+                    src = pre_resolve_url(src)
+                    valid_url(src)
+                    default = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
+                else:
+                    src = os.path.abspath(os.path.expanduser(safe_text(src, "local file path", 8192)))
+                    if not os.path.isfile(src):
+                        raise TransferError(f"Local file not found: {src}")
+                    default = Path(src).name
+                p_name = valid_name(it.get("name") or default or "part.bin")
+                parts_list.append({"source": src, "kind": p_kind, "name": p_name})
+
+            new = [{
+                "id": secrets.token_hex(6),
+                "name": target_name,
+                "source": f"{len(parts_list)} parts: {target_name}",
+                "parts": parts_list,
+                "kind": "multipart",
+                "state": "queued",
+                "detail": f"Queued ({len(parts_list)} parts) · direct PS5 stitch",
+                "total": None,
+                "transferred": 0,
+                "overwrite": bool(data.get("overwrite", False)),
+                "created": time.time(),
+                "identity": None
+            }]
+        else:
+            new = []
+            for item in items:
+                src = item.get("source", "").strip()
+                if kind == "url":
+                    src = pre_resolve_url(src)
+                    valid_url(src)
+                    default = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
+                else:
+                    src = os.path.abspath(os.path.expanduser(safe_text(src, "local file path", 8192)))
+                    if not os.path.isfile(src):
+                        raise TransferError("Local file not found. Use Choose file or enter its full path.")
+                    default = Path(src).name
+                name = valid_name(item.get("name") or default or "download.bin")
+                new.append({"id": secrets.token_hex(6), "name": name, "source": src, "kind": kind,
+                    "state": "queued", "detail": "Waiting to start", "total": None, "transferred": 0,
+                    "overwrite": bool(data.get("overwrite", False)), "created": time.time(), "identity": None})
         with self.lock:
             if len(self.jobs) + len(new) > 500:
                 raise TransferError("Queue is full. Clear completed jobs first.")
@@ -421,22 +458,34 @@ class Manager:
     def _validate_queued_links(self):
         tok = StopToken()
         with self.lock:
-            pending = [j for j in self.jobs if j["kind"] == "url" and j["state"] in ("queued", "paused")]
+            pending = [j for j in self.jobs if j["kind"] in ("url", "multipart") and j["state"] in ("queued", "paused")]
         self.log("info", f"Validating {len(pending)} queued links…")
         for j in pending:
             try:
                 tok.check()
-                info = validate_source_url(j["source"], tok)
-                with self.lock:
-                    target = next((item for item in self.jobs if item["id"] == j["id"]), None)
-                    if target and target["id"] != self.current:
-                        if info["valid"]:
-                            if info["size"] is not None:
-                                target["total"] = info["size"]
-                            status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
-                            target["detail"] = f"Link verified · {status}"
-                        else:
-                            target["detail"] = f"Link check failed: {info['error']}"
+                if j["kind"] == "multipart":
+                    info = validate_multipart_source(j.get("parts") or j["source"], tok)
+                    with self.lock:
+                        target = next((item for item in self.jobs if item["id"] == j["id"]), None)
+                        if target and target["id"] != self.current:
+                            if info["valid"]:
+                                if info["size"] is not None:
+                                    target["total"] = info["size"]
+                                target["detail"] = f"Verified {info['parts_count']} parts · direct PS5 stitch"
+                            else:
+                                target["detail"] = f"Part check failed: {info['error']}"
+                else:
+                    info = validate_source_url(j["source"], tok)
+                    with self.lock:
+                        target = next((item for item in self.jobs if item["id"] == j["id"]), None)
+                        if target and target["id"] != self.current:
+                            if info["valid"]:
+                                if info["size"] is not None:
+                                    target["total"] = info["size"]
+                                status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
+                                target["detail"] = f"Link verified · {status}"
+                            else:
+                                target["detail"] = f"Link check failed: {info['error']}"
                 self.save()
             except Exception:
                 pass
