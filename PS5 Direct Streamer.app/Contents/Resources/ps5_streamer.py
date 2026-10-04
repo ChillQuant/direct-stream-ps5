@@ -37,17 +37,46 @@ ACTIVE = {"starting", "running", "retrying", "pausing", "cancelling"}
 
 
 def notify_macos(title, message, sound="Glass"):
-    if sys.platform != "darwin":
-        return
     try:
         clean_title = re.sub(r'["\\]', '', str(title))
         clean_msg = re.sub(r'["\\]', '', str(message))
-        script = f'display notification "{clean_msg}" with title "{clean_title}"'
-        if sound:
-            script += f' sound name "{sound}"'
-        subprocess.Popen(["/usr/bin/osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if sys.platform == "darwin":
+            script = f'display notification "{clean_msg}" with title "{clean_title}"'
+            if sound:
+                script += f' sound name "{sound}"'
+            subprocess.Popen(["/usr/bin/osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif shutil.which("termux-notification"):
+            subprocess.Popen(["termux-notification", "--title", clean_title, "--content", clean_msg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
+
+
+def open_browser(url):
+    if shutil.which("termux-open-url"):
+        try:
+            subprocess.Popen(["termux-open-url", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        except Exception:
+            pass
+    if shutil.which("xdg-open") and not sys.platform.startswith("darwin") and not sys.platform.startswith("win"):
+        try:
+            subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        except Exception:
+            pass
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
+
+def get_lan_ip():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
 
 
 def atomic_json(path, data):
@@ -745,6 +774,7 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/pick":
                 pick_type = data.get("type", "file")
                 paths, folder_path = [], ""
+                picker_unsupported = False
                 if sys.platform == "darwin":
                     if pick_type == "folder":
                         script = 'POSIX path of (choose folder with prompt "Choose folder containing PS5 packages")'
@@ -782,6 +812,8 @@ class Handler(BaseHTTPRequestHandler):
                                 paths = [p.strip() for p in proc.stdout.splitlines() if p.strip()] if proc.returncode == 0 else []
                         except Exception:
                             pass
+                    else:
+                        picker_unsupported = True
 
                 if pick_type == "folder":
                     found = []
@@ -792,9 +824,9 @@ class Handler(BaseHTTPRequestHandler):
                                     found.append(os.path.join(r, f))
                             if len(found) >= 100:
                                 break
-                    result = {"paths": found, "path": folder_path}
+                    result = {"paths": found, "path": folder_path, "picker_unsupported": picker_unsupported and not folder_path}
                 else:
-                    result = {"paths": paths, "path": paths[0] if paths else ""}
+                    result = {"paths": paths, "path": paths[0] if paths else "", "picker_unsupported": picker_unsupported and not paths}
             elif route == "/api/shutdown":
                 result = {"ok": True}
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
@@ -842,6 +874,7 @@ def _lock_instance(directory: Path):
 def main():
     parser = argparse.ArgumentParser(description="DIRECT STREAM FOR PLAYSTATION 5 — local dashboard")
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind to (e.g. 127.0.0.1 or 0.0.0.0)")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--data-dir", default=str(Path.home() / ".ps5-transfer"))
     args = parser.parse_args()
@@ -854,20 +887,29 @@ def main():
         try:
             session = json.loads((directory / "session.json").read_text())
             if not args.no_browser:
-                webbrowser.open(session["url"])
+                open_browser(session["url"])
             print("DIRECT STREAM FOR PLAYSTATION 5 is already running.", flush=True)
         except Exception:
             print("DIRECT STREAM FOR PLAYSTATION 5 is already starting. Try opening it again in a moment.", flush=True)
         return
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     server.token = secrets.token_urlsafe(32)
     server.manager = Manager(directory)
-    url = f"http://127.0.0.1:{server.server_port}/#session={server.token}"
+    
+    local_url = f"http://127.0.0.1:{server.server_port}/#session={server.token}"
+    if args.host == "0.0.0.0":
+        lan_ip = get_lan_ip()
+        network_url = f"http://{lan_ip}:{server.server_port}/#session={server.token}"
+        url = local_url
+        print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nLocal URL:   {local_url}\nNetwork URL: {network_url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
+    else:
+        url = f"http://{args.host}:{server.server_port}/#session={server.token}"
+        print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nOpen {url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
+
     atomic_json(directory / "session.json", {"url": url, "pid": os.getpid()})
-    print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nOpen {url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
     if not args.no_browser:
-        webbrowser.open(url)
+        open_browser(url)
     def shutdown(*_):
         threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, shutdown)

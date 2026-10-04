@@ -27,19 +27,35 @@ A high-performance parallel transfer engine and local browser dashboard for stre
 
 ## Quick Start
 
-1. Ensure **Python 3.9 or later** is installed. (Download from [python.org](https://www.python.org/downloads/macos/) if needed).
-2. Extract the **entire ZIP or clone the repository**.
-3. Double-click **`Launch PS5 Streamer.command`**, or launch **`PS5 Direct Streamer.app`**.
+### macOS & Windows
+1. Ensure **Python 3.9 or later** is installed.
+2. Double-click **`Launch PS5 Streamer.command`** (macOS) or **`Launch Direct Stream for PlayStation 5.bat`** (Windows).
    *(Alternatively, run `python3 ps5_streamer.py` directly from terminal).*
-4. The dashboard will automatically open in your default browser at `http://127.0.0.1:<port>/?token=...`.
-5. Open **Settings**, configure your PS5 IP address, FTP port, and destination folder (e.g. `/data/PS5Direct`), and click **Test connection**.
-6. Click **New Transfer**, paste your download URLs or choose a local file, and click **Start queue**.
-7. When done, click **Quit app** in the sidebar or Settings page to safely terminate the background server.
+3. The dashboard will automatically open in your default browser at `http://127.0.0.1:<port>/#session=...`.
+4. Open **Settings**, configure your PS5 IP address, FTP port, and destination folder, and click **Test connection**.
+5. Click **New Transfer**, paste your download URLs or choose a local file, and start streaming!
 
 > [!NOTE]
-> The app is unsigned. If macOS Gatekeeper alerts you on first open, follow the standard macOS Privacy & Security confirmation ("Open Anyway"). If permissions are lost, run `chmod +x launch.sh "Launch PS5 Streamer.command"`.
+> On macOS, if Gatekeeper alerts you on first open, follow the standard confirmation ("Open Anyway"). If permissions are lost, run `chmod +x launch.sh "Launch PS5 Streamer.command"`.
 
-Optional: Run `bash install_to_applications.sh` to install the app cleanly to `~/Applications` without requiring administrator privileges.
+### Android (via Termux)
+Direct Stream runs natively on Android phones with **raw Wi-Fi throughput** and zero root required:
+
+```bash
+# 1. Update packages and install python + git
+pkg update && pkg install python git
+
+# 2. Clone the repository
+git clone https://github.com/ChillQuant/direct-stream-ps5.git
+cd direct-stream-ps5
+
+# 3. Start the streamer
+./run_android.sh
+```
+
+- **Background WakeLock**: `./run_android.sh` automatically enables Android WakeLock so your phone won't sleep or throttle Wi-Fi during 50GB+ streaming transfers.
+- **Remote Access (`--host 0.0.0.0`)**: Pass `--host 0.0.0.0` if you want to control the Android stream server from your PC, Mac, or tablet on the same Wi-Fi.
+- **Phone Storage Access**: Run `termux-setup-storage` to stream local packages directly from `/sdcard/Download/`.
 
 ---
 

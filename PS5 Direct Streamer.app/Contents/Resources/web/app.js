@@ -363,7 +363,9 @@ function render(s) {
   if ($('completed-count')) $('completed-count').textContent = jobs.filter(j => j.state === 'completed').length + ' completed';
 
   if ($('sidebar-host')) $('sidebar-host').textContent = s.settings.host || 'Not configured';
+  if ($('mobile-host')) $('mobile-host').textContent = s.settings.host || 'PS5 offline';
   if ($('connection-dot')) $('connection-dot').className = 'dot ' + (s.connection.state === 'connected' ? 'green' : s.connection.state === 'error' ? 'error' : '');
+  if ($('mobile-connection-dot')) $('mobile-connection-dot').className = 'dot ' + (s.connection.state === 'connected' ? 'green' : s.connection.state === 'error' ? 'error' : '');
   const connText = $('connection-status-text');
   if (connText) {
     connText.textContent = s.connection.state === 'connected' ? 'Connected' : s.connection.state === 'error' ? 'Offline' : 'Checking…';
@@ -922,6 +924,8 @@ $('pick-file').addEventListener('click', async () => {
       $('local-path').value = r.paths.join('\n');
     } else if (r.path) {
       $('local-path').value = r.path;
+    } else if (r.picker_unsupported) {
+      toast('File picker dialog not available in terminal/mobile mode. Enter or paste the file path directly.', true);
     }
   } catch (e) {
     toast(e.message, true);
@@ -940,6 +944,8 @@ $('pick-folder').addEventListener('click', async () => {
       toast(`Found ${r.paths.length} packages in folder`);
     } else if (r.path) {
       $('local-path').value = r.path;
+    } else if (r.picker_unsupported) {
+      toast('Folder picker dialog not available in terminal/mobile mode. Enter or paste the folder path directly.', true);
     }
   } catch (e) {
     toast(e.message, true);

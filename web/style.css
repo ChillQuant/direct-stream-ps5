@@ -2049,6 +2049,10 @@ dialog.studio-modal::backdrop {
    Responsive Adaptations
    ========================================================================== */
 
+.mobile-topbar {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .diagnostics-dual-grid {
     grid-template-columns: 1fr;
@@ -2062,5 +2066,242 @@ dialog.studio-modal::backdrop {
   }
   .settings-form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  /* App Shell & Mobile Bottom Bar */
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 60px;
+    padding: 6px 8px env(safe-area-inset-bottom, 6px);
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    z-index: 1000;
+    border-right: none;
+    border-top: 1px solid var(--sidebar-line);
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  .sidebar-top {
+    flex-direction: row;
+    width: 100%;
+    align-items: center;
+    justify-content: space-around;
+    gap: 0;
+  }
+
+  .sidebar-top .brand {
+    display: none;
+  }
+
+  .sidebar-bottom {
+    display: none;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+    gap: 2px;
+  }
+
+  .nav-item {
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 2px;
+    border-radius: 8px;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    min-width: 0;
+    font-size: 10px;
+    position: relative;
+  }
+
+  .nav-item .nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .nav-item .nav-label {
+    display: block;
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+
+  .nav-item .nav-count {
+    position: absolute;
+    top: 2px;
+    right: calc(50% - 18px);
+    font-size: 9px;
+    padding: 1px 4px;
+    line-height: 1;
+  }
+
+  /* Workspace & Padding */
+  .workspace {
+    margin-left: 0;
+    width: 100%;
+    min-width: 0;
+    padding-bottom: 76px;
+  }
+
+  /* Mobile Top Header */
+  .mobile-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--sidebar-bg);
+    border-bottom: 1px solid var(--sidebar-line);
+    color: #ffffff;
+    position: sticky;
+    top: 0;
+    z-index: 99;
+  }
+
+  .mobile-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .mobile-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+  }
+
+  .mobile-sub {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--sidebar-muted);
+    letter-spacing: 0.06em;
+  }
+
+  .mobile-device-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    color: #ffffff;
+    cursor: pointer;
+  }
+
+  .main-content {
+    padding: 16px 14px 32px;
+  }
+
+  .banner {
+    margin: 12px 14px 0;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .page-header h1 {
+    font-size: 22px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .button,
+  .new-transfer-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 11px 16px;
+    font-size: 14px;
+  }
+
+  /* Live Transfer Card on Mobile */
+  .card, .live-transfer-card {
+    padding: 16px;
+    margin-bottom: 16px;
+    border-radius: 10px;
+  }
+
+  .transfer-title {
+    font-size: 17px;
+  }
+
+  .transfer-progress-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .meta-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .transfer-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .footer-actions-left,
+  .footer-actions-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* Toolbars on Mobile */
+  .files-toolbar,
+  .activity-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .files-breadcrumb-form,
+  .files-search-box {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* Studio Modals on Mobile */
+  dialog.studio-modal {
+    width: calc(100vw - 24px);
+    max-width: 480px;
+    padding: 18px 16px;
+    margin: auto;
+    border-radius: 14px;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .modal-footer button {
+    width: 100%;
   }
 }

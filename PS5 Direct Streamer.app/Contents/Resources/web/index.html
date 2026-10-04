@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>DIRECT STREAM FOR PLAYSTATION 5</title>
   <link rel="icon" href="/icon.svg">
   <link rel="stylesheet" href="/style.css">
@@ -115,6 +115,18 @@
   <div class="workspace">
     <!-- Studio Status Rail -->
     <div class="ps5-lightbar" id="status-lightbar"></div>
+
+    <!-- Mobile Top Header (<= 768px) -->
+    <header class="mobile-topbar" aria-label="Mobile navigation header">
+      <div class="mobile-brand">
+        <span class="mobile-title">DIRECT STREAM</span>
+        <span class="mobile-sub">FOR PS5</span>
+      </div>
+      <div class="mobile-device-status" id="mobile-device-card" title="Click to view console connection settings" data-open-settings>
+        <span id="mobile-connection-dot" class="dot green"></span>
+        <span id="mobile-host">PS5</span>
+      </div>
+    </header>
 
     <div id="offline-banner" class="banner error" hidden role="alert">Connection to the app was lost. Reopen DIRECT STREAM FOR PLAYSTATION 5 to reconnect.</div>
 
