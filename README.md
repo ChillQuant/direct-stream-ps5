@@ -6,7 +6,8 @@ A high-performance parallel transfer engine and local browser dashboard for stre
   <img src="assets/demo.gif" alt="Direct Stream for PlayStation 5 Studio Demo" width="100%" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.5);">
 </p>
 <p align="center">
-  <em>⚡ Real-time Gigabit LAN streaming, automatic speed benchmark matrix, and direct PS5 console filesystem explorer.</em>
+  <em>⚡ Real-time Gigabit LAN streaming (118+ MB/s), automatic benchmark tuning, and remote PS5 console file manager.</em><br>
+  <small><a href="assets/demo.mp4">▶ Download / View 1080p Master Video (assets/demo.mp4)</a></small>
 </p>
 
 ---
