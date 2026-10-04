@@ -29,7 +29,7 @@ from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
     valid_name, valid_url, check_ftp_storage, validate_source_url, MIB)
 
-VERSION = "2.8.0"
+VERSION = "2.8.1"
 BASE = Path(__file__).resolve().parent
 DEFAULTS = {"host": "", "port": 1337, "folder": "/data/ShadowMount", "username": "anonymous",
             "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3}
@@ -808,6 +808,37 @@ class Handler(BaseHTTPRequestHandler):
             self.send(500, {"error": friendly_error(e)})
 
 
+def _lock_instance(directory: Path):
+    """Acquire single-instance file lock across macOS, Linux, and Windows.
+    Returns the open file object if lock acquired, or None if already running."""
+    lock_path = directory / "instance.lock"
+    lockfile = open(lock_path, "a+b")
+    if os.name == "nt":
+        try:
+            import msvcrt
+            if lockfile.tell() == 0:
+                lockfile.write(b"\0")
+                lockfile.flush()
+            lockfile.seek(0)
+            msvcrt.locking(lockfile.fileno(), msvcrt.LK_NBLCK, 1)
+            return lockfile
+        except (OSError, PermissionError):
+            lockfile.close()
+            return None
+        except ImportError:
+            return lockfile
+    else:
+        try:
+            import fcntl
+            fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lockfile
+        except (BlockingIOError, OSError):
+            lockfile.close()
+            return None
+        except ImportError:
+            return lockfile
+
+
 def main():
     parser = argparse.ArgumentParser(description="DIRECT STREAM FOR PLAYSTATION 5 — local dashboard")
     parser.add_argument("--no-browser", action="store_true")
@@ -818,11 +849,8 @@ def main():
     directory.mkdir(parents=True, exist_ok=True)
     os.chmod(directory, 0o700)
     # One instance per profile. Reopening the app reuses its existing dashboard.
-    import fcntl
-    lockfile = open(directory / "instance.lock", "a+")
-    try:
-        fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    lockfile = _lock_instance(directory)
+    if lockfile is None:
         try:
             session = json.loads((directory / "session.json").read_text())
             if not args.no_browser:

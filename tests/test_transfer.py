@@ -234,4 +234,40 @@ class Integration(unittest.TestCase):
             self.assertTrue(space is None or isinstance(space, int))
         finally:
             close_ftp(ftp, tok)
+
+    def test_lock_instance_posix_and_windows_simulation(self):
+        from ps5_streamer import _lock_instance
+        from unittest.mock import patch, MagicMock
+
+        with tempfile.TemporaryDirectory() as d:
+            dir_path = Path(d)
+            # 1. Native POSIX lock test
+            l1 = _lock_instance(dir_path)
+            self.assertIsNotNone(l1)
+            l2 = _lock_instance(dir_path)
+            self.assertIsNone(l2)
+            l1.close()
+            l3 = _lock_instance(dir_path)
+            self.assertIsNotNone(l3)
+            l3.close()
+
+            # 2. Windows msvcrt simulation test
+            mock_msvcrt = MagicMock()
+            locked = [False]
+            def fake_locking(fd, mode, nbytes):
+                if locked[0]:
+                    raise OSError("File is locked by another process")
+                locked[0] = True
+            mock_msvcrt.locking = fake_locking
+            mock_msvcrt.LK_NBLCK = 1
+
+            with patch('os.name', 'nt'), patch.dict('sys.modules', {'msvcrt': mock_msvcrt}):
+                win_dir = dir_path / "win_test"
+                win_dir.mkdir()
+                w1 = _lock_instance(win_dir)
+                self.assertIsNotNone(w1)
+                w2 = _lock_instance(win_dir)
+                self.assertIsNone(w2)
+                w1.close()
+
 if __name__=='__main__':unittest.main()
