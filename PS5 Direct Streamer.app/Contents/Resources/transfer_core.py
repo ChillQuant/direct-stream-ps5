@@ -15,10 +15,23 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
+from resolver import (
+    pre_resolve_url,
+    extract_download_link_from_html,
+    parse_filename_from_headers,
+    get_captcha_hint_if_applicable,
+)
 
 MIB = 1024 * 1024
 BLOCK = MIB
-HEADERS = {"User-Agent": "PS5-Transfer/2.0", "Accept-Encoding": "identity"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "identity",
+    "Connection": "keep-alive",
+}
 
 class TransferError(Exception):
     """A problem that needs user action; don't blindly retry it."""
@@ -150,6 +163,7 @@ class SourceInfo:
     etag: str = ""
     modified: str = ""
     fingerprint: str = ""
+    filename: str = ""
 
     def identity(self):
         return {"kind": self.kind, "size": self.size, "etag": self.etag,
@@ -159,7 +173,7 @@ class SourceInfo:
         return self.kind == "local" or (self.ranges and bool(self.etag or self.modified))
 
 
-def probe_source(kind, location, token):
+def probe_source(kind, location, token, resolve_depth=0):
     token.check()
     if kind == "local":
         path = os.path.abspath(os.path.expanduser(safe_text(location, "local path", 8192)))
@@ -171,8 +185,10 @@ def probe_source(kind, location, token):
             f.seek(max(0, stat.st_size - 65536))
             digest.update(f.read(65536))
         return SourceInfo("local", path, stat.st_size, True,
-            fingerprint=f"{stat.st_mtime_ns}:{digest.hexdigest()}")
+            fingerprint=f"{stat.st_mtime_ns}:{digest.hexdigest()}", filename=Path(path).name)
     location = valid_url(location)
+    if resolve_depth == 0:
+        location = pre_resolve_url(location)
     req = urllib.request.Request(location, headers={**HEADERS, "Range": "bytes=0-0"})
     try:
         response = opener().open(req, timeout=20)
@@ -181,11 +197,25 @@ def probe_source(kind, location, token):
         e.close()
         if code in (408, 429, 500, 502, 503, 504):
             raise OSError(f"Temporary download server error: HTTP {code}") from e
+        hint = get_captcha_hint_if_applicable(location)
+        if hint:
+            raise TransferError(hint)
         raise TransferError(f"Download server returned HTTP {code}. Check the direct link or get a fresh one.")
     with response:
         token.check()
         h = response.headers
         if "text/html" in h.get("Content-Type", "").lower():
+            if resolve_depth < 3:
+                try:
+                    html_chunk = response.read(256 * 1024).decode("utf-8", errors="replace")
+                    resolved = extract_download_link_from_html(response.geturl(), html_chunk)
+                except Exception:
+                    resolved = None
+                if resolved and resolved != location and resolved != response.geturl():
+                    return probe_source(kind, resolved, token, resolve_depth + 1)
+            hint = get_captcha_hint_if_applicable(location)
+            if hint:
+                raise TransferError(hint)
             raise TransferError("This is a web page, not a downloadable file. Paste the direct download link.")
         if h.get("Content-Encoding", "identity").lower() not in ("", "identity"):
             raise TransferError("Server ignored the request for uncompressed bytes.")
@@ -200,8 +230,9 @@ def probe_source(kind, location, token):
         etag = h.get("ETag", "")
         if etag.startswith("W/"):
             etag = ""
+        filename = parse_filename_from_headers(h, response.geturl())
         return SourceInfo("url", valid_url(response.geturl()), size, ranges, etag,
-                          h.get("Last-Modified", ""))
+                          h.get("Last-Modified", ""), filename=filename)
 
 
 class Meter:
@@ -623,6 +654,10 @@ def transfer(job, settings, token, report, save):
     """One transfer attempt. Partial files are uniquely owned by the persisted job ID."""
     report("status", "Inspecting source")
     source = probe_source(job["kind"], job["source"], token)
+    if source.kind == "url" and source.location != job["source"]:
+        job["source"] = source.location
+    if source.filename and job.get("name") in ("download.bin", "file", "view", "uc", ""):
+        job["name"] = source.filename
     old_identity = job.get("identity")
     if old_identity and old_identity != source.identity():
         raise TransferError("Source changed since this job started. Use Restart to begin a new partial file.")

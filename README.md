@@ -15,6 +15,7 @@ A high-performance parallel transfer engine and local browser dashboard for stre
 ## Highlights
 
 - **Zero-Copy Direct Streaming**: Download HTTP/HTTPS web links straight into PS5 storage over high-speed LAN without staging gigabytes onto your Mac disk.
+- **Smart Link Resolver**: Paste file sharing landing pages from MediaFire, PixelDrain, Google Drive, or Internet Archive; the engine automatically extracts and streams the true underlying CDN download link.
 - **Pure Python 3.9+ Standard Library**: No third-party runtime dependencies. Uses Python's native `http.client`, `ftplib`, and `asyncio`/threading.
 - **Fine-Tuned Parallel Multi-Stream Engine**: Configurable 1–32 concurrent HTTP range workers, dynamic RAM ring buffer (32 MiB to 1024 MiB), and segment chunk sizing (2 MiB to 32 MiB).
 - **Speed Diagnostics & Automated Benchmark**: Built-in benchmark engine offering **Quick Scan (~10s)** and **Full Test (~60s Multi-Tier Matrix)** to automatically determine and apply the optimal throughput configuration for your specific network.

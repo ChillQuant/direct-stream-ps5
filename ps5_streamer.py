@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp,
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
     valid_name, valid_url, check_ftp_storage, validate_source_url, MIB)
+from resolver import pre_resolve_url
 
 VERSION = "2.8.5"
 BASE = Path(__file__).resolve().parent
@@ -296,6 +297,7 @@ class Manager:
         for item in items:
             src = item.get("source", "").strip()
             if kind == "url":
+                src = pre_resolve_url(src)
                 valid_url(src)
                 default = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
             else:
