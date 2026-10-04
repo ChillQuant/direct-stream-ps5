@@ -1,0 +1,1602 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Direct Stream for PlayStation 5 - Product Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      *, *::before, *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      :root {
+        --bg-canvas: #07090e;
+        --sidebar-bg: #10141d;
+        --sidebar-border: rgba(255, 255, 255, 0.08);
+        --workspace-bg: #f1f3f7;
+        --surface: #ffffff;
+        --surface-subtle: #f8fafc;
+        --line: #cbd5e1;
+        --line-subtle: #e2e8f0;
+        --ink: #090d16;
+        --ink-secondary: #1e293b;
+        --muted: #475569;
+        --ps-blue: #1256c4;
+        --ps-blue-glow: rgba(18, 86, 196, 0.35);
+        --purple-source: #7c3aed;
+        --green-buffer: #047857;
+        --shadow-window: 0 32px 80px rgba(0, 0, 0, 0.65), 0 8px 24px rgba(0, 0, 0, 0.4);
+        --shadow-card: 0 2px 6px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.02);
+      }
+      html, body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--bg-canvas);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at 50% 30%, #172238 0%, #0a0e17 65%, #05070a 100%);
+      }
+
+      /* Ambient Studio Backdrop Glow */
+      .ambient-glow {
+        position: absolute;
+        width: 1300px;
+        height: 750px;
+        background: radial-gradient(ellipse, rgba(22, 104, 227, 0.18) 0%, rgba(139, 92, 246, 0.08) 45%, transparent 70%);
+        top: 15%;
+        left: 50%;
+        transform: translate(-50%, -10%);
+        pointer-events: none;
+        filter: blur(80px);
+      }
+
+      /* Desktop App Window Frame */
+      .app-window {
+        position: relative;
+        width: 1580px;
+        height: 940px;
+        border-radius: 18px;
+        background: var(--workspace-bg);
+        box-shadow: var(--shadow-window);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      /* macOS Style Title Bar */
+      .mac-titlebar {
+        height: 44px;
+        background: #0d1017;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        position: relative;
+        z-index: 10;
+      }
+      .window-dots {
+        display: flex;
+        gap: 8px;
+      }
+      .dot-btn {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .dot-close { background: #ff5f56; }
+      .dot-min { background: #ffbd2e; }
+      .dot-zoom { background: #27c93f; }
+      .window-title {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 13px;
+        font-weight: 500;
+        color: #94a3b8;
+        letter-spacing: 0.02em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .window-title-badge {
+        font-size: 10px;
+        font-weight: 600;
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.12);
+        padding: 2px 7px;
+        border-radius: 999px;
+        border: 1px solid rgba(56, 189, 248, 0.25);
+      }
+
+      /* PS5 Blue Accent Lightbar on top edge of workspace */
+      .ps5-lightbar {
+        position: absolute;
+        top: 44px;
+        left: 280px;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #1668e3 0%, #38bdf8 50%, #1668e3 100%);
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.8), 0 0 8px #1668e3;
+        z-index: 9;
+      }
+
+      /* Main Window Split Layout */
+      .app-body {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      /* SIDEBAR: Matte Obsidian */
+      .sidebar {
+        width: 280px;
+        background: var(--sidebar-bg);
+        border-right: 1px solid var(--sidebar-border);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 24px 18px;
+        color: #fff;
+        z-index: 5;
+      }
+      .brand-box {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 28px;
+        padding: 0 6px;
+      }
+      .brand-logo {
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #1668e3, #0284c7);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(22, 104, 227, 0.4);
+      }
+      .brand-logo svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: #fff;
+        stroke-width: 2.2;
+      }
+      .brand-text h1 {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #f1f5f9;
+        text-transform: uppercase;
+        line-height: 1.2;
+      }
+      .brand-text p {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: #94a3b8;
+        text-transform: uppercase;
+      }
+
+      .nav-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .nav-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 9px;
+        font-size: 13.5px;
+        font-weight: 500;
+        color: #cbd5e1;
+        background: transparent;
+        border: 1px solid transparent;
+        text-align: left;
+      }
+      .nav-btn svg {
+        width: 18px;
+        height: 18px;
+        stroke-width: 2;
+        stroke: currentColor;
+      }
+      .nav-btn.active {
+        background: rgba(22, 104, 227, 0.2);
+        color: #ffffff;
+        font-weight: 600;
+        border: 1px solid rgba(56, 189, 248, 0.4);
+      }
+      .nav-btn.active svg {
+        stroke: #38bdf8;
+      }
+      .nav-badge {
+        margin-left: auto;
+        background: #1668e3;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 999px;
+      }
+
+      /* Console Status Card at bottom of sidebar */
+      .console-card {
+        background: #161b26;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .ps5-svg-wrap {
+        width: 32px;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 8px;
+      }
+      .console-info h4 {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #f8fafc;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #10b981;
+        box-shadow: 0 0 8px #10b981;
+      }
+      .console-info p {
+        font-size: 11px;
+        color: #94a3b8;
+        font-family: 'JetBrains Mono', monospace;
+        margin-top: 2px;
+      }
+
+      /* WORKSPACE CONTENT AREA */
+      .workspace {
+        flex: 1;
+        background: var(--workspace-bg);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+      }
+      .page-container {
+        position: absolute;
+        inset: 0;
+        padding: 32px 40px;
+        overflow-y: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .page-container.active-page {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* Page Header */
+      .page-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+      }
+      .page-head h2 {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--ink);
+        letter-spacing: -0.02em;
+      }
+      .page-head p {
+        font-size: 13.5px;
+        color: #334155;
+        margin-top: 3px;
+      }
+      .head-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .btn-primary {
+        background: var(--ps-blue);
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 9px 18px;
+        border-radius: 8px;
+        border: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 2px 8px rgba(22, 104, 227, 0.35);
+      }
+      .btn-outline {
+        background: #ffffff;
+        color: var(--ink-secondary);
+        font-size: 13px;
+        font-weight: 500;
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      /* TRANSFERS HERO CARD */
+      .hero-card {
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-card);
+        padding: 24px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .hero-top-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .state-tag-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .state-badge {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #bfdbfe;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .state-badge::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #1e40af;
+        box-shadow: 0 0 6px #1e40af;
+      }
+      .bottleneck-pill {
+        font-size: 11px;
+        font-weight: 700;
+        color: #065f46;
+        background: #d1fae5;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid #a7f3d0;
+      }
+      .hero-title-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      .pkg-filename {
+        font-size: 19px;
+        font-weight: 700;
+        color: var(--ink);
+        letter-spacing: -0.01em;
+      }
+      .speedometer-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--ps-blue);
+      }
+
+      /* Progress Bar */
+      .progress-meta-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .progress-meta-row strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .progress-track {
+        height: 9px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+        position: relative;
+      }
+      .progress-fill {
+        height: 100%;
+        width: 74%;
+        background: linear-gradient(90deg, #1668e3 0%, #38bdf8 100%);
+        border-radius: 999px;
+        box-shadow: 0 0 12px rgba(22, 104, 227, 0.6);
+        position: relative;
+      }
+
+      /* 3 Telemetry Pillars */
+      .pillars-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        padding-top: 6px;
+      }
+      .pillar {
+        background: var(--surface-subtle);
+        border: 1px solid var(--line-subtle);
+        border-radius: 10px;
+        padding: 12px 16px;
+      }
+      .pillar-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .dot-blue { width: 7px; height: 7px; border-radius: 50%; background: var(--ps-blue); }
+      .dot-purple { width: 7px; height: 7px; border-radius: 50%; background: var(--purple-source); }
+      .dot-green { width: 7px; height: 7px; border-radius: 50%; background: var(--green-buffer); }
+      .pillar-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 19px;
+        font-weight: 700;
+        color: var(--ink);
+        margin-top: 4px;
+      }
+
+      /* Live Wave Graph */
+      .telemetry-chart-box {
+        position: relative;
+        height: 80px;
+        background: #fafcff;
+        border: 1px solid #e5edfa;
+        border-radius: 10px;
+        overflow: hidden;
+        display: flex;
+        align-items: flex-end;
+      }
+      .chart-svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Queue Table Card */
+      .queue-card {
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-card);
+        padding: 20px 24px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .queue-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .queue-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .queue-badge-count {
+        font-size: 11px;
+        font-weight: 600;
+        background: #e2e8f0;
+        color: #334155;
+        padding: 2px 8px;
+        border-radius: 999px;
+      }
+      .queue-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .queue-table th {
+        text-align: left;
+        padding: 8px 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1px solid var(--line);
+      }
+      .queue-table td {
+        padding: 12px;
+        border-bottom: 1px solid var(--line-subtle);
+        color: var(--ink-secondary);
+      }
+      .row-active {
+        background: #f0f7ff;
+      }
+      .status-pill {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 9px;
+        border-radius: 999px;
+        display: inline-block;
+      }
+      .pill-active { background: #dbeafe; color: #1e40af; }
+      .pill-queued { background: #f1f5f9; color: #475569; }
+
+      /* ====================================================
+         PAGE 2: DIAGNOSTICS & MATRIX BENCHMARK
+         ==================================================== */
+      .diag-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .diag-card {
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-card);
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .diag-card h3 {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .diag-card p {
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: -8px;
+      }
+      .diag-input-box {
+        display: flex;
+        align-items: center;
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 13px;
+        color: var(--ink);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .scan-modes-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .mode-chips {
+        display: flex;
+        gap: 8px;
+      }
+      .mode-chip {
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink-secondary);
+      }
+      .mode-chip.active {
+        background: #1668e3;
+        color: #fff;
+        border-color: #1668e3;
+      }
+      .diag-rate-hero {
+        background: #f8fafc;
+        border: 1px solid var(--line-subtle);
+        border-radius: 12px;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .diag-rate-val {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--ps-blue);
+      }
+      .diag-mini-chart {
+        height: 64px;
+        width: 100%;
+        background: #fff;
+        border-radius: 8px;
+        border: 1px solid var(--line-subtle);
+        overflow: hidden;
+      }
+
+      /* Recommendation Box */
+      .rec-banner {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 12px;
+        padding: 18px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .rec-content h4 {
+        font-size: 14.5px;
+        font-weight: 700;
+        color: #166534;
+      }
+      .rec-content p {
+        font-size: 12.5px;
+        color: #15803d;
+        margin-top: 2px;
+      }
+      .rec-btn {
+        background: #0f172a;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: none;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+      }
+
+      /* ====================================================
+         PAGE 3: CONSOLE FILES EXPLORER
+         ==================================================== */
+      .files-card {
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-card);
+        padding: 22px 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        flex: 1;
+      }
+      .files-path-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .path-badge {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: #e2e8f0;
+        color: #1e293b;
+      }
+      .path-badge.active {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .files-meta-count {
+        margin-left: auto;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      /* ====================================================
+         PAGE 4: SETTINGS & TRANSFER ENGINE PRESETS
+         ==================================================== */
+      .settings-card {
+        background: #ffffff;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-card);
+        padding: 24px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .preset-bar-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--line-subtle);
+      }
+      .preset-btns-group {
+        display: flex;
+        gap: 8px;
+      }
+      .engine-preset-btn {
+        font-size: 12.5px;
+        font-weight: 600;
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink-secondary);
+      }
+      .engine-preset-btn.active-preset {
+        background: #10141d;
+        color: #fff;
+        border-color: #10141d;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      .settings-fields-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+      .field-block {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .field-block label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .field-select {
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 13.5px;
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .field-hint {
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+
+      /* Storage Explorer Bar */
+      .storage-bar-card {
+        background: #f8fafc;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .storage-meta-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12.5px;
+      }
+      .storage-track {
+        height: 10px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .storage-fill {
+        height: 100%;
+        width: 65%;
+        background: linear-gradient(90deg, #10b981 0%, #38bdf8 100%);
+      }
+
+      /* ====================================================
+         VIRTUAL CURSOR
+         ==================================================== */
+      .virtual-cursor {
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        pointer-events: none;
+        z-index: 999;
+        transform: translate(1100px, 800px);
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
+      }
+      .cursor-click-ring {
+        position: absolute;
+        width: 32px;
+        height: 32px;
+        border: 2.5px solid #1668e3;
+        border-radius: 50%;
+        top: -4px;
+        left: -4px;
+        opacity: 0;
+        transform: scale(0.3);
+      }
+
+      /* ====================================================
+         CLOSING BRAND OUTRO CARD
+         ==================================================== */
+      .brand-outro {
+        position: absolute;
+        inset: 0;
+        background: rgba(7, 9, 14, 0.94);
+        backdrop-filter: blur(24px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 100;
+      }
+      .outro-ps5-icon {
+        width: 80px;
+        height: 100px;
+        filter: drop-shadow(0 0 24px rgba(56, 189, 248, 0.7));
+      }
+      .outro-title {
+        font-size: 40px;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: -0.02em;
+        text-align: center;
+      }
+      .outro-sub {
+        font-size: 17px;
+        font-weight: 500;
+        color: #cbd5e1;
+        text-align: center;
+        max-width: 680px;
+        line-height: 1.5;
+      }
+      .outro-badges {
+        display: flex;
+        gap: 14px;
+        margin-top: 8px;
+      }
+      .outro-pill {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #f1f5f9;
+        font-size: 13.5px;
+        font-weight: 600;
+        padding: 8px 18px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .outro-url {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 15px;
+        font-weight: 600;
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 8px 22px;
+        border-radius: 10px;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="15.0"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div class="ambient-glow"></div>
+
+      <!-- App Window Clip -->
+      <div id="app-window" class="app-window clip" data-start="0" data-duration="13.2" data-track-index="0">
+        <!-- Mac Titlebar -->
+        <div class="mac-titlebar">
+          <div class="window-dots">
+            <span class="dot-btn dot-close"></span>
+            <span class="dot-btn dot-min"></span>
+            <span class="dot-btn dot-zoom"></span>
+          </div>
+          <div class="window-title">
+            <span>Direct Stream Studio</span>
+            <span class="window-title-badge">PS5 Gigabit LAN</span>
+          </div>
+        </div>
+
+        <!-- PS5 Top Accent Lightbar -->
+        <div id="ps5-lightbar" class="ps5-lightbar"></div>
+
+        <div class="app-body">
+          <!-- Sidebar -->
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand-box">
+                <div class="brand-logo">
+                  <svg viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></svg>
+                </div>
+                <div class="brand-text">
+                  <h1>Direct Stream</h1>
+                  <p>For PlayStation 5</p>
+                </div>
+              </div>
+
+              <nav class="nav-group">
+                <button id="nav-transfers" class="nav-btn active">
+                  <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>
+                  <span>Transfers</span>
+                  <span class="nav-badge">3</span>
+                </button>
+                <button id="nav-diagnostics" class="nav-btn">
+                  <svg viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M7 18h10"/><circle cx="12" cy="13" r="1.5"/></svg>
+                  <span>Diagnostics</span>
+                </button>
+                <button id="nav-files" class="nav-btn">
+                  <svg viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3Z"/></svg>
+                  <span>Console files</span>
+                </button>
+                <button id="nav-settings" class="nav-btn">
+                  <svg viewBox="0 0 24 24"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <span>Settings</span>
+                </button>
+              </nav>
+            </div>
+
+            <!-- Bottom Console Card -->
+            <div class="console-card">
+              <div class="ps5-svg-wrap">
+                <svg viewBox="0 0 24 32" style="width: 20px; height: 26px;">
+                  <path d="M7 2c1.2 0 2.4 1 2.8 3.5l1.6 19c.2 2.2 1.4 3.5 3.6 3.5s3.4-1.3 3.6-3.5l1.6-19c.4-2.5 1.6-3.5 2.8-3.5" fill="none" stroke="#e8ecf4" stroke-width="2" stroke-linecap="round"/>
+                  <rect x="9.5" y="5" width="5" height="23" rx="1.5" fill="#090b0e"/>
+                  <line x1="12" y1="6" x2="12" y2="24" stroke="#1668e3" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="console-info">
+                <h4><span class="status-dot"></span> PS5 Connected</h4>
+                <p>192.168.1.188</p>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Workspace -->
+          <main class="workspace">
+            <!-- ============================================== -->
+            <!-- VIEW 1: TRANSFERS DASHBOARD                    -->
+            <!-- ============================================== -->
+            <section id="view-transfers" class="page-container active-page">
+              <div class="page-head">
+                <div>
+                  <h2>Transfers</h2>
+                  <p>Direct Gigabit LAN streaming · zero-copy memory ring buffer</p>
+                </div>
+                <div class="head-actions">
+                  <button class="btn-primary">
+                    <svg style="width: 16px; height: 16px; stroke-width: 2.2;" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    New Transfer
+                  </button>
+                </div>
+              </div>
+
+              <!-- Live Telemetry Card -->
+              <div class="hero-card">
+                <div class="hero-top-row">
+                  <div class="state-tag-group">
+                    <span class="state-badge">Streaming</span>
+                    <span class="bottleneck-pill">Gigabit LAN Saturated</span>
+                  </div>
+                  <span id="trans-eta" style="font-size: 13px; font-weight: 600; color: #475569;">ETA: 1m 04s</span>
+                </div>
+
+                <div class="hero-title-row">
+                  <h3 class="pkg-filename">Elden_Ring_Shadow_v1.12.pkg</h3>
+                  <div class="speedometer-num"><span id="speed-counter">118.8</span> MB/s</div>
+                </div>
+
+                <div class="progress-meta-row">
+                  <span><strong id="bytes-counter">41.8 GB</strong> / 48.2 GB</span>
+                  <strong id="percent-counter" style="color: var(--ps-blue);">86.7%</strong>
+                </div>
+
+                <div class="progress-track">
+                  <div id="hero-progress-fill" class="progress-fill"></div>
+                </div>
+
+                <!-- 3 Metric Pillars -->
+                <div class="pillars-grid">
+                  <div class="pillar">
+                    <div class="pillar-header">
+                      <span class="dot-blue"></span> To Console
+                    </div>
+                    <div class="pillar-value" id="pillar-console">118.8 MB/s</div>
+                  </div>
+                  <div class="pillar">
+                    <div class="pillar-header">
+                      <span class="dot-purple"></span> From Source
+                    </div>
+                    <div class="pillar-value" id="pillar-source">122.4 MB/s</div>
+                  </div>
+                  <div class="pillar">
+                    <div class="pillar-header">
+                      <span class="dot-green"></span> RAM Buffer
+                    </div>
+                    <div class="pillar-value" id="pillar-ram">384 / 512 MiB</div>
+                  </div>
+                </div>
+
+                <!-- Real-time SVG Waveform -->
+                <div class="telemetry-chart-box">
+                  <svg class="chart-svg" viewBox="0 0 600 70" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="chartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#1668e3" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#1668e3" stop-opacity="0.0"/>
+                      </linearGradient>
+                    </defs>
+                    <path id="chart-area" d="M0,70 L0,35 Q60,30 120,24 T240,16 T360,18 T480,12 T600,10 L600,70 Z" fill="url(#chartGrad)"/>
+                    <path id="chart-line-source" d="M0,38 Q60,32 120,26 T240,18 T360,20 T480,14 T600,11" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4 3"/>
+                    <path id="chart-line-console" d="M0,35 Q60,30 120,24 T240,16 T360,18 T480,12 T600,10" fill="none" stroke="#1256c4" stroke-width="2.5" stroke-linecap="round"/>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Queue Card -->
+              <div class="queue-card">
+                <div class="queue-header-row">
+                  <div class="queue-title">
+                    <span>Queue</span>
+                    <span class="queue-badge-count">3 items</span>
+                  </div>
+                  <span style="font-size: 12px; color: #334155;">Direct sequential pipeline</span>
+                </div>
+
+                <table class="queue-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 45%;">Name</th>
+                      <th>Size</th>
+                      <th>Status</th>
+                      <th style="text-align: right;">Speed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-active">
+                      <td><strong>Elden_Ring_Shadow_v1.12.pkg</strong></td>
+                      <td>48.2 GB</td>
+                      <td><span class="status-pill pill-active">Streaming</span></td>
+                      <td style="text-align: right; font-family: 'JetBrains Mono'; font-weight: 600; color: var(--ps-blue);">118.8 MB/s</td>
+                    </tr>
+                    <tr>
+                      <td>Cyberpunk_2077_Phantom_Liberty.pkg</td>
+                      <td>32.6 GB</td>
+                      <td><span class="status-pill pill-queued">Queued</span></td>
+                      <td style="text-align: right; color: var(--muted); font-family: 'JetBrains Mono';">—</td>
+                    </tr>
+                    <tr>
+                      <td>Gran_Turismo_7_Update_1.49.pkg</td>
+                      <td>14.8 GB</td>
+                      <td><span class="status-pill pill-queued">Queued</span></td>
+                      <td style="text-align: right; color: var(--muted); font-family: 'JetBrains Mono';">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 2: SPEED DIAGNOSTICS & BENCHMARK          -->
+            <!-- ============================================== -->
+            <section id="view-diagnostics" class="page-container">
+              <div class="page-head">
+                <div>
+                  <h2>Speed Diagnostics</h2>
+                  <p>Real-time matrix benchmark to discover highest throughput parameters</p>
+                </div>
+              </div>
+
+              <div class="diag-grid">
+                <!-- Internet source benchmark -->
+                <div class="diag-card">
+                  <h3>Internet Source Benchmark</h3>
+                  <p>Analyze HTTP multi-range throughput and TCP latency</p>
+
+                  <div class="diag-input-box">
+                    https://fast-cdn.mirror.net/packages/speedtest_chunk.pkg
+                  </div>
+
+                  <div class="scan-modes-row">
+                    <div class="mode-chips">
+                      <span class="mode-chip active">Quick Scan (~25s)</span>
+                      <span class="mode-chip">Full Matrix (~60s)</span>
+                    </div>
+                    <button id="btn-run-benchmark" class="btn-primary" style="padding: 7px 16px; font-size: 12.5px;">
+                      Run Quick Scan
+                    </button>
+                  </div>
+
+                  <div class="diag-rate-hero">
+                    <div>
+                      <div class="diag-rate-val" id="diag-rate-counter">116.4 MB/s</div>
+                      <span style="font-size: 12px; color: var(--muted); font-weight: 500;">Sustained Download Rate</span>
+                    </div>
+                    <span style="background: #e0f2fe; color: #0369a1; font-weight: 600; font-size: 11px; padding: 4px 10px; border-radius: 999px;">
+                      16 Streams · 8 MiB
+                    </span>
+                  </div>
+
+                  <div class="diag-mini-chart">
+                    <svg viewBox="0 0 360 50" style="width: 100%; height: 100%;">
+                      <path d="M0,45 Q40,42 80,30 T160,20 T240,16 T320,12 L360,10" fill="none" stroke="#1256c4" stroke-width="2.2" stroke-linecap="round"/>
+                      <circle cx="80" cy="30" r="3.5" fill="#1256c4"/>
+                      <circle cx="160" cy="20" r="3.5" fill="#1256c4"/>
+                      <circle cx="240" cy="16" r="3.5" fill="#1256c4"/>
+                      <circle cx="320" cy="12" r="3.5" fill="#1256c4"/>
+                    </svg>
+                  </div>
+                </div>
+
+                <!-- Local Path Benchmark -->
+                <div class="diag-card">
+                  <h3>Mac-to-PS5 LAN Path</h3>
+                  <p>Measure local gigabit FTP socket pipeline to internal SSD</p>
+
+                  <div style="display: flex; gap: 10px;">
+                    <button class="btn-outline" style="font-size: 12px;"><svg style="width: 14px; height: 14px;" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5Z"/></svg>Choose Test File</button>
+                    <button class="btn-outline" style="font-size: 12px;"><svg style="width: 14px; height: 14px;" viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3Z"/></svg>Choose Folder</button>
+                  </div>
+
+                  <div class="diag-rate-hero">
+                    <div>
+                      <div class="diag-rate-val">112.8 MB/s</div>
+                      <span style="font-size: 12px; color: var(--muted); font-weight: 500;">Console Ingest Speed</span>
+                    </div>
+                    <span style="background: #dcfce7; color: #15803d; font-weight: 600; font-size: 11px; padding: 4px 10px; border-radius: 999px;">
+                      Gigabit Verified
+                    </span>
+                  </div>
+
+                  <div class="diag-mini-chart">
+                    <svg viewBox="0 0 360 50" style="width: 100%; height: 100%;">
+                      <path d="M0,45 Q50,38 100,28 T200,18 T300,14 L360,12" fill="none" stroke="#047857" stroke-width="2.2" stroke-linecap="round"/>
+                      <circle cx="100" cy="28" r="3.5" fill="#047857"/>
+                      <circle cx="200" cy="18" r="3.5" fill="#047857"/>
+                      <circle cx="300" cy="14" r="3.5" fill="#047857"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Recommendation Card -->
+              <div id="rec-banner" class="rec-banner">
+                <div class="rec-content">
+                  <h4>Optimal Transfer Configuration Detected</h4>
+                  <p>16 parallel streams · 8 MiB slice chunks · 256 MiB RAM ring buffer maximizes your speed without socket timeouts.</p>
+                </div>
+                <button id="btn-apply-optimal" class="rec-btn">
+                  Apply Recommended Settings
+                </button>
+              </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 3: CONSOLE FILES EXPLORER                 -->
+            <!-- ============================================== -->
+            <section id="view-files" class="page-container">
+              <div class="page-head">
+                <div>
+                  <h2>Console Files</h2>
+                  <p>Browse, inspect and verify packages on PS5 internal storage</p>
+                </div>
+                <div class="head-actions">
+                  <button id="btn-refresh-files" class="btn-outline">
+                    <svg viewBox="0 0 24 24"><path d="M4 4v5h.6M20 20v-5h-.6M4.6 9A8 8 0 0 1 19 6.3M19.4 15A8 8 0 0 1 5 17.7"/></svg>
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div class="files-card">
+                <div class="files-path-bar">
+                  <span style="font-weight: 500; color: #475569;">PS5 Path:</span>
+                  <span class="path-badge">data</span>
+                  <span style="color: #94a3b8;">/</span>
+                  <span class="path-badge active">PS5Direct</span>
+                  <span class="files-meta-count">4 packages · 143.1 GB allocated</span>
+                </div>
+
+                <table class="queue-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 42%;">Name</th>
+                      <th>Size</th>
+                      <th>Modified</th>
+                      <th>Integrity Status</th>
+                      <th style="text-align: right;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="row-active" id="row-file-elden">
+                      <td><strong>Elden_Ring_Shadow_v1.12.pkg</strong></td>
+                      <td>48.2 GB</td>
+                      <td>Today, 14:38</td>
+                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
+                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Bloodborne_Complete_Edition.pkg</strong></td>
+                      <td>38.4 GB</td>
+                      <td>Yesterday</td>
+                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
+                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Ghost_of_Tsushima_DC_Update.pkg</strong></td>
+                      <td>34.6 GB</td>
+                      <td>2 days ago</td>
+                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
+                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Demon_Souls_Remake_Patch_1.04.pkg</strong></td>
+                      <td>21.9 GB</td>
+                      <td>3 days ago</td>
+                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
+                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- VIEW 4: TRANSFER ENGINE SETTINGS               -->
+            <!-- ============================================== -->
+            <section id="view-settings" class="page-container">
+              <div class="page-head">
+                <div>
+                  <h2>Transfer Engine Settings</h2>
+                  <p>Configure parallel thread workers, ring buffer capacity, and destination</p>
+                </div>
+              </div>
+
+              <!-- Console Connection Card -->
+              <div class="settings-card" style="padding: 18px 24px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div>
+                    <h3 style="font-size: 14.5px; font-weight: 700;">Console Connection Profile</h3>
+                    <p style="font-size: 12px; color: #475569; margin-top: 2px;">Target IP: 192.168.1.188:2121 · Destination: /data/PS5Direct</p>
+                  </div>
+                  <span style="background: #dcfce7; color: #15803d; font-weight: 700; font-size: 11.5px; padding: 4px 12px; border-radius: 999px;">
+                    ● Active Gigabit Socket Link (0.8ms)
+                  </span>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="preset-bar-row">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 700;">Performance Presets</h3>
+                    <p style="font-size: 12.5px; color: var(--muted);">One-click hardware and bandwidth profiles</p>
+                  </div>
+                  <div class="preset-btns-group">
+                    <button class="engine-preset-btn" id="preset-cons">Conservative</button>
+                    <button class="engine-preset-btn" id="preset-bal">Balanced</button>
+                    <button class="engine-preset-btn active-preset" id="preset-turbo">Turbo (16 St)</button>
+                    <button class="engine-preset-btn" id="preset-max">Max Saturation (32 St)</button>
+                  </div>
+                </div>
+
+                <div class="settings-fields-grid">
+                  <div class="field-block">
+                    <label>Parallel Streams</label>
+                    <div class="field-select" id="select-streams">16 streams (Fast Turbo / Recommended)</div>
+                    <span class="field-hint">Simultaneous HTTP range socket connections</span>
+                  </div>
+                  <div class="field-block">
+                    <label>Chunk Slice Size</label>
+                    <div class="field-select" id="select-chunk">8 MiB (Balanced / Low Overhead)</div>
+                    <span class="field-hint">Segment window per concurrent fetch</span>
+                  </div>
+                  <div class="field-block">
+                    <label>RAM Ring Buffer</label>
+                    <div class="field-select" id="select-buffer">256 MiB (Turbo Tier)</div>
+                    <span class="field-hint">Zero-disk cache for seamless console streaming</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Storage Info Card -->
+              <div class="storage-bar-card">
+                <div class="storage-meta-row">
+                  <span style="font-weight: 600; color: var(--ink);">PS5 Internal Storage (/data/PS5Direct)</span>
+                  <span style="font-family: 'JetBrains Mono'; font-weight: 600; color: var(--ps-blue);">542 GB / 825 GB (283 GB Free)</span>
+                </div>
+                <div class="storage-track">
+                  <div class="storage-fill"></div>
+                </div>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+
+      <!-- Virtual Mouse Cursor -->
+      <div id="cursor" class="virtual-cursor clip" data-start="0" data-duration="13.2" data-track-index="1">
+        <svg viewBox="0 0 24 24" style="width: 24px; height: 24px;">
+          <polygon points="0,0 0,20 5.5,15.5 9,23.5 13,22 9.5,14 16,14" fill="#0f172a" stroke="#ffffff" stroke-width="1.6"/>
+        </svg>
+        <div id="click-ring" class="cursor-click-ring"></div>
+      </div>
+
+      <!-- Closing Brand Outro -->
+      <div id="brand-outro" class="brand-outro clip" data-start="12.8" data-duration="2.2" data-track-index="2" data-layout-allow-overlap="true">
+        <svg viewBox="0 0 24 32" class="outro-ps5-icon">
+          <path d="M7 2c1.2 0 2.4 1 2.8 3.5l1.6 19c.2 2.2 1.4 3.5 3.6 3.5s3.4-1.3 3.6-3.5l1.6-19c.4-2.5 1.6-3.5 2.8-3.5" fill="none" stroke="#e8ecf4" stroke-width="2.2" stroke-linecap="round"/>
+          <rect x="9.5" y="5" width="5" height="23" rx="1.5" fill="#090b0e"/>
+          <line x1="12" y1="5" x2="12" y2="25" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <h2 class="outro-title">DIRECT STREAM FOR PLAYSTATION 5</h2>
+        <p class="outro-sub">Direct Gigabit LAN streaming, zero-copy memory ring buffer, and precision speed telemetry.</p>
+        <div class="outro-badges">
+          <span class="outro-pill">⚡ 118+ MB/s Gigabit Speed</span>
+          <span class="outro-pill">💾 Zero Local Disk Wear</span>
+          <span class="outro-pill">🛡️ 100% Native Pure Python</span>
+        </div>
+        <div class="outro-url">github.com/ChillQuant/direct-stream-ps5</div>
+      </div>
+    </div>
+
+    <!-- GSAP Master Animation Script -->
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      // =======================================================
+      // SCENE 1: APP WINDOW ENTRANCE & LIVE TELEMETRY (0s - 3.8s)
+      // =======================================================
+      tl.fromTo(
+        "#app-window",
+        { opacity: 0, scale: 0.95, y: 30 },
+        { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "power2.out" },
+        0
+      );
+
+      // Lightbar pulse
+      tl.fromTo(
+        "#ps5-lightbar",
+        { opacity: 0.3, filter: "drop-shadow(0 0 2px #1668e3)" },
+        { opacity: 1, filter: "drop-shadow(0 0 12px #38bdf8)", duration: 1.0, ease: "power2.inOut" },
+        0.4
+      );
+
+      // Progress bar fill surges from 68% to 88%
+      tl.fromTo(
+        "#hero-progress-fill",
+        { width: "68%" },
+        { width: "88%", duration: 3.2, ease: "power1.inOut" },
+        0.5
+      );
+
+      // Speed counter ticker
+      const speedObj = { val: 86.4, bytes: 33.0, pct: 68.5, ram: 256 };
+      tl.to(
+        speedObj,
+        {
+          val: 118.8,
+          bytes: 42.4,
+          pct: 88.0,
+          ram: 384,
+          duration: 3.0,
+          ease: "power2.out",
+          onUpdate: function () {
+            document.getElementById("speed-counter").innerText = speedObj.val.toFixed(1);
+            document.getElementById("pillar-console").innerText = speedObj.val.toFixed(1) + " MB/s";
+            document.getElementById("bytes-counter").innerText = speedObj.bytes.toFixed(1) + " GB";
+            document.getElementById("percent-counter").innerText = speedObj.pct.toFixed(1) + "%";
+            document.getElementById("pillar-ram").innerText = Math.round(speedObj.ram) + " / 512 MiB";
+          },
+        },
+        0.6
+      );
+
+      // Cursor enters from bottom-right and glides toward Diagnostics nav button
+      tl.fromTo(
+        "#cursor",
+        { x: 1200, y: 750, opacity: 0 },
+        { x: 310, y: 264, opacity: 1, duration: 1.1, ease: "power2.out" },
+        2.5
+      );
+
+      // Click Diagnostics
+      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 3.65);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 3.65);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 3.77);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 3.87);
+
+      // =======================================================
+      // SCENE 2: TRANSITION TO DIAGNOSTICS & BENCHMARK (3.8s - 7.2s)
+      // =======================================================
+      // Nav switch
+      tl.to("#nav-transfers", { className: "nav-btn", duration: 0.08 }, 3.75);
+      tl.to("#nav-diagnostics", { className: "nav-btn active", duration: 0.08 }, 3.75);
+
+      // Page cross-fade
+      tl.to("#view-transfers", { opacity: 0, duration: 0.25, ease: "power1.in" }, 3.75);
+      tl.to("#view-diagnostics", { opacity: 1, duration: 0.35, ease: "power1.out" }, 4.0);
+
+      // Cursor moves to "Run Quick Scan" button
+      tl.to("#cursor", { x: 990, y: 338, duration: 0.7, ease: "power2.inOut" }, 4.1);
+
+      // Click "Run Quick Scan"
+      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 4.8);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 4.8);
+      tl.to("#btn-run-benchmark", { scale: 0.96, background: "#0e4399", duration: 0.12 }, 4.8);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 4.92);
+      tl.to("#btn-run-benchmark", { scale: 1.0, background: "#1256c4", duration: 0.15 }, 4.92);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 5.02);
+
+      // Benchmark sweeps numbers
+      const diagObj = { rate: 24.0 };
+      tl.to(
+        diagObj,
+        {
+          rate: 116.4,
+          duration: 1.2,
+          ease: "power2.out",
+          onUpdate: function () {
+            document.getElementById("diag-rate-counter").innerText = diagObj.rate.toFixed(1) + " MB/s";
+          },
+        },
+        4.95
+      );
+
+      // Recommendation Banner appears with glow
+      tl.fromTo(
+        "#rec-banner",
+        { opacity: 0.5, y: 10, scale: 0.98 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power2.out" },
+        5.6
+      );
+
+      // Cursor moves to "Apply Recommended Settings"
+      tl.to("#cursor", { x: 1480, y: 628, duration: 0.8, ease: "power2.inOut" }, 5.8);
+
+      // Click "Apply Recommended Settings"
+      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 6.6);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 6.6);
+      tl.to("#btn-apply-optimal", { scale: 0.96, background: "#047857", duration: 0.12 }, 6.6);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 6.72);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 6.82);
+
+      // =======================================================
+      // SCENE 3: CONSOLE FILES EXPLORER (7.2s - 10.2s)
+      // =======================================================
+      // Cursor glides to "Console files" in sidebar
+      tl.to("#cursor", { x: 310, y: 306, duration: 0.65, ease: "power2.inOut" }, 6.9);
+
+      // Click Console files
+      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 7.55);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 7.55);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 7.67);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 7.77);
+
+      // Nav switch
+      tl.to("#nav-diagnostics", { className: "nav-btn", duration: 0.08 }, 7.65);
+      tl.to("#nav-files", { className: "nav-btn active", duration: 0.08 }, 7.65);
+
+      // Page cross-fade
+      tl.to("#view-diagnostics", { opacity: 0, duration: 0.25, ease: "power1.in" }, 7.65);
+      tl.to("#view-files", { opacity: 1, duration: 0.35, ease: "power1.out" }, 7.9);
+
+      // Cursor moves over verified package row
+      tl.to("#cursor", { x: 850, y: 350, duration: 0.8, ease: "power2.inOut" }, 8.1);
+
+      // Cursor moves to Refresh button
+      tl.to("#cursor", { x: 1630, y: 145, duration: 0.7, ease: "power2.inOut" }, 9.0);
+
+      // Click Refresh button
+      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 9.7);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 9.7);
+      tl.to("#btn-refresh-files", { scale: 0.95, duration: 0.12 }, 9.7);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 9.82);
+      tl.to("#btn-refresh-files", { scale: 1.0, duration: 0.15 }, 9.82);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 9.92);
+
+      // =======================================================
+      // SCENE 4: SETTINGS & TRANSFER ENGINE PRESETS (10.2s - 12.8s)
+      // =======================================================
+      // Cursor glides to Settings in sidebar
+      tl.to("#cursor", { x: 310, y: 348, duration: 0.6, ease: "power2.inOut" }, 10.0);
+
+      // Click Settings
+      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 10.6);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 10.6);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 10.72);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 10.82);
+
+      // Nav switch
+      tl.to("#nav-files", { className: "nav-btn", duration: 0.08 }, 10.7);
+      tl.to("#nav-settings", { className: "nav-btn active", duration: 0.08 }, 10.7);
+
+      // Page cross-fade
+      tl.to("#view-files", { opacity: 0, duration: 0.25, ease: "power1.in" }, 10.7);
+      tl.to("#view-settings", { opacity: 1, duration: 0.35, ease: "power1.out" }, 10.95);
+
+      // Cursor moves to "Max Saturation" preset button
+      tl.to("#cursor", { x: 1530, y: 345, duration: 0.75, ease: "power2.inOut" }, 11.2);
+
+      // Click "Max Saturation"
+      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 11.95);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 11.95);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 12.07);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 12.17);
+
+      // Change presets UI state
+      tl.call(
+        function () {
+          document.getElementById("preset-turbo").classList.remove("active-preset");
+          document.getElementById("preset-max").classList.add("active-preset");
+          document.getElementById("select-streams").innerText = "32 streams (Max LAN Saturation)";
+          document.getElementById("select-chunk").innerText = "32 MiB (Max Saturation)";
+          document.getElementById("select-buffer").innerText = "512 MiB (Max Saturation Tier)";
+        },
+        null,
+        12.07
+      );
+
+      // Cursor fades offscreen
+      tl.to("#cursor", { opacity: 0, x: 1650, y: 400, duration: 0.4, ease: "power1.in" }, 12.4);
+
+      // =======================================================
+      // SCENE 5: BRAND OUTRO & REPO LOCKUP (12.8s - 15.0s)
+      // =======================================================
+      tl.to("#app-window", { scale: 0.92, opacity: 0, duration: 0.45, ease: "power2.in" }, 12.8);
+      tl.fromTo(
+        "#brand-outro",
+        { opacity: 0, scale: 0.92 },
+        { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" },
+        13.0
+      );
+
+      // Register master timeline
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
