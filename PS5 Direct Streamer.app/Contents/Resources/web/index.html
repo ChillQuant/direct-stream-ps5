@@ -1,0 +1,1029 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DIRECT STREAM FOR PLAYSTATION 5</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+
+<!-- SVG Symbol Definitions -->
+<svg class="symbols" aria-hidden="true"><defs>
+  <symbol id="i-transfer" viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M7 18h10"/><circle cx="12" cy="13" r="1.5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3Z"/></symbol>
+  <symbol id="i-log" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 8h6M9 12h6M9 16h4"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 7 2-2a5 5 0 0 1 7 7l-2 2M14 17l-2 2a5 5 0 0 1-7-7l2-2M8 16l8-8"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5Z M14 3v6h5M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5" fill="currentColor"/><circle cx="15" cy="6" r="1.5" fill="currentColor"/><circle cx="9" cy="12" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/><circle cx="9" cy="18" r="1.5" fill="currentColor"/><circle cx="15" cy="18" r="1.5" fill="currentColor"/></symbol>
+  <symbol id="i-sound" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></symbol>
+  <symbol id="i-sound-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5ZM23 9l-6 6M17 9l6 6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 4v5h.6M20 20v-5h-.6M4.6 9A8 8 0 0 1 19 6.3M19.4 15A8 8 0 0 1 5 17.7"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 4v12m-4-4 4 4 4-4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="18" cy="12" r="1.5" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20" fill="currentColor"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+</defs></svg>
+
+<!-- Drag and drop whole-window overlay -->
+<div id="drop-overlay" class="drop-overlay" hidden>
+  <div class="drop-box">
+    <div class="drop-icon-box">
+      <svg><use href="#i-transfer"/></svg>
+    </div>
+    <h2>Transfer Files to PS5 Storage</h2>
+    <p>Direct zero-copy stream over Gigabit LAN</p>
+  </div>
+</div>
+
+<div class="app-shell">
+  <!-- MATTE DARK SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <a class="brand" href="#" aria-label="DIRECT STREAM FOR PLAYSTATION 5 home">
+        <div class="brand-text">
+          <span class="studio-title">DIRECT STREAM</span>
+          <span class="studio-sub">FOR PLAYSTATION 5</span>
+        </div>
+      </a>
+
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <button class="nav-item selected" data-page="transfers">
+          <svg class="nav-icon"><use href="#i-grid"/></svg>
+          <span class="nav-label">Transfers</span>
+          <span id="queue-badge" class="nav-count" hidden>0</span>
+        </button>
+        <button class="nav-item" data-page="diagnostics">
+          <svg class="nav-icon"><use href="#i-gauge"/></svg>
+          <span class="nav-label">Diagnostics</span>
+        </button>
+        <button class="nav-item" data-page="files">
+          <svg class="nav-icon"><use href="#i-folder"/></svg>
+          <span class="nav-label">Console files</span>
+        </button>
+        <button class="nav-item" data-page="activity">
+          <svg class="nav-icon"><use href="#i-log"/></svg>
+          <span class="nav-label">Activity</span>
+        </button>
+        <button class="nav-item" data-page="settings">
+          <svg class="nav-icon"><use href="#i-gear"/></svg>
+          <span class="nav-label">Settings</span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="sidebar-bottom">
+      <!-- Miniature PS5 Console Target Status Card -->
+      <div class="device-card" id="sidebar-device-card" title="Click to view console connection settings" data-open-settings>
+        <div class="ps5-console-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 32" class="ps5-console-svg">
+            <!-- Sleek PS5 Console Collar & Center Silhouette -->
+            <path d="M7 2c1.2 0 2.4 1 2.8 3.5l1.6 19c.2 2.2 1.4 3.5 3.6 3.5s3.4-1.3 3.6-3.5l1.6-19c.4-2.5 1.6-3.5 2.8-3.5" fill="none" stroke="#e8ecf4" stroke-width="1.8" stroke-linecap="round"/>
+            <rect x="9.5" y="5" width="5" height="23" rx="1.5" fill="#090b0e"/>
+            <!-- PS5 Blue LED light strip -->
+            <line x1="12" y1="6" x2="12" y2="24" stroke="#1668e3" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="device-meta">
+          <div class="device-name">PS5 connected</div>
+          <div class="device-sub">
+            <span id="connection-dot" class="dot green"></span>
+            <span id="sidebar-host">192.168.1.188</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-foot">
+        <span>v2.8 · Pure Mac Native</span>
+        <button id="quit" class="text-button">Quit app</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- LIGHT STUDIO WORKSPACE -->
+  <div class="workspace">
+    <!-- Studio Status Rail -->
+    <div class="ps5-lightbar" id="status-lightbar"></div>
+
+    <div id="offline-banner" class="banner error" hidden role="alert">Connection to the app was lost. Reopen DIRECT STREAM FOR PLAYSTATION 5 to reconnect.</div>
+
+    <!-- Hidden elements required by existing app.js logic to maintain 100% compatibility -->
+    <div hidden>
+      <span id="crumb">Transfers</span>
+      <span id="connection-pill" class="status-pill"><span id="connection-status-text">Connected</span></span>
+      <code id="target-host">192.168.1.188:1337</code>
+      <code id="target-folder">/data/ShadowMount</code>
+      <span id="pipeline-settings">16 streams · 256 MiB RAM</span>
+      <span id="source-mode">Direct Stream</span>
+      <span id="connection-message">Ready to stream</span>
+      <button id="sound-toggle"><svg id="sound-icon"><use href="#i-sound"/></svg></button>
+      <input id="quick-url" type="url">
+      <button id="quick-add-btn">Stream</button>
+      <button id="live-cancel-btn">Cancel</button>
+    </div>
+
+    <main class="main-content">
+
+      <!-- ========================================== -->
+      <!-- 01: TRANSFERS PAGE                         -->
+      <!-- ========================================== -->
+      <section id="page-transfers" class="page">
+        <!-- Page Header Row -->
+        <header class="page-header">
+          <div>
+            <h1>Transfers</h1>
+            <p class="page-subtitle">Send games, packages and files to your PlayStation 5 over a high-speed local network.</p>
+          </div>
+          <div class="header-actions">
+            <button class="button primary new-transfer-btn" data-add>
+              <svg><use href="#i-plus"/></svg>+ New transfer
+            </button>
+          </div>
+        </header>
+
+        <!-- Active Transfer Hero Card -->
+        <article class="card live-transfer-card" id="live-panel">
+          <div class="transfer-card-header">
+            <div class="transfer-tag-group">
+              <span id="live-state" class="status-badge idle">Idle</span>
+              <span id="bottleneck" class="bottleneck-tag" hidden>Optimal path</span>
+            </div>
+            <button id="live-pause-btn" class="icon-circle-btn" title="Pause or Resume transfer" aria-label="Pause transfer" hidden>
+              <svg><use href="#i-pause"/></svg>
+            </button>
+          </div>
+
+          <div class="transfer-title-row">
+            <h2 id="active-name" class="transfer-title">No active transfer</h2>
+          </div>
+
+          <!-- Progress Meta Row -->
+          <div class="transfer-progress-meta">
+            <div class="meta-left">
+              <span id="progress-bytes">Queue is empty</span>
+              <span class="meta-dot">·</span>
+              <strong id="progress-percent" class="blue-percent">0%</strong>
+            </div>
+            <div class="meta-right">
+              <span class="eta-label"><span id="eta">—</span></span>
+              <strong id="live-speed-heading" class="live-speed-heading"><span id="upload-speed">0.0</span> MB/s</strong>
+            </div>
+          </div>
+
+          <!-- Progress Bar Track -->
+          <div id="main-progress" class="progress-bar-track" role="progressbar" aria-label="Active transfer progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+
+          <!-- 3 Metric Pillars -->
+          <div class="telemetry-pillars">
+            <div class="pillar-stat">
+              <div class="pillar-top">
+                <span class="indicator-dot blue"></span>
+                <strong id="live-stat-console" class="pillar-num"><span id="upload-speed-display">0.0</span> MB/s</strong>
+              </div>
+              <span class="pillar-label">To console</span>
+            </div>
+            <div class="pillar-stat">
+              <div class="pillar-top">
+                <span class="indicator-dot purple"></span>
+                <strong id="live-stat-source" class="pillar-num"><span id="download-speed">0.0</span> MB/s</strong>
+              </div>
+              <span class="pillar-label">From source</span>
+            </div>
+            <div class="pillar-stat">
+              <div class="pillar-top">
+                <span class="indicator-dot green"></span>
+                <strong id="buffer-value" class="pillar-num">0 / 512 MiB</strong>
+              </div>
+              <span class="pillar-label">RAM buffer</span>
+              <div class="mini-buffer-track" hidden><div id="buffer-fill" style="width: 0%;"></div></div>
+            </div>
+          </div>
+
+          <!-- Real-Time Telemetry Graph -->
+          <div class="telemetry-graph-wrapper">
+            <div class="graph-y-axis">
+              <span>150 MB/s</span>
+              <span>75 MB/s</span>
+              <span>0</span>
+            </div>
+            <div class="graph-canvas-box">
+              <svg id="speed-chart" viewBox="0 0 640 84" preserveAspectRatio="none" role="img" aria-label="Real-time speed telemetry graph">
+                <path class="chart-grid-line" d="M0 14 H640"/>
+                <path class="chart-grid-line" d="M0 48 H640"/>
+                <path class="chart-grid-line" d="M0 76 H640"/>
+                <path id="chart-fill"/>
+                <path id="chart-down"/>
+                <path id="chart-up"/>
+              </svg>
+              <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+            </div>
+            <div class="graph-legend-col">
+              <div class="legend-item"><span class="indicator-dot blue"></span> To console</div>
+              <div class="legend-item"><span class="indicator-dot purple"></span> From source</div>
+            </div>
+          </div>
+          <div class="graph-x-axis">
+            <span>2m ago</span>
+            <span>90s</span>
+            <span>60s</span>
+            <span>30s</span>
+            <span>Now</span>
+          </div>
+          <p id="active-detail" hidden></p>
+        </article>
+
+        <!-- Transfer Queue Card -->
+        <article class="card queue-card">
+          <div class="queue-card-header">
+            <div class="queue-title-group">
+              <h2>Transfer queue</h2>
+              <span id="queue-total" class="items-count-badge">0 items</span>
+              <span id="completed-count" hidden>0 completed</span>
+              <p id="queue-subtitle" class="section-desc">Direct queue streaming · one FTP upload at a time</p>
+            </div>
+            <div class="queue-action-buttons">
+              <button id="quick-browse-file" class="button outline small">
+                <svg><use href="#i-file"/></svg>Add files
+              </button>
+              <button id="quick-browse-folder" class="button outline small">
+                <svg><use href="#i-folder"/></svg>Add folder
+              </button>
+              <button class="button outline small" data-add>
+                <svg><use href="#i-link"/></svg>Add link
+              </button>
+            </div>
+          </div>
+
+          <!-- Floating Bulk Action Bar -->
+          <div id="bulk-bar" class="bulk-bar" hidden>
+            <span id="bulk-count">0 selected</span>
+            <button id="bulk-pause" class="button small">Pause</button>
+            <button id="bulk-resume" class="button small">Resume</button>
+            <button id="bulk-remove" class="button small danger">Remove</button>
+            <button id="bulk-cancel" class="text-button">Deselect</button>
+          </div>
+
+          <!-- Queue Table -->
+          <div class="table-responsive">
+            <table class="studio-table queue-table">
+              <thead>
+                <tr>
+                  <th class="col-chk"><input type="checkbox" id="select-all" title="Select all jobs"></th>
+                  <th class="col-num">#</th>
+                  <th>Name</th>
+                  <th>Size</th>
+                  <th>Progress</th>
+                  <th>Status</th>
+                  <th class="right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="queue-body">
+                <!-- Dynamically populated rows from app.js -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State -->
+          <div id="queue-empty" class="empty-state" hidden>
+            <div class="empty-icon-wrap"><svg><use href="#i-transfer"/></svg></div>
+            <h3>Queue is clear</h3>
+            <p>Paste a download link or drop package files anywhere to start streaming.</p>
+            <button class="button primary small" data-add><svg><use href="#i-plus"/></svg>Add Transfer</button>
+          </div>
+
+          <!-- Queue Controls Footer -->
+          <div class="queue-footer-row">
+            <div class="queue-footer-left">
+              <span class="verified-tip"><svg><use href="#i-check"/></svg>Files verified byte-for-byte before atomic PS5 finalization</span>
+            </div>
+            <div class="queue-footer-actions">
+              <button id="start-queue" class="button small">Start Queue</button>
+              <button id="pause-all" class="button small">Pause Queue</button>
+              <button id="clear-completed" class="button small quiet">Clear Completed</button>
+              <button id="validate-links" class="button small quiet" title="Verify HTTP direct links without downloading">Verify Links</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+
+      <!-- ========================================== -->
+      <!-- 02: DIAGNOSTICS PAGE                       -->
+      <!-- ========================================== -->
+      <section id="page-diagnostics" class="page" hidden>
+        <header class="page-header">
+          <div>
+            <h1>Diagnostics</h1>
+            <p class="page-subtitle">Find your fastest connection. Measure and optimize your download performance.</p>
+          </div>
+        </header>
+
+        <div class="diagnostics-dual-grid">
+          <!-- Card 1: Internet source benchmark -->
+          <article class="card diag-card">
+            <h2>Internet source benchmark</h2>
+            <p class="card-caption">Test your download link with different stream and buffer presets.</p>
+            
+            <div class="input-with-icon">
+              <svg class="field-icon"><use href="#i-link"/></svg>
+              <input id="benchmark-url" type="url" placeholder="https://example.com/studio/Studio%20archive.pkg">
+            </div>
+
+            <div class="benchmark-controls-row">
+              <div class="mode-toggle-group" role="radiogroup" aria-label="Benchmark scan type">
+                <button type="button" id="matrix-mode-quick" class="mode-toggle-btn selected" data-mode="quick" role="radio" aria-checked="true">
+                  <span class="mode-radio-dot" aria-hidden="true"></span>
+                  <span>Quick scan (~25s)</span>
+                </button>
+                <button type="button" id="matrix-mode-full" class="mode-toggle-btn" data-mode="full" role="radio" aria-checked="false">
+                  <span class="mode-radio-dot" aria-hidden="true"></span>
+                  <span>Full test (~60s)</span>
+                </button>
+              </div>
+              <button id="benchmark-matrix" class="button primary small">Run Quick Scan</button>
+              <button id="stop-diagnostic" class="button outline small" hidden>Stop</button>
+              <button id="benchmark" hidden>Single test</button>
+            </div>
+
+            <div class="kpi-display-block">
+              <strong id="diag-rate-val" class="kpi-rate">— MB/s</strong>
+              <div class="kpi-meta-row">
+                <span class="kpi-label">Sustained download rate</span>
+                <span id="benchmark-mode-badge" class="benchmark-mode-pill">Quick scan (~25s)</span>
+              </div>
+            </div>
+
+            <!-- Mini Speed Line Chart -->
+            <div class="mini-chart-box">
+              <div class="mini-chart-y">
+                <span>150 MB/s</span>
+                <span>75 MB/s</span>
+                <span>0</span>
+              </div>
+              <div class="mini-chart-canvas">
+                <svg viewBox="0 0 400 64" preserveAspectRatio="none">
+                  <path class="mini-grid" d="M0 10 H400 M0 36 H400 M0 58 H400"/>
+                  <path d="M0 56 Q30 52 60 40 T120 28 T180 22 T240 26 T300 24 T360 20 L400 24" fill="none" stroke="#1668e3" stroke-width="2" stroke-linecap="round"/>
+                  <circle cx="60" cy="40" r="3" fill="#1668e3"/>
+                  <circle cx="120" cy="28" r="3" fill="#1668e3"/>
+                  <circle cx="180" cy="22" r="3" fill="#1668e3"/>
+                  <circle cx="240" cy="26" r="3" fill="#1668e3"/>
+                  <circle cx="300" cy="24" r="3" fill="#1668e3"/>
+                  <circle cx="360" cy="20" r="3" fill="#1668e3"/>
+                </svg>
+              </div>
+            </div>
+            <div class="mini-chart-x">
+              <span>0s</span><span>15s</span><span>30s</span><span>45s</span><span>60s</span>
+            </div>
+
+            <div id="benchmark-result" class="benchmark-result-meta" hidden></div>
+            <button id="apply-optimal-btn" class="button primary small margin-top" hidden>Apply Recommended Settings</button>
+          </article>
+
+          <!-- Card 2: Mac-to-PS5 local path -->
+          <article class="card diag-card">
+            <h2>Mac-to-PS5 local path</h2>
+            <p class="card-caption">Test the speed from your Mac to the console.</p>
+
+            <div class="local-choose-buttons">
+              <button class="button outline small" id="add-local">
+                <svg><use href="#i-file"/></svg>Choose a file...
+              </button>
+              <button class="button outline small" id="add-local-folder">
+                <svg><use href="#i-folder"/></svg>Choose a folder...
+              </button>
+            </div>
+
+            <div class="kpi-display-block">
+              <strong id="local-rate-val" class="kpi-rate">— MB/s</strong>
+              <span class="kpi-label">Sustained upload rate</span>
+            </div>
+
+            <!-- Mini Speed Line Chart -->
+            <div class="mini-chart-box">
+              <div class="mini-chart-y">
+                <span>150 MB/s</span>
+                <span>75 MB/s</span>
+                <span>0</span>
+              </div>
+              <div class="mini-chart-canvas">
+                <svg viewBox="0 0 400 64" preserveAspectRatio="none">
+                  <path class="mini-grid" d="M0 10 H400 M0 36 H400 M0 58 H400"/>
+                  <path d="M0 56 Q40 50 80 42 T160 34 T240 28 T320 24 L400 21" fill="none" stroke="#1668e3" stroke-width="2" stroke-linecap="round"/>
+                  <circle cx="80" cy="42" r="3" fill="#1668e3"/>
+                  <circle cx="160" cy="34" r="3" fill="#1668e3"/>
+                  <circle cx="240" cy="28" r="3" fill="#1668e3"/>
+                  <circle cx="320" cy="24" r="3" fill="#1668e3"/>
+                  <circle cx="380" cy="22" r="3" fill="#1668e3"/>
+                </svg>
+              </div>
+            </div>
+            <div class="mini-chart-x">
+              <span>0s</span><span>15s</span><span>30s</span><span>45s</span><span>60s</span>
+            </div>
+          </article>
+        </div>
+
+        <!-- Recommended Network Card -->
+        <article class="card recommendation-card">
+          <div class="rec-main-row">
+            <div class="rec-left">
+              <div class="rec-check-icon">
+                <svg><use href="#i-check"/></svg>
+              </div>
+              <div class="rec-copy">
+                <h3>Wired connection recommended</h3>
+                <p>Your network is performing well. A wired connection will provide the most consistent results.</p>
+              </div>
+            </div>
+            <div class="rec-preset-block">
+              <span class="rec-preset-label">Optimal preset</span>
+              <div class="preset-metrics">
+                <div>
+                  <strong>16 streams</strong>
+                  <small>Parallel workers</small>
+                </div>
+                <div>
+                  <strong>256 MiB</strong>
+                  <small>RAM buffer</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <details class="rec-details">
+            <summary><svg><use href="#i-chevron-right"/></svg> Understand your results</summary>
+            <div class="rec-details-content">
+              <div class="three-columns-clean">
+                <div>
+                  <h4>Ethernet Link</h4>
+                  <p>Connect both Mac and PS5 over Gigabit Ethernet to eliminate Wi-Fi interference.</p>
+                </div>
+                <div>
+                  <h4>Parallel Streams</h4>
+                  <p>16 parallel HTTP streams overcome ISP TCP window limits on single connections.</p>
+                </div>
+                <div>
+                  <h4>Decoupled Buffer</h4>
+                  <p>256 MiB RAM buffer prevents stalls when source download rate fluctuates.</p>
+                </div>
+              </div>
+            </div>
+          </details>
+        </article>
+      </section>
+
+
+      <!-- ========================================== -->
+      <!-- 03: CONSOLE FILES PAGE                     -->
+      <!-- ========================================== -->
+      <section id="page-files" class="page" hidden>
+        <header class="page-header">
+          <div>
+            <h1>Console files</h1>
+            <p class="page-subtitle">Browse your PS5 storage. This view is read-only while transfers are paused.</p>
+          </div>
+          <div class="storage-meter-block">
+            <div class="storage-text-row">
+              <strong id="storage-free-text">412 GB free</strong>
+              <span>of <span id="storage-total-text">825 GB</span></span>
+            </div>
+            <div class="storage-bar-track">
+              <div class="storage-bar-fill" style="width: 50%;"></div>
+            </div>
+          </div>
+        </header>
+
+        <article class="card files-browser-card">
+          <!-- Toolbar row -->
+          <div class="files-toolbar">
+            <div class="files-nav-buttons">
+              <button type="button" class="icon-btn small" id="files-back-btn" title="Back"><svg><use href="#i-chevron-left"/></svg></button>
+              <button type="button" class="icon-btn small" id="files-fwd-btn" title="Forward"><svg><use href="#i-chevron-right"/></svg></button>
+            </div>
+
+            <form id="browse-form" class="files-breadcrumb-form">
+              <div class="breadcrumb-pill">
+                <svg class="drive-icon"><use href="#i-folder"/></svg>
+                <input id="browse-path" value="/data/PS5Direct" spellcheck="false">
+              </div>
+              <button class="button small" type="submit" hidden>Go</button>
+            </form>
+
+            <div class="files-search-box">
+              <svg><use href="#i-search"/></svg>
+              <input id="files-search" type="search" placeholder="Search files...">
+            </div>
+
+            <button type="button" class="icon-btn small" id="files-refresh-btn" title="Refresh files list">
+              <svg><use href="#i-refresh"/></svg>
+            </button>
+          </div>
+
+          <div class="files-shortcuts-subbar">
+            <button class="button outline small" type="button" id="parent-folder">↑ Parent</button>
+            <button class="button outline small" type="button" id="root-folder-btn">/</button>
+            <span id="browse-message" class="browse-status-msg">Read-only connection active.</span>
+          </div>
+
+          <!-- Files Table -->
+          <div class="table-responsive">
+            <table class="studio-table files-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Modified</th>
+                  <th class="right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="files-body">
+                <tr id="files-loading-row">
+                  <td colspan="5" style="text-align: center; padding: 32px; color: var(--muted);">Click Refresh or enter a directory above to explore PS5 storage.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Bottom Notice -->
+          <div class="files-bottom-notice">
+            <span class="info-circle-icon">ℹ</span>
+            <span>Browsing is read-only. Files can be added via the Transfers page.</span>
+          </div>
+        </article>
+      </section>
+
+
+      <!-- ========================================== -->
+      <!-- 04: ACTIVITY PAGE                          -->
+      <!-- ========================================== -->
+      <section id="page-activity" class="page" hidden>
+        <header class="page-header">
+          <div>
+            <h1>Activity</h1>
+            <p class="page-subtitle">View a log of transfers, connections and system activity.</p>
+          </div>
+          <div class="header-actions">
+            <button id="export-log" class="button outline small">
+              <svg><use href="#i-export"/></svg>Export log
+            </button>
+          </div>
+        </header>
+
+        <!-- 4 Metric Cards in a Row -->
+        <div class="activity-metric-cards-row">
+          <div class="activity-card">
+            <div class="activity-card-icon blue"><svg><use href="#i-transfer"/></svg></div>
+            <div class="activity-card-body">
+              <strong id="act-metric-completed">0</strong>
+              <span>transfers completed</span>
+            </div>
+          </div>
+          <div class="activity-card">
+            <div class="activity-card-icon red"><svg><use href="#i-alert"/></svg></div>
+            <div class="activity-card-body">
+              <strong id="act-metric-errors">0</strong>
+              <span>errors</span>
+            </div>
+          </div>
+          <div class="activity-card">
+            <div class="activity-card-icon green"><svg><use href="#i-link"/></svg></div>
+            <div class="activity-card-body">
+              <strong id="act-metric-connections">0</strong>
+              <span>connections</span>
+            </div>
+          </div>
+          <div class="activity-card">
+            <div class="activity-card-icon gray"><svg><use href="#i-log"/></svg></div>
+            <div class="activity-card-body">
+              <strong id="act-metric-events">0</strong>
+              <span>events</span>
+            </div>
+          </div>
+        </div>
+
+        <article class="card activity-table-card">
+          <!-- Filter and Search Bar -->
+          <div class="activity-toolbar">
+            <div class="activity-filter-tabs">
+              <button type="button" class="tab-pill selected" data-log-filter="all">All (<span id="count-all">0</span>)</button>
+              <button type="button" class="tab-pill" data-log-filter="transfer">Transfers (<span id="count-transfers">0</span>)</button>
+              <button type="button" class="tab-pill" data-log-filter="connection">Connections (<span id="count-connections">0</span>)</button>
+              <button type="button" class="tab-pill" data-log-filter="error">Errors (<span id="count-errors">0</span>)</button>
+            </div>
+            <div class="activity-search-box">
+              <svg><use href="#i-search"/></svg>
+              <input id="activity-search-input" type="search" placeholder="Search activity...">
+            </div>
+          </div>
+
+          <!-- Activity Log Table -->
+          <div class="table-responsive">
+            <table class="studio-table activity-table">
+              <thead>
+                <tr>
+                  <th style="width: 120px;">Time</th>
+                  <th style="width: 140px;">Type</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="log-list">
+                <!-- Dynamically populated by app.js -->
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+
+      <!-- ========================================== -->
+      <!-- 05: SETTINGS PAGE                          -->
+      <!-- ========================================== -->
+      <section id="page-settings" class="page" hidden>
+        <header class="page-header">
+          <div>
+            <h1>Settings</h1>
+            <p class="page-subtitle">Configure your console connection and transfer preferences.</p>
+          </div>
+        </header>
+
+        <form id="settings-page-form" class="settings-page-container">
+          <div class="settings-tabs-row" role="tablist" aria-label="Settings categories">
+            <button type="button" class="settings-tab-btn selected" data-settings-tab="all" role="tab" aria-selected="true">All Settings</button>
+            <button type="button" class="settings-tab-btn" data-settings-tab="connection" role="tab" aria-selected="false">Connection</button>
+            <button type="button" class="settings-tab-btn" data-settings-tab="transfers" role="tab" aria-selected="false">Transfer Engine</button>
+          </div>
+
+          <!-- Section: Console Connection -->
+          <article class="card settings-section-card" id="settings-connection-section">
+            <h2>Console connection</h2>
+            <div class="settings-form-grid">
+              <div class="form-field">
+                <label for="page-setting-host">Console address</label>
+                <input id="page-setting-host" placeholder="192.168.1.188" required spellcheck="false">
+              </div>
+              <div class="form-field">
+                <label for="page-setting-port">Port</label>
+                <input id="page-setting-port" type="number" min="1" max="65535" value="2121" required>
+              </div>
+              <div class="form-field wide">
+                <label for="page-setting-folder">Destination directory</label>
+                <input id="page-setting-folder" value="/data/PS5Direct" required spellcheck="false">
+              </div>
+            </div>
+
+            <div class="connection-status-action-row">
+              <button type="button" id="test-connection" class="button outline small">Test connection</button>
+              <div class="connection-status-indicator">
+                <span id="page-conn-dot" class="dot"></span>
+                <strong id="page-conn-status">Checking…</strong>
+                <span id="page-conn-msg" class="conn-sub">Connecting to console</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Section: Transfer Engine -->
+          <article class="card settings-section-card" id="settings-transfers-section">
+            <div class="card-header-row">
+              <div>
+                <h2>Transfer engine</h2>
+                <p class="section-desc">Fine-tune parallel workers, RAM caching, and socket throughput.</p>
+              </div>
+              <div class="engine-preset-group" aria-label="Performance presets">
+                <span class="preset-label">Presets:</span>
+                <button type="button" class="preset-btn" id="preset-conservative" title="4 streams · 4 MiB chunk · 64 MiB RAM">Conservative</button>
+                <button type="button" class="preset-btn" id="preset-balanced" title="8 streams · 8 MiB chunk · 128 MiB RAM">Balanced</button>
+                <button type="button" class="preset-btn" id="preset-fast" title="16 streams · 8 MiB chunk · 256 MiB RAM">Turbo</button>
+                <button type="button" class="preset-btn" id="preset-max" title="16 streams · 32 MiB chunk · 512 MiB RAM">Max Saturation</button>
+              </div>
+            </div>
+
+            <div class="settings-form-grid engine-grid">
+              <div class="form-field">
+                <label for="page-setting-streams">Parallel streams</label>
+                <select id="page-setting-streams">
+                  <option value="1">1 stream (Single stream / No range)</option>
+                  <option value="2">2 streams (Low-Bandwidth / Wi-Fi)</option>
+                  <option value="4">4 streams (Standard Entry Broadband)</option>
+                  <option value="6">6 streams (Stable Mid-Bandwidth)</option>
+                  <option value="8">8 streams (Balanced Default)</option>
+                  <option value="12">12 streams (High-Speed Fiber)</option>
+                  <option value="16" selected>16 streams (Fast Turbo / Recommended)</option>
+                  <option value="24">24 streams (Ultra Fiber)</option>
+                  <option value="32">32 streams (Max LAN Saturation)</option>
+                </select>
+                <small class="field-hint">Concurrent HTTP range requests.</small>
+              </div>
+
+              <div class="form-field">
+                <label for="page-setting-chunk_mb">Chunk slice size</label>
+                <select id="page-setting-chunk_mb">
+                  <option value="2">2 MiB (Low-Bandwidth / Wi-Fi)</option>
+                  <option value="4">4 MiB (Standard Entry Broadband)</option>
+                  <option value="8" selected>8 MiB (Balanced / Recommended)</option>
+                  <option value="16">16 MiB (Ultra-Wide Pipeline)</option>
+                  <option value="32">32 MiB (Max Saturation)</option>
+                </select>
+                <small class="field-hint">Size of each downloaded segment.</small>
+              </div>
+
+              <div class="form-field">
+                <label for="page-setting-buffer_mb">RAM buffer</label>
+                <select id="page-setting-buffer_mb">
+                  <option value="32">32 MiB (Wi-Fi Tier)</option>
+                  <option value="64">64 MiB (Standard Entry)</option>
+                  <option value="96">96 MiB (Stable Mid-Bandwidth)</option>
+                  <option value="128">128 MiB (Balanced Default)</option>
+                  <option value="192">192 MiB (High-Speed Fiber)</option>
+                  <option value="256" selected>256 MiB (Fast Turbo / Recommended)</option>
+                  <option value="384">384 MiB (Ultra-Wide Pipeline)</option>
+                  <option value="512">512 MiB (Max Saturation)</option>
+                  <option value="1024">1024 MiB (1 GB High-Memory)</option>
+                </select>
+                <small class="field-hint">Memory ring buffer preventing pipeline stalls.</small>
+              </div>
+
+              <div class="form-field">
+                <label for="page-setting-limit_mbps">Speed cap (MB/s)</label>
+                <input id="page-setting-limit_mbps" type="number" min="0" max="1000" step="5" value="0">
+                <small class="field-hint">0 = Unlimited LAN/WAN bandwidth.</small>
+              </div>
+
+              <div class="form-field">
+                <label for="page-setting-retries">Network retries</label>
+                <select id="page-setting-retries">
+                  <option value="0">0 (Fail immediately)</option>
+                  <option value="1">1 retry</option>
+                  <option value="2">2 retries</option>
+                  <option value="3" selected>3 retries (Recommended)</option>
+                  <option value="5">5 retries</option>
+                </select>
+                <small class="field-hint">Auto-reconnect with exponential backoff.</small>
+              </div>
+
+              <div class="form-field pipeline-info-field">
+                <label>Pipeline capacity</label>
+                <div class="pipeline-calc-pill" id="page-pipeline-calc">
+                  <span id="page-calc-text">16 streams × 8 MiB = 128 MiB min · 256 MiB RAM (32 slots)</span>
+                </div>
+                <small class="field-hint">Buffer must be ≥ streams × chunk size.</small>
+              </div>
+
+              <div class="form-field wide toggle-row">
+                <div class="toggle-copy">
+                  <strong>Verify files after transfer</strong>
+                  <span>Always verifies final PS5 remote file size matches source before completing.</span>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="page-setting-verify" checked disabled aria-label="Always verify final PS5 remote file size">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <div class="settings-footer-row">
+            <button type="button" id="settings-reset-defaults" class="button outline">Reset to defaults</button>
+            <button type="button" id="mobile-quit" class="button outline danger">Quit app</button>
+            <button type="submit" class="button primary">Save changes</button>
+          </div>
+        </form>
+      </section>
+
+    </main>
+
+    <!-- Clean Studio Footer Stamp -->
+    <footer class="studio-clean-footer">
+      <div class="footer-sig">
+        <span>PRECISION STREAMING ARCHITECTURE</span>
+      </div>
+      <div class="footer-meta">
+        <span>DIRECT STREAM FOR PLAYSTATION 5 <b>2.8</b></span>
+        <span>A quieter kind of performance.</span>
+      </div>
+    </footer>
+  </div>
+</div>
+
+
+<!-- ========================================== -->
+<!-- 06: MODAL: NEW TRANSFER                    -->
+<!-- ========================================== -->
+<dialog id="add-dialog" class="studio-modal">
+  <form id="add-form">
+    <div class="modal-header">
+      <div>
+        <h2>New transfer</h2>
+        <p class="modal-subtitle">Add a file, folder or download link to your transfer queue.</p>
+      </div>
+      <button type="button" class="icon-circle-btn" data-close="add-dialog" aria-label="Close new transfer">×</button>
+    </div>
+
+    <!-- Segmented Source Switcher -->
+    <div class="segmented-pill-switcher" role="group" aria-label="Transfer source type">
+      <button type="button" class="selected" data-kind="url">Link</button>
+      <button type="button" data-kind="local">File</button>
+      <button type="button" data-kind="folder">Folder</button>
+    </div>
+
+    <!-- URL Field -->
+    <div id="url-fields" class="modal-field-block">
+      <label for="source-urls">Direct download URL</label>
+      <div class="input-with-icon">
+        <svg class="field-icon"><use href="#i-link"/></svg>
+        <textarea id="source-urls" rows="2" placeholder="https://example.com/studio/Studio%20archive.pkg" spellcheck="false" required></textarea>
+      </div>
+    </div>
+
+    <!-- Local Path Field -->
+    <div id="local-fields" class="modal-field-block" hidden>
+      <label for="local-path">Local package path</label>
+      <div class="input-group">
+        <input id="local-path" placeholder="/Users/you/Downloads/game.pkg" spellcheck="false">
+        <button id="pick-file" type="button" class="button outline small">Browse file</button>
+        <button id="pick-folder" type="button" class="button outline small">Browse folder</button>
+      </div>
+    </div>
+
+    <!-- Destination on PS5 Field -->
+    <div class="modal-field-block">
+      <label for="modal-dest-folder">Destination on PS5</label>
+      <div class="input-with-button">
+        <div class="input-with-icon flex-1">
+          <svg class="field-icon"><use href="#i-folder"/></svg>
+          <input id="modal-dest-folder" value="/data/PS5Direct" spellcheck="false">
+        </div>
+        <button type="button" class="button outline small" data-page="files" data-close="add-dialog">Browse</button>
+      </div>
+    </div>
+
+    <!-- Detected Package Preview Box -->
+    <div class="file-preview-card">
+      <div class="preview-icon-box">
+        <svg><use href="#i-file"/></svg>
+      </div>
+      <div class="preview-meta">
+        <strong id="preview-filename">No package selected</strong>
+        <span id="preview-filesize">Enter URL or choose local package</span>
+      </div>
+      <button type="button" class="button outline tiny" id="change-preview-file">Change</button>
+    </div>
+
+    <!-- Collapsible Advanced Options -->
+    <details class="modal-advanced-accordion">
+      <summary><svg><use href="#i-chevron-right"/></svg> Advanced options</summary>
+      <div class="advanced-options-body">
+        <div class="modal-field-block">
+          <label for="file-name">Custom destination filename</label>
+          <input id="file-name" placeholder="Auto-detected from source filename">
+        </div>
+        <label class="studio-checkbox-label">
+          <input id="overwrite" type="checkbox">
+          <span>Allow replacement of existing console file on size match</span>
+        </label>
+      </div>
+    </details>
+
+    <p id="add-error" class="form-error" role="alert"></p>
+
+    <div class="modal-footer">
+      <button type="button" class="button outline" data-close="add-dialog">Cancel</button>
+      <button type="submit" class="button primary">Add to queue</button>
+    </div>
+  </form>
+</dialog>
+
+
+<!-- MODAL: SETTINGS (Dialog Fallback) -->
+<dialog id="settings-dialog" class="studio-modal">
+  <form id="settings-form">
+    <div class="modal-header">
+      <div>
+        <h2>Settings</h2>
+        <p class="modal-subtitle">Configure your console connection and transfer preferences.</p>
+      </div>
+      <button type="button" class="icon-circle-btn" data-close="settings-dialog" aria-label="Close settings">×</button>
+    </div>
+
+    <div class="settings-form-grid">
+      <div class="form-field">
+        <label for="setting-host">Console address</label>
+        <input id="setting-host" placeholder="192.168.1.188" required spellcheck="false">
+      </div>
+      <div class="form-field">
+        <label for="setting-port">Port</label>
+        <input id="setting-port" type="number" min="1" max="65535" value="2121" required>
+      </div>
+      <div class="form-field wide">
+        <label for="setting-folder">Destination directory</label>
+        <input id="setting-folder" value="/data/PS5Direct" required spellcheck="false">
+      </div>
+      <div class="form-field">
+        <label for="setting-password">FTP Password (optional)</label>
+        <input id="setting-password" type="password" placeholder="Leave empty for anonymous">
+      </div>
+      <div class="form-field">
+        <label for="setting-streams">Parallel streams</label>
+        <select id="setting-streams">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="4">4</option>
+          <option value="6">6</option>
+          <option value="8">8</option>
+          <option value="12">12</option>
+          <option value="16" selected>16</option>
+          <option value="24">24</option>
+          <option value="32">32</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="setting-chunk_mb">Chunk slice size</label>
+        <select id="setting-chunk_mb">
+          <option value="2">2 MiB</option>
+          <option value="4">4 MiB</option>
+          <option value="8" selected>8 MiB</option>
+          <option value="16">16 MiB</option>
+          <option value="32">32 MiB</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="setting-buffer_mb">RAM buffer</label>
+        <select id="setting-buffer_mb">
+          <option value="32">32 MiB</option>
+          <option value="64">64 MiB</option>
+          <option value="96">96 MiB</option>
+          <option value="128">128 MiB</option>
+          <option value="192">192 MiB</option>
+          <option value="256" selected>256 MiB</option>
+          <option value="384">384 MiB</option>
+          <option value="512">512 MiB</option>
+          <option value="1024">1024 MiB</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="setting-limit_mbps">Speed cap (MB/s)</label>
+        <input id="setting-limit_mbps" type="number" min="0" max="1000" step="5" value="0">
+      </div>
+      <div class="form-field">
+        <label for="setting-retries">Network retries</label>
+        <select id="setting-retries">
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+    </div>
+
+    <p id="settings-error" class="form-error" role="alert"></p>
+
+    <div class="modal-footer">
+      <button type="button" class="button outline" data-close="settings-dialog">Cancel</button>
+      <button type="submit" class="button primary">Save settings</button>
+    </div>
+  </form>
+</dialog>
+
+
+<!-- MODAL: UPDATE LINK -->
+<dialog id="edit-dialog" class="studio-modal">
+  <form id="edit-form">
+    <div class="modal-header">
+      <div>
+        <h2>Update Download Link</h2>
+        <p class="modal-subtitle">Replace expired direct URL with a fresh one.</p>
+      </div>
+      <button type="button" class="icon-circle-btn" data-close="edit-dialog" aria-label="Close update link">×</button>
+    </div>
+    <div class="modal-field-block">
+      <label for="edit-source">Fresh direct link</label>
+      <textarea id="edit-source" rows="4" required spellcheck="false"></textarea>
+    </div>
+    <p class="field-hint">Must point to the exact same file. Size and validators are re-checked before resuming.</p>
+    <p id="edit-error" class="form-error" role="alert"></p>
+    <div class="modal-footer">
+      <button type="button" class="button outline" data-close="edit-dialog">Cancel</button>
+      <button type="submit" class="button primary">Update link</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

@@ -1,0 +1,2 @@
+# Test-only dependency. The app itself uses only Python's standard library.
+pyftpdlib==2.2.0

@@ -1,0 +1,6 @@
+# DIRECT STREAM FOR PLAYSTATION 5
+# The application runs entirely on Python's Standard Library (Python 3.9+).
+# Zero external packages are needed to run the app or web dashboard.
+
+# For running integration tests and development fixtures:
+# pip install -r requirements-dev.txt

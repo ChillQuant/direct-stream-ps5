@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+CONTENTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+umask 077
+LOG_DIR="$HOME/Library/Logs/PS5 Transfer"
+mkdir -p "$LOG_DIR"
+# Each launch replaces the old launch log; private session URL stays on this Mac.
+exec /bin/bash "$CONTENTS/Resources/launch.sh" "$@" > "$LOG_DIR/launch.log" 2>&1
