@@ -27,7 +27,146 @@ ps5, playstation-5, ftp, ftp-streamer, parallel-download, direct-stream, zero-de
 
 ---
 
-## 2. GitHub Release Notes (v2.8.5 — Android & Mobile Update)
+## 2. GitHub Release Notes (v2.8.6 — Smart Direct Link Resolver)
+
+### Tag Version
+```text
+v2.8.6
+```
+
+### Release Title
+```text
+DIRECT STREAM FOR PLAYSTATION 5 v2.8.6 — Smart Direct Link Resolver
+```
+
+### Release Description:
+```markdown
+## DIRECT STREAM FOR PLAYSTATION 5 (v2.8.6)
+
+Direct Stream for PlayStation 5 now features a built-in **Smart Direct Download Link Resolver**! You can now paste links directly from popular file hosting services without manually extracting the underlying download URL.
+
+---
+
+### What's New in v2.8.6
+
+- **Smart Direct Download Resolver**:
+  - **MediaFire**: Automatically extracts direct `.pkg` download URLs from standard sharing links.
+  - **PixelDrain**: Converts `pixeldrain.com/u/<id>` sharing links to raw high-speed download endpoints.
+  - **Google Drive**: Converts standard Drive sharing links to direct export streams, automatically handling Google's large file virus-scan confirmation screens.
+  - **Archive.org**: Seamlessly resolves `archive.org/details/<item>` links to high-speed `/download/` streams.
+  - **GoFile**: Pre-resolves sharing pages to direct content streams.
+- **Smart Filename Extraction**:
+  - Extracts true filenames from HTTP `Content-Disposition` response headers.
+- **CAPTCHA & Quota Awareness**:
+  - Friendly warnings when a hosting provider requires manual CAPTCHA solving or rate-limit cooldowns.
+- **Pure Python Standard Library**:
+  - Zero external pip dependencies required.
+
+---
+
+### Push Command (When Ready to Release)
+```bash
+git checkout main
+git merge feature/smart-resolver
+git tag v2.8.6
+git push origin main --tags
+```
+```
+
+---
+
+## 3. GitHub Release Notes (v2.8.8 — Multi-Part File Stitching Engine)
+
+### Tag Version
+```text
+v2.8.8
+```
+
+### Release Title
+```text
+DIRECT STREAM FOR PLAYSTATION 5 v2.8.8 — Multi-Part File Stitching Engine
+```
+
+### Release Description:
+```markdown
+## DIRECT STREAM FOR PLAYSTATION 5 (v2.8.8)
+
+Stream split multi-part files directly into a unified `.pkg` on your PS5 with **Zero Local Disk Buffering**!
+
+---
+
+### What's New in v2.8.8
+
+- **Multi-Part File Stitching Pipeline**:
+  - Automatically detects, sorts, and stitches split multi-part files (`.001`, `.002`, `.part1.rar`, etc.).
+  - Works over HTTP URLs, local files, or mixed sources.
+- **Continuous Zero-Gap FTP Streaming**:
+  - Pre-warms the connection for the next part while the current part finishes, eliminating network stall.
+- **Zero Local Disk Footprint**:
+  - No need to extract or stitch files on your PC or phone first.
+
+---
+
+### Push Command (When Ready to Release)
+```bash
+git checkout main
+git merge feature/multipart-stitcher
+git tag v2.8.8
+git push origin main --tags
+```
+```
+
+---
+
+## 4. GitHub Release Notes (v2.9.0 — On-The-Fly Archive Decompression)
+
+### Tag Version
+```text
+v2.9.0
+```
+
+### Release Title
+```text
+DIRECT STREAM FOR PLAYSTATION 5 v2.9.0 — On-The-Fly Archive Decompressor
+```
+
+### Release Description:
+```markdown
+## DIRECT STREAM FOR PLAYSTATION 5 (v2.9.0)
+
+Stream and extract compressed `.zip` archives directly into PlayStation 5 storage in RAM with **Zero Local Disk Space Required**!
+
+---
+
+### What's New in v2.9.0
+
+- **On-The-Fly Streaming Decompression**:
+  - Extract `.zip` (Deflate & Stored) directly to PS5 FTP storage in real-time.
+  - **0 GB Local Disk Used**: Stream a 70 GB zipped game from a phone or laptop with only 2 GB of free storage.
+- **Sub-Second Remote Header Probing**:
+  - Inspects remote ZIP directories in ~100 ms via lightweight HTTP Range requests (~64 KB).
+  - Automatically identifies the inner `.pkg` file and its uncompressed size.
+- **Tough Data Integrity Guards**:
+  - Accurate PS5 storage pre-check against uncompressed file size.
+  - Strict size verification before atomic rename.
+  - Prevents corrupted mid-stream resumes on compressed bitstreams.
+- **Web Dashboard Integration**:
+  - Automatic `.zip` detection badge in the UI with an on-the-fly decompression toggle.
+
+---
+
+### Push Command (When Ready to Release)
+```bash
+git checkout main
+git merge feature/v2.9.0-decompressor
+git tag v2.9.0
+git push origin main --tags
+```
+```
+
+---
+
+## 5. GitHub Release Notes (v2.8.5 — Android & Mobile Update)
 
 ### Tag Version
 ```text
