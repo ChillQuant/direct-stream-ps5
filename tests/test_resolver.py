@@ -26,6 +26,71 @@ class TestResolver(unittest.TestCase):
         url = "https://archive.org/details/ps5_sample_repo/update_v105.pkg"
         self.assertEqual(pre_resolve_url(url), "https://archive.org/download/ps5_sample_repo/update_v105.pkg")
 
+    def test_archive_org_html_details_extract(self):
+        html = '''
+        <html>
+        <body>
+            <h1>PlayStation Archive</h1>
+            <a href="/download/ps5_collection/readme.txt">Readme</a>
+            <a href="/download/ps5_collection/CUSA00123_00.pkg">Download PKG</a>
+        </body>
+        </html>
+        '''
+        res = extract_download_link_from_html("https://archive.org/details/ps5_collection", html)
+        self.assertEqual(res, "https://archive.org/download/ps5_collection/CUSA00123_00.pkg")
+
+    def test_buzzheavier_pre_resolve_and_extract(self):
+        # Test pre-resolve patterns
+        url1 = "https://buzzheavier.com/abc12345"
+        self.assertEqual(pre_resolve_url(url1), "https://buzzheavier.com/abc12345/download")
+
+        url2 = "https://bzzhr.to/f/xyz7890"
+        self.assertEqual(pre_resolve_url(url2), "https://bzzhr.to/xyz7890/download")
+
+        # Test HTML extraction
+        html = '''
+        <html>
+        <body>
+            <a class="download-button" href="https://w.buzzheavier.com/s/direct/CUSA99999.pkg">Download file</a>
+        </body>
+        </html>
+        '''
+        res = extract_download_link_from_html("https://buzzheavier.com/abc12345", html)
+        self.assertEqual(res, "https://w.buzzheavier.com/s/direct/CUSA99999.pkg")
+
+    def test_1fichier_extract(self):
+        html = '''
+        <html>
+        <body>
+            <div id="dl_link">
+                <a class="ok btn-general btn-orange" href="https://a-01.1fichier.com/c123456789">Click here to download the file</a>
+            </div>
+        </body>
+        </html>
+        '''
+        res = extract_download_link_from_html("https://1fichier.com/?abc123", html)
+        self.assertEqual(res, "https://a-01.1fichier.com/c123456789")
+
+    def test_krakenfiles_extract(self):
+        html = '''
+        <html>
+        <body>
+            <a id="downloadButton" href="https://krakenfiles.com/download/file12345/game.pkg">Download</a>
+        </body>
+        </html>
+        '''
+        res = extract_download_link_from_html("https://krakenfiles.com/view/file12345/file.html", html)
+        self.assertEqual(res, "https://krakenfiles.com/download/file12345/game.pkg")
+
+    def test_qiwi_and_sendcm_extract(self):
+        html_qiwi = '<html><body><a href="https://eu.qiwi.gg/files/CUSA11111.pkg">Download</a></body></html>'
+        res_qiwi = extract_download_link_from_html("https://qiwi.gg/file/abc", html_qiwi)
+        self.assertEqual(res_qiwi, "https://eu.qiwi.gg/files/CUSA11111.pkg")
+
+        html_send = '<html><body><a href="https://s1.send.cm/files/CUSA22222.pkg">Download</a></body></html>'
+        res_send = extract_download_link_from_html("https://send.cm/file/xyz", html_send)
+        self.assertEqual(res_send, "https://s1.send.cm/files/CUSA22222.pkg")
+
     def test_mediafire_html_extract(self):
         html = '''
         <!DOCTYPE html>
@@ -80,7 +145,10 @@ class TestResolver(unittest.TestCase):
         hint = get_captcha_hint_if_applicable("https://1fichier.com/?abc123xyz")
         self.assertIsNotNone(hint)
         self.assertIn("1fichier", hint)
-        self.assertIn("CAPTCHA", hint)
+
+        hint_buzz = get_captcha_hint_if_applicable("https://buzzheavier.com/abc123xyz")
+        self.assertIsNotNone(hint_buzz)
+        self.assertIn("BuzzHeavier", hint_buzz)
 
         no_hint = get_captcha_hint_if_applicable("https://mediafire.com/file/abc")
         self.assertIsNone(no_hint)
