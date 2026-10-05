@@ -821,7 +821,6 @@ const updateAddPreview = () => {
   } else {
     name = first.split('/').pop() || 'local.bin';
   }
-  if ($('preview-filename')) $('preview-filename').textContent = name;
 
   const ext = name.toLowerCase().split('?')[0].split('.').pop();
   let formatLabel = isUrl ? 'Direct link · Ready to stream' : 'Local file · Ready to stream';
@@ -829,15 +828,24 @@ const updateAddPreview = () => {
 
   if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
     const extUpper = ext.toUpperCase();
+    if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? `Direct link · PS5 Native ${extUpper} Disk Image` : `Local file · PS5 Native ${extUpper} Disk Image`;
     smartDest = '/data/ShadowMount';
   } else if (ext === 'pkg') {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? 'Direct link · PlayStation Package (.pkg)' : 'Local file · PlayStation Package (.pkg)';
     smartDest = '/data/pkg';
-  } else if (['zip', 'rar', '7z'].includes(ext)) {
-    formatLabel = isUrl ? 'Direct link · Streaming Archive' : 'Local file · Archive';
+  } else if (['zip', 'zip64'].includes(ext)) {
+    if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
+    formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
+  } else if (['rar', '7z', 'tar'].includes(ext)) {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
+    formatLabel = isUrl ? 'Direct link · Archive' : 'Local file · Archive';
   } else if (['iso', 'bin', 'img'].includes(ext)) {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? 'Direct link · Disc Image' : 'Local file · Disc Image';
+  } else {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
   }
 
   if ($('preview-filesize')) $('preview-filesize').textContent = formatLabel;
@@ -875,6 +883,7 @@ $('add-form').addEventListener('submit', async e => {
       items: items.map(it => ({ ...it, folder: destFolder })),
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
+      decompress: $('decompress-zip') ? $('decompress-zip').checked : true,
       overwrite: $('overwrite').checked
     });
     $('add-dialog').close();

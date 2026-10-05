@@ -810,16 +810,26 @@ const updateAddPreview = () => {
     try {
       const u = new URL(first);
       const name = decodeURIComponent(u.pathname.split('/').pop()) || 'package.pkg';
-      if ($('preview-filename')) $('preview-filename').textContent = name;
-      if ($('preview-filesize')) $('preview-filesize').textContent = 'Direct download link · Package file';
+      if (name.toLowerCase().endsWith('.zip') || name.toLowerCase().endsWith('.zip64')) {
+        if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
+        if ($('preview-filesize')) $('preview-filesize').textContent = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
+      } else {
+        if ($('preview-filename')) $('preview-filename').textContent = name;
+        if ($('preview-filesize')) $('preview-filesize').textContent = 'Direct download link · Package file';
+      }
     } catch {
       if ($('preview-filename')) $('preview-filename').textContent = first;
       if ($('preview-filesize')) $('preview-filesize').textContent = 'Direct link';
     }
   } else {
     const name = first.split('/').pop() || 'local.pkg';
-    if ($('preview-filename')) $('preview-filename').textContent = name;
-    if ($('preview-filesize')) $('preview-filesize').textContent = 'Local file · Ready to stream';
+    if (name.toLowerCase().endsWith('.zip') || name.toLowerCase().endsWith('.zip64')) {
+      if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
+      if ($('preview-filesize')) $('preview-filesize').textContent = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
+    } else {
+      if ($('preview-filename')) $('preview-filename').textContent = name;
+      if ($('preview-filesize')) $('preview-filesize').textContent = 'Local file · Ready to stream';
+    }
   }
 };
 
@@ -847,6 +857,7 @@ $('add-form').addEventListener('submit', async e => {
       items: items,
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
+      decompress: $('decompress-zip') ? $('decompress-zip').checked : true,
       overwrite: $('overwrite').checked
     });
     $('add-dialog').close();

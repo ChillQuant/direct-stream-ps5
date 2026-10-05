@@ -30,7 +30,7 @@ from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp
     valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source, MIB)
 from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info
 
-VERSION = "2.8.8"
+VERSION = "2.9.0"
 BASE = Path(__file__).resolve().parent
 DEFAULTS = {"host": "", "port": 1337, "folder": "/data/ShadowMount", "username": "anonymous",
             "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3}
@@ -345,7 +345,9 @@ class Manager:
                 name = valid_name(item.get("name") or default or "download.bin")
                 new.append({"id": secrets.token_hex(6), "name": name, "source": src, "kind": kind,
                     "state": "queued", "detail": "Waiting to start", "total": None, "transferred": 0,
-                    "overwrite": bool(data.get("overwrite", False)), "created": time.time(), "identity": None})
+                    "overwrite": bool(data.get("overwrite", False)),
+                    "decompress": bool(data.get("decompress", True)),
+                    "created": time.time(), "identity": None})
         with self.lock:
             if len(self.jobs) + len(new) > 500:
                 raise TransferError("Queue is full. Clear completed jobs first.")
@@ -475,15 +477,20 @@ class Manager:
                             else:
                                 target["detail"] = f"Part check failed: {info['error']}"
                 else:
-                    info = validate_source_url(j["source"], tok)
+                    info = validate_source_url(j["source"], tok, decompress=j.get("decompress", True))
                     with self.lock:
                         target = next((item for item in self.jobs if item["id"] == j["id"]), None)
                         if target and target["id"] != self.current:
                             if info["valid"]:
                                 if info["size"] is not None:
                                     target["total"] = info["size"]
-                                status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
-                                target["detail"] = f"Link verified · {status}"
+                                if info.get("is_zip"):
+                                    if info.get("filename") and target["name"] in ("download.bin", "file", "view", "uc", "", j.get("name")):
+                                        target["name"] = info.get("filename")
+                                    target["detail"] = f"ZIP Archive · Streaming '{info.get('filename')}' directly to PS5"
+                                else:
+                                    status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
+                                    target["detail"] = f"Link verified · {status}"
                             else:
                                 target["detail"] = f"Link check failed: {info['error']}"
                 self.save()
