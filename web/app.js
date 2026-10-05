@@ -742,25 +742,47 @@ const updateAddPreview = () => {
   const isUrl = sourceKind === 'url';
   const val = isUrl ? $('source-urls')?.value.trim() : $('local-path')?.value.trim();
   if (!val) {
-    if ($('preview-filename')) $('preview-filename').textContent = 'No package selected';
-    if ($('preview-filesize')) $('preview-filesize').textContent = 'Enter URL or choose local package';
+    if ($('preview-filename')) $('preview-filename').textContent = 'No game file selected';
+    if ($('preview-filesize')) $('preview-filesize').textContent = 'Enter direct link or choose file';
     return;
   }
   const first = val.split('\n')[0].trim();
+  let name = '';
   if (isUrl) {
     try {
       const u = new URL(first);
-      const name = decodeURIComponent(u.pathname.split('/').pop()) || 'package.pkg';
-      if ($('preview-filename')) $('preview-filename').textContent = name;
-      if ($('preview-filesize')) $('preview-filesize').textContent = 'Direct download link · Package file';
+      name = decodeURIComponent(u.pathname.split('/').pop()) || 'download.bin';
     } catch {
-      if ($('preview-filename')) $('preview-filename').textContent = first;
-      if ($('preview-filesize')) $('preview-filesize').textContent = 'Direct link';
+      name = first;
     }
   } else {
-    const name = first.split('/').pop() || 'local.pkg';
-    if ($('preview-filename')) $('preview-filename').textContent = name;
-    if ($('preview-filesize')) $('preview-filesize').textContent = 'Local file · Ready to stream';
+    name = first.split('/').pop() || 'local.bin';
+  }
+  if ($('preview-filename')) $('preview-filename').textContent = name;
+
+  const ext = name.toLowerCase().split('?')[0].split('.').pop();
+  let formatLabel = isUrl ? 'Direct link · Ready to stream' : 'Local file · Ready to stream';
+  let smartDest = null;
+
+  if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+    const extUpper = ext.toUpperCase();
+    formatLabel = isUrl ? `Direct link · PS5 Native ${extUpper} Disk Image` : `Local file · PS5 Native ${extUpper} Disk Image`;
+    smartDest = '/data/ShadowMount';
+  } else if (ext === 'pkg') {
+    formatLabel = isUrl ? 'Direct link · PlayStation Package (.pkg)' : 'Local file · PlayStation Package (.pkg)';
+    smartDest = '/data/pkg';
+  } else if (['zip', 'rar', '7z'].includes(ext)) {
+    formatLabel = isUrl ? 'Direct link · Streaming Archive' : 'Local file · Archive';
+  } else if (['iso', 'bin', 'img'].includes(ext)) {
+    formatLabel = isUrl ? 'Direct link · Disc Image' : 'Local file · Disc Image';
+  }
+
+  if ($('preview-filesize')) $('preview-filesize').textContent = formatLabel;
+
+  // Auto-route destination if user hasn't explicitly set a custom folder
+  const currentDest = $('modal-dest-folder')?.value.trim();
+  if (smartDest && (!currentDest || currentDest === '/data/PS5Direct' || currentDest === '/data/ShadowMount' || currentDest === '/data/pkg')) {
+    if ($('modal-dest-folder')) $('modal-dest-folder').value = smartDest;
   }
 };
 
@@ -776,12 +798,14 @@ $('add-form').addEventListener('submit', async e => {
     $('add-error').textContent = 'Leave Save as blank when adding multiple links.';
     return;
   }
+  const destFolder = $('modal-dest-folder')?.value.trim();
   const button = e.submitter;
   button.disabled = true;
   try {
     const r = await api('jobs', {
       kind: sourceKind,
-      items: sources.map(source => ({ source, name: $('file-name').value.trim() })),
+      folder: destFolder,
+      items: sources.map(source => ({ source, name: $('file-name').value.trim(), folder: destFolder })),
       overwrite: $('overwrite').checked
     });
     $('add-dialog').close();

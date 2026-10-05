@@ -12,6 +12,14 @@ import urllib.parse
 from pathlib import Path
 
 
+SUPPORTED_EXTENSIONS = (
+    "pkg", "ffpfsc", "exfat", "ufs", "bin", "iso", "img",
+    "zip", "rar", "7z", "tar", "001"
+)
+MEDIA_EXT_PATTERN = r'(?:pkg|ffpfsc|exfat|ufs|bin|iso|img|tar|zip|rar|7z|001)'
+PRIMARY_GAME_EXTS = (".ffpfsc", ".exfat", ".ufs", ".pkg", ".iso", ".bin")
+
+
 def pre_resolve_url(url: str) -> str:
     """Pre-resolve known URL patterns before sending network requests."""
     if not url or not isinstance(url, str):
@@ -68,17 +76,17 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
             if m:
                 return m.group(1).replace("&amp;", "&")
 
-    # 2. Internet Archive (archive.org): Extract package file links from details/download directory
+    # 2. Internet Archive (archive.org): Extract package/game file links from details/download directory
     if "archive.org" in domain:
-        # Search for .pkg links under /download/
-        pkg_links = re.findall(r'href=["\']((?:https?://(?:www\.)?archive\.org)?/download/[^"\']+\.(?:pkg|zip|bin|iso)(?:\?[^"\']*)?)["\']', html_text, re.I)
-        if not pkg_links:
+        # Search for game/package links under /download/
+        game_links = re.findall(rf'href=["\']((?:https?://(?:www\.)?archive\.org)?/download/[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
+        if not game_links:
             # Check relative links inside /download/<identifier>/ directory
-            pkg_links = re.findall(r'<a[^>]*href=["\']([^"\']+\.(?:pkg|zip|bin|iso)(?:\?[^"\']*)?)["\']', html_text, re.I)
-        if pkg_links:
-            # Prioritize .pkg files over .zip or metadata
-            pkgs_only = [l for l in pkg_links if ".pkg" in l.lower()]
-            chosen = pkgs_only[0] if pkgs_only else pkg_links[0]
+            game_links = re.findall(rf'<a[^>]*href=["\']([^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
+        if game_links:
+            # Prioritize primary game disk/package files (.ffpfsc, .exfat, .ufs, .pkg, .iso) over archives/metadata
+            primary_only = [l for l in game_links if any(l.lower().split("?")[0].endswith(ext) for ext in PRIMARY_GAME_EXTS)]
+            chosen = primary_only[0] if primary_only else game_links[0]
             return urllib.parse.urljoin(page_url, chosen.replace("&amp;", "&"))
 
     # 3. BuzzHeavier / Bzzhr: Extract direct CDN download link or hx-redirect target
@@ -113,13 +121,13 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
 
     # 6. Qiwi (qiwi.gg, qiwi.to, qiwi.lol)
     if "qiwi." in domain:
-        m_qiwi = re.search(r'href=["\'](https?://[a-zA-Z0-9.-]*qiwi\.[a-z]+/[^"\']+\.(?:pkg|zip|bin|iso)(?:\?[^"\']*)?)["\']', html_text, re.I)
+        m_qiwi = re.search(rf'href=["\'](https?://[a-zA-Z0-9.-]*qiwi\.[a-z]+/[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
         if m_qiwi:
             return m_qiwi.group(1).replace("&amp;", "&")
 
     # 7. Send.cm
     if "send.cm" in domain:
-        m_send = re.search(r'href=["\'](https?://[a-zA-Z0-9.-]*send\.cm/[^"\']+\.(?:pkg|zip|bin)(?:\?[^"\']*)?)["\']', html_text, re.I)
+        m_send = re.search(rf'href=["\'](https?://[a-zA-Z0-9.-]*send\.cm/[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
         if m_send:
             return m_send.group(1).replace("&amp;", "&")
 
@@ -153,18 +161,21 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
         if target.startswith("http") or target.startswith("/"):
             return urllib.parse.urljoin(page_url, target)
 
-    # B) Specific package file links (.pkg, .bin, .iso, .tar, .zip, .rar, .7z)
-    pkg_links = re.findall(r'<a[^>]*href=["\'](https?://[^"\']+\.(?:pkg|bin|iso|tar|zip|rar|7z)(?:\?[^"\']*)?)["\']', html_text, re.I)
-    if not pkg_links:
-        pkg_links = re.findall(r'<a[^>]*href=["\'](/[^"\']+\.(?:pkg|bin|iso|tar|zip|rar|7z)(?:\?[^"\']*)?)["\']', html_text, re.I)
-        pkg_links = [urllib.parse.urljoin(page_url, l) for l in pkg_links]
+    # B) Specific game/disk/package links (.pkg, .ffpfsc, .exfat, .ufs, .iso, .zip, etc.)
+    game_links = re.findall(rf'<a[^>]*href=["\'](https?://[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
+    if not game_links:
+        game_links = re.findall(rf'<a[^>]*href=["\'](/[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
+        game_links = [urllib.parse.urljoin(page_url, l) for l in game_links]
 
-    if len(pkg_links) == 1:
-        return pkg_links[0]
-    elif len(pkg_links) > 1:
-        pkg_only = [l for l in pkg_links if ".pkg" in l.lower()]
-        if len(pkg_only) == 1:
-            return pkg_only[0]
+    if len(game_links) == 1:
+        return game_links[0]
+    elif len(game_links) > 1:
+        primary_only = [l for l in game_links if any(l.lower().split("?")[0].endswith(ext) for ext in PRIMARY_GAME_EXTS)]
+        if len(primary_only) == 1:
+            return primary_only[0]
+        elif primary_only:
+            return primary_only[0]
+        return game_links[0]
 
     # C) Anchor with explicit download attribute
     m_download = re.search(r'<a[^>]*download(?:\s*=\s*["\'][^"\']*["\'])?[^>]*href=["\'](https?://[^"\']+)["\']', html_text, re.I)

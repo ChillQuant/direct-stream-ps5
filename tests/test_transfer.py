@@ -270,4 +270,23 @@ class Integration(unittest.TestCase):
                 self.assertIsNone(w2)
                 w1.close()
 
+    def test_smart_destination_routing_and_per_job_folder(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            # 1. Native PS5 game (.ffpfsc) routes to /data/ShadowMount
+            m.add_jobs({"kind": "url", "items": [{"source": "http://127.0.0.1:9099/demons.ffpfsc"}]})
+            j1 = next(j for j in m.jobs if "demons.ffpfsc" in j["name"])
+            self.assertEqual(j1.get("folder"), "/data/ShadowMount")
+
+            # 2. Native PS5 raw disk (.exfat) routes to /data/ShadowMount
+            m.add_jobs({"kind": "url", "items": [{"source": "http://127.0.0.1:9099/spider.exfat"}]})
+            j2 = next(j for j in m.jobs if "spider.exfat" in j["name"])
+            self.assertEqual(j2.get("folder"), "/data/ShadowMount")
+
+            # 3. Explicit folder override in request is respected
+            m.add_jobs({"kind": "url", "folder": "/data/custom_dir", "items": [{"source": "http://127.0.0.1:9099/custom.bin"}]})
+            j3 = next(j for j in m.jobs if "custom.bin" in j["name"])
+            self.assertEqual(j3.get("folder"), "/data/custom_dir")
+            m.stop()
+
 if __name__=='__main__':unittest.main()

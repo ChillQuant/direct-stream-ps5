@@ -129,6 +129,27 @@ class TestResolver(unittest.TestCase):
         res = extract_download_link_from_html("https://releases.example.com/release.html", html)
         self.assertEqual(res, "https://releases.example.com/builds/v1.2/Package_Patch_102.pkg")
 
+    def test_native_ps5_formats_extract(self):
+        # Native PS5 compressed disk image (.ffpfsc)
+        html_ffpfsc = '''
+        <html><body>
+            <a href="https://releases.example.com/readme.txt">Readme</a>
+            <a href="https://releases.example.com/assets.zip">Assets ZIP</a>
+            <a href="https://releases.example.com/Demons_Souls_PPSA01411.ffpfsc">Download PS5 PFS</a>
+        </body></html>
+        '''
+        res_ffpfsc = extract_download_link_from_html("https://releases.example.com/demons-souls", html_ffpfsc)
+        self.assertEqual(res_ffpfsc, "https://releases.example.com/Demons_Souls_PPSA01411.ffpfsc")
+
+        # Native PS5 raw exFAT disk image (.exfat)
+        html_exfat = '''
+        <html><body>
+            <a href="https://archive.org/download/spiderman2_ps5/Spider_Man_2_PPSA08338.exfat">Direct Virtual Disk</a>
+        </body></html>
+        '''
+        res_exfat = extract_download_link_from_html("https://archive.org/details/spiderman2_ps5", html_exfat)
+        self.assertEqual(res_exfat, "https://archive.org/download/spiderman2_ps5/Spider_Man_2_PPSA08338.exfat")
+
     def test_generic_no_link_returns_none(self):
         html = "<html><body><h1>Welcome to our home page</h1><p>No downloads here</p></body></html>"
         res = extract_download_link_from_html("https://example.com/about", html)

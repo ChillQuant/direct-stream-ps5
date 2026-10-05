@@ -306,7 +306,19 @@ class Manager:
                     raise TransferError("Local file not found. Use Choose file or enter its full path.")
                 default = Path(src).name
             name = valid_name(item.get("name") or default or "download.bin")
+            dest_folder = item.get("folder") or data.get("folder")
+            if dest_folder:
+                dest_folder = valid_folder(dest_folder)
+            else:
+                ext = Path(name).suffix.lower()
+                if ext in (".ffpfsc", ".exfat", ".ufs"):
+                    dest_folder = "/data/ShadowMount"
+                elif ext == ".pkg" and self.settings.get("folder") == "/data/ShadowMount":
+                    dest_folder = "/data/pkg"
+                else:
+                    dest_folder = self.settings.get("folder", "/data/ShadowMount")
             new.append({"id": secrets.token_hex(6), "name": name, "source": src, "kind": kind,
+                "folder": dest_folder,
                 "state": "queued", "detail": "Waiting to start", "total": None, "transferred": 0,
                 "overwrite": bool(data.get("overwrite", False)), "created": time.time(), "identity": None})
         with self.lock:
@@ -783,11 +795,11 @@ class Handler(BaseHTTPRequestHandler):
                 picker_unsupported = False
                 if sys.platform == "darwin":
                     if pick_type == "folder":
-                        script = 'POSIX path of (choose folder with prompt "Choose folder containing PS5 packages")'
+                        script = 'POSIX path of (choose folder with prompt "Choose folder containing PS5 game images or packages")'
                         proc = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=120)
                         folder_path = proc.stdout.strip() if proc.returncode == 0 else ""
                     else:
-                        script = 'set chosen to choose file with prompt "Choose package files to send to PS5" with multiple selections allowed\n' \
+                        script = 'set chosen to choose file with prompt "Choose game files or packages to send to PS5" with multiple selections allowed\n' \
                                  'set outPaths to ""\n' \
                                  'repeat with aFile in chosen\n' \
                                  '  set outPaths to outPaths & (POSIX path of aFile) & linefeed\n' \
@@ -798,11 +810,11 @@ class Handler(BaseHTTPRequestHandler):
                 elif sys.platform == "win32":
                     try:
                         if pick_type == "folder":
-                            ps_cmd = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = "Choose folder containing PS5 packages"; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }'
+                            ps_cmd = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = "Choose folder containing PS5 game images or packages"; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }'
                             proc = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], capture_output=True, text=True, timeout=120)
                             folder_path = proc.stdout.strip() if proc.returncode == 0 else ""
                         else:
-                            ps_cmd = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.OpenFileDialog; $f.Title = "Choose package files to send to PS5"; $f.Multiselect = $true; $f.Filter = "Packages (*.pkg;*.bin;*.iso;*.tar)|*.pkg;*.bin;*.iso;*.tar|All Files (*.*)|*.*"; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $f.FileNames | ForEach-Object { Write-Output $_ } }'
+                            ps_cmd = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.OpenFileDialog; $f.Title = "Choose game files or packages to send to PS5"; $f.Multiselect = $true; $f.Filter = "PlayStation Games (*.pkg;*.ffpfsc;*.exfat;*.ufs;*.iso;*.bin;*.zip)|*.pkg;*.ffpfsc;*.exfat;*.ufs;*.iso;*.bin;*.zip|All Files (*.*)|*.*"; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $f.FileNames | ForEach-Object { Write-Output $_ } }'
                             proc = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], capture_output=True, text=True, timeout=120)
                             paths = [p.strip() for p in proc.stdout.splitlines() if p.strip()] if proc.returncode == 0 else []
                     except Exception:
