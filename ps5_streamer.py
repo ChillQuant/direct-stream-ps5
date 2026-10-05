@@ -304,7 +304,7 @@ class Manager:
                 "settings": dict(self.settings),
                 "jobs": [dict(j) for j in self.jobs],
                 "running": self.running,
-                "active": dict(self.current) if self.current else None,
+                "active": self.current,
                 "connection": dict(self.connection),
                 "diagnostic": dict(self.diagnostic),
                 "metrics": dict(self.metrics),
