@@ -2,11 +2,13 @@
 const $ = id => document.getElementById(id);
 const escaped = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fragment = new URLSearchParams(location.hash.slice(1));
-let token = fragment.get('session') || sessionStorage.getItem('ps5-session') || '';
+let token = fragment.get('session') || sessionStorage.getItem('ps5-session') || localStorage.getItem('ps5-session') || '';
 if (fragment.has('session')) {
   sessionStorage.setItem('ps5-session', token);
+  try { localStorage.setItem('ps5-session', token); } catch (_) {}
   history.replaceState(null, '', location.pathname);
 }
+
 
 let state = null;
 let sourceKind = 'url';
@@ -84,9 +86,17 @@ async function api(path, data) {
     opts.body = JSON.stringify(data);
   }
   const r = await fetch('/api/' + path, opts);
-  const body = await r.json();
-  if (!r.ok) throw new Error(body.error || 'Request failed');
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    if (r.status === 401) {
+      sessionStorage.removeItem('ps5-session');
+      try { localStorage.removeItem('ps5-session'); } catch (_) {}
+      token = '';
+    }
+    throw new Error(body.error || `HTTP ${r.status}`);
+  }
   return body;
+
 }
 
 async function perform(path, data, success) {
@@ -667,7 +677,8 @@ async function poll() {
     $('offline-banner').hidden = false;
     $('offline-banner').textContent = token
       ? `Connection to the app was lost. ${e.message}`
-      : 'Open DIRECT STREAM FOR PLAYSTATION 5 from its Mac launcher to connect this dashboard.';
+      : 'Launch DIRECT STREAM FOR PLAYSTATION 5 from its launcher (or run "ps5" in Termux) to connect.';
+
   } finally {
     polling = false;
   }
