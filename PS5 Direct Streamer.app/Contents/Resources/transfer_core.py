@@ -370,8 +370,9 @@ def probe_multipart_source(parts, token, target_filename=None):
         else:
             first_name = probed_parts[0].filename or ""
             parsed = parse_multipart_info(first_name)
-            fname = parsed[0] if parsed else (first_name or "combined.pkg")
-    if not fname.lower().endswith(".pkg"):
+    if not fname:
+        fname = "combined.pkg"
+    elif "." not in os.path.basename(fname):
         fname += ".pkg"
 
     return SourceInfo(
