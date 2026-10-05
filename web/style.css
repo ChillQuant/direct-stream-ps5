@@ -898,125 +898,207 @@ a { color: inherit; text-decoration: none; }
   color: var(--muted);
 }
 
-.game-thumb-container {
+/* ========================================================
+   PLAYSTATION 5 GAME CARTRIDGE & MEDIA THUMBNAILS
+   ======================================================== */
+.ps-game-card {
   position: relative;
   width: 44px;
   height: 52px;
   min-width: 44px;
-  border-radius: 6px;
+  border-radius: 9px;
   overflow: hidden;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  user-select: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.16), 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
-.game-thumb-container:hover {
-  transform: scale(1.08);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+.ps-game-card:hover {
+  transform: translateY(-2px) scale(1.08);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.28), 0 2px 4px rgba(15, 23, 42, 0.1);
   z-index: 2;
 }
 
-.game-cover-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+.ps-game-card .card-glass-shine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.02) 100%);
+  pointer-events: none;
 }
 
-.format-badge-box {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 2px;
-  box-sizing: border-box;
-}
-
-.format-badge-box .badge-tag {
+.ps-game-card .card-plat-pill {
+  position: absolute;
+  top: 3.5px;
+  left: 4px;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 8px;
+  font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  padding: 1px 3.5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  line-height: 1;
+}
+
+.ps-game-card .card-fmt-pill {
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.5px 3px;
+  border-radius: 2.5px;
+  background: rgba(0, 0, 0, 0.5);
   line-height: 1.1;
 }
 
-.format-badge-box .badge-sub {
-  font-size: 8px;
-  font-weight: 600;
-  opacity: 0.8;
-  margin-top: 2px;
-  letter-spacing: 0.02em;
+.ps-game-card .card-icon-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.badge-ps5 {
-  background: linear-gradient(135deg, rgba(121, 40, 202, 0.25), rgba(255, 0, 128, 0.25));
-  color: #d8b4fe;
-  border: 1px solid rgba(192, 132, 252, 0.3);
+.ps-game-card .card-vector {
+  width: 23px;
+  height: 23px;
+  transition: transform 0.2s ease;
 }
 
-.badge-ps4, .badge-pkg {
-  background: linear-gradient(135deg, rgba(0, 67, 156, 0.35), rgba(0, 112, 209, 0.28));
-  color: #60a5fa;
-  border: 1px solid rgba(96, 165, 250, 0.35);
+.ps-game-card:hover .card-vector {
+  transform: scale(1.1);
 }
 
-.badge-pfs, .badge-ffpfsc {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(236, 72, 153, 0.28));
-  color: #f472b6;
-  border: 1px solid rgba(244, 114, 182, 0.35);
+/* Card Themes */
+/* PS5 Native PFS: Signature PlayStation Magenta/Violet Neon */
+.theme-ps5-pfs {
+  background: radial-gradient(circle at 50% 30%, #3b0764 0%, #1e1136 60%, #0d111d 100%);
+  border-color: rgba(236, 72, 153, 0.45);
+  box-shadow: 0 3px 10px rgba(168, 85, 247, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.theme-ps5-pfs .card-plat-pill { color: #fdf2f8; border-color: rgba(244, 114, 182, 0.4); }
+.theme-ps5-pfs .card-fmt-pill { color: #f472b6; }
+.theme-ps5-pfs .card-vector { color: #f472b6; filter: drop-shadow(0 0 5px rgba(236, 72, 153, 0.7)); }
+
+/* PS5 Native exFAT / UFS: High-Speed Disk Emerald */
+.theme-ps5-disk {
+  background: radial-gradient(circle at 50% 30%, #064e3b 0%, #092e24 60%, #08151c 100%);
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.theme-ps5-disk .card-plat-pill { color: #ecfdf5; border-color: rgba(52, 211, 153, 0.4); }
+.theme-ps5-disk .card-fmt-pill { color: #34d399; }
+.theme-ps5-disk .card-vector { color: #34d399; filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.7)); }
+
+/* PlayStation Package (PKG): PlayStation Classic Electric Blue */
+.theme-pkg {
+  background: radial-gradient(circle at 50% 30%, #00439c 0%, #00224d 60%, #040c1a 100%);
+  border-color: rgba(37, 99, 235, 0.5);
+  box-shadow: 0 3px 10px rgba(0, 112, 209, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.theme-pkg .card-plat-pill { color: #eff6ff; border-color: rgba(96, 165, 250, 0.4); }
+.theme-pkg .card-fmt-pill { color: #60a5fa; }
+.theme-pkg .card-vector { color: #93c5fd; filter: drop-shadow(0 0 5px rgba(0, 112, 209, 0.8)); }
+
+/* Archive (.rar, .zip): Warm Amber / Gold */
+.theme-archive {
+  background: radial-gradient(circle at 50% 30%, #451a03 0%, #2b1404 60%, #120e0d 100%);
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 3px 10px rgba(245, 158, 11, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.theme-archive .card-plat-pill { color: #fffbeb; border-color: rgba(251, 191, 36, 0.4); }
+.theme-archive .card-fmt-pill { color: #fbbf24; }
+.theme-archive .card-vector { color: #fde68a; filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.7)); }
+
+/* Optical Disc (ISO): Holographic Cyan */
+.theme-iso {
+  background: radial-gradient(circle at 50% 30%, #083344 0%, #092631 60%, #071318 100%);
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 3px 10px rgba(6, 182, 212, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.theme-iso .card-plat-pill { color: #ecfeff; border-color: rgba(34, 211, 238, 0.4); }
+.theme-iso .card-fmt-pill { color: #22d3ee; }
+.theme-iso .card-vector { color: #67e8f9; filter: drop-shadow(0 0 5px rgba(6, 182, 212, 0.7)); }
+
+/* Default / Binary */
+.theme-default {
+  background: radial-gradient(circle at 50% 30%, #1e293b 0%, #111827 60%, #0b0f19 100%);
+  border-color: rgba(148, 163, 184, 0.35);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.theme-default .card-plat-pill { color: #f8fafc; }
+.theme-default .card-fmt-pill { color: #94a3b8; }
+.theme-default .card-vector { color: #94a3b8; }
+
+/* Metadata Badges & Typography in Queue Name Column */
+.game-title-text {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  letter-spacing: -0.015em;
+  line-height: 1.3;
 }
 
-.badge-exfat, .badge-ufs {
-  background: linear-gradient(135deg, rgba(5, 150, 105, 0.28), rgba(16, 185, 129, 0.28));
-  color: #34d399;
-  border: 1px solid rgba(52, 211, 153, 0.35);
+.game-sub-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted, #475569);
+  line-height: 1.2;
 }
 
-.badge-archive, .badge-rar, .badge-zip, .badge-7z {
-  background: linear-gradient(135deg, rgba(217, 119, 6, 0.28), rgba(245, 158, 11, 0.28));
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.35);
-}
-
-.badge-iso, .badge-disk {
-  background: linear-gradient(135deg, rgba(14, 116, 144, 0.28), rgba(6, 182, 212, 0.28));
-  color: #22d3ee;
-  border: 1px solid rgba(34, 211, 238, 0.35);
-}
-
-.badge-default {
-  background: rgba(100, 116, 139, 0.2);
-  color: #94a3b8;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-}
-
-.title-id-pill {
+.id-badge {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border: 1px solid rgba(165, 180, 252, 0.25);
-  letter-spacing: 0.02em;
+  background: #ede9fe;
+  color: #6366f1;
+  border: 1px solid #c7d2fe;
+  letter-spacing: 0.03em;
 }
 
-.format-pill {
-  font-size: 10px;
-  font-weight: 600;
+.meta-pill {
+  font-size: 9.5px;
+  font-weight: 700;
   padding: 1px 6px;
   border-radius: 4px;
-  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.meta-pill.pill-pkg {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+.meta-pill.pill-pfs {
+  background: #fdf2f8;
+  color: #db2777;
+  border: 1px solid #fbcfe8;
+}
+.meta-pill.pill-disk {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+.meta-pill.pill-archive {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
 }
 
 .row-progress {

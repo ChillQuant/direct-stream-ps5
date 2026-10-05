@@ -242,23 +242,73 @@ function updateBulkBar() {
   }
 }
 
-function getTitleId(name, source) {
-  const combined = ((name || '') + ' ' + (source || '')).toUpperCase();
-  const match = combined.match(/\b(PPSA\d{5}|CUSA\d{5})\b/i);
-  return match ? match[1].toUpperCase() : null;
-}
+function parseJobVisuals(job) {
+  const rawName = job.name || '';
+  const source = job.source || '';
+  const combined = (rawName + ' ' + source).toUpperCase();
+  const matchId = combined.match(/\b(PPSA\d{5}|CUSA\d{5})\b/i);
+  const titleId = matchId ? matchId[1].toUpperCase() : null;
+  const isPs5 = titleId ? titleId.startsWith('PPSA') : false;
+  const isPs4 = titleId ? titleId.startsWith('CUSA') : false;
 
-function getFormatInfo(name) {
-  const ext = ((name || '').split('?')[0].split('.').pop() || '').toLowerCase();
-  if (ext === 'pkg') return { tag: 'PKG', sub: 'PS PKG', theme: 'badge-pkg', label: 'PlayStation Package' };
-  if (ext === 'ffpfsc') return { tag: 'PFS', sub: 'PS5 PFS', theme: 'badge-pfs', label: 'PS5 PFS Disk Image' };
-  if (ext === 'exfat') return { tag: 'exFAT', sub: 'DISK', theme: 'badge-exfat', label: 'exFAT Disk Image' };
-  if (ext === 'ufs') return { tag: 'UFS', sub: 'SYSTEM', theme: 'badge-ufs', label: 'UFS Image' };
-  if (ext === 'rar') return { tag: 'RAR', sub: 'ARCHIVE', theme: 'badge-rar', label: 'RAR Archive' };
-  if (ext === 'zip' || ext === 'zip64') return { tag: 'ZIP', sub: 'ARCHIVE', theme: 'badge-zip', label: 'ZIP Archive' };
-  if (ext === '7z') return { tag: '7Z', sub: 'ARCHIVE', theme: 'badge-7z', label: '7Z Archive' };
-  if (ext === 'iso') return { tag: 'ISO', sub: 'OPTICAL', theme: 'badge-iso', label: 'ISO Image' };
-  return { tag: ext ? ext.toUpperCase().slice(0, 5) : 'FILE', sub: 'BINARY', theme: 'badge-default', label: (ext ? ext.toUpperCase() : 'Binary') };
+  const ext = (rawName.split('?')[0].split('.').pop() || '').toLowerCase();
+
+  let platform = isPs5 ? 'PS5' : isPs4 ? 'PS4' : '';
+  let tag = ext.toUpperCase().slice(0, 5) || 'FILE';
+  let cardClass = 'theme-default';
+  let iconHref = '#i-ps5-disc';
+  let formatLabel = 'Direct File';
+  let pillClass = 'pill-pkg';
+
+  if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+    platform = platform || 'PS5';
+    tag = ext === 'ffpfsc' ? 'PFS' : ext === 'exfat' ? 'exFAT' : 'UFS';
+    cardClass = ext === 'ffpfsc' ? 'theme-ps5-pfs' : 'theme-ps5-disk';
+    iconHref = ext === 'ffpfsc' ? '#i-ps5-disc' : '#i-ps-storage';
+    formatLabel = ext === 'ffpfsc' ? 'PS5 Native PFS Image' : `PS5 Native ${tag} Image`;
+    pillClass = ext === 'ffpfsc' ? 'pill-pfs' : 'pill-disk';
+  } else if (ext === 'pkg') {
+    platform = platform || (isPs5 ? 'PS5' : 'PS4');
+    tag = 'PKG';
+    cardClass = 'theme-pkg';
+    iconHref = '#i-ps-shapes';
+    formatLabel = 'PlayStation Package';
+    pillClass = 'pill-pkg';
+  } else if (['rar', 'zip', 'zip64', '7z'].includes(ext)) {
+    platform = platform || 'ARCHIVE';
+    tag = ext.toUpperCase().slice(0, 4);
+    cardClass = 'theme-archive';
+    iconHref = '#i-archive-crate';
+    formatLabel = `${tag} Archive`;
+    pillClass = 'pill-archive';
+  } else if (ext === 'iso') {
+    platform = platform || 'DISC';
+    tag = 'ISO';
+    cardClass = 'theme-iso';
+    iconHref = '#i-disc-iso';
+    formatLabel = 'Optical Disc Image';
+    pillClass = 'pill-pkg';
+  }
+
+  // Extract clean game title if filename is formatted like "PPSA06092 - WRC.ffpfsc" or "PPSA03541 UFC 5.ffpfsc"
+  const cleanExt = rawName.replace(/\.[a-zA-Z0-9]+$/, '');
+  const prefixMatch = cleanExt.match(/^(?:\[[^\]]+\]\s*[-_]?\s*)?(?:(PPSA\d{5}|CUSA\d{5})[\s_-]+)(.+)$/i);
+  let cleanTitle = rawName;
+  if (prefixMatch && prefixMatch[2].trim()) {
+    cleanTitle = prefixMatch[2].trim();
+  }
+
+  return {
+    rawName,
+    cleanTitle,
+    titleId,
+    platform: platform || 'DATA',
+    tag,
+    cardClass,
+    iconHref,
+    formatLabel,
+    pillClass
+  };
 }
 
 function row(job, index) {
@@ -284,46 +334,37 @@ function row(job, index) {
   const statusDotClass = (job.state === 'running' || job.state === 'completed') ? 'green' : job.state === 'failed' ? 'error' : '';
   const statusDotStyle = job.state === 'queued' ? 'background: #1668e3;' : job.state === 'paused' ? 'background: #f59e0b;' : '';
 
-  const titleId = getTitleId(job.name, job.source);
-  const fmt = getFormatInfo(job.name);
-  const coverUrl = titleId ? `https://art.gametdb.com/ps4/cover/US/${titleId}.jpg` : '';
-  const coverAltUrl = titleId ? `https://art.gametdb.com/ps4/cover/EN/${titleId}.jpg` : '';
+  const v = parseJobVisuals(job);
 
-  let visualHtml = '';
-  if (titleId) {
-    visualHtml = `
-      <div class="game-thumb-container" title="${titleId}">
-        <img class="game-cover-thumb" src="${coverUrl}" alt="${escaped(job.name)}" loading="lazy"
-          onerror="if(!this.dataset.triedAlt){this.dataset.triedAlt='1';this.src='${coverAltUrl}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}">
-        <div class="format-badge-box ${fmt.theme}" style="display:none;">
-          <span class="badge-tag">${fmt.tag}</span>
-          <span class="badge-sub">${titleId.slice(0, 4)}</span>
-        </div>
-      </div>`;
-  } else {
-    visualHtml = `
-      <div class="game-thumb-container" title="${fmt.label}">
-        <div class="format-badge-box ${fmt.theme}">
-          <span class="badge-tag">${fmt.tag}</span>
-          <span class="badge-sub">${fmt.sub}</span>
-        </div>
-      </div>`;
-  }
+  const cardHtml = `
+    <div class="ps-game-card ${v.cardClass}" title="${v.formatLabel}">
+      <div class="card-glass-shine"></div>
+      <span class="card-plat-pill">${v.platform}</span>
+      <div class="card-icon-center">
+        <svg class="card-vector"><use href="${v.iconHref}"/></svg>
+      </div>
+      <span class="card-fmt-pill">${v.tag}</span>
+    </div>
+  `;
 
   return `<tr data-job-id="${job.id}" data-index="${index}" class="${isActive ? 'row-active' : ''}">
     <td class="col-chk"><input type="checkbox" class="row-select" data-id="${job.id}" ${isChecked ? 'checked' : ''}></td>
     <td class="col-num">${index + 1}</td>
     <td>
       <div class="queue-name">
-        ${visualHtml}
-        <div class="queue-meta" style="display: flex; flex-direction: column; gap: 2px;">
+        ${cardHtml}
+        <div class="queue-meta" style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
           <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-            <strong style="word-break: break-all;">${escaped(job.name)}</strong>
-            ${titleId ? `<span class="title-id-pill">${titleId}</span>` : ''}
-            ${job.kind === 'multipart' ? '<span class="format-pill badge-pkg">STITCHED</span>' : ''}
-            ${(job.is_zip || job.decompress) && ['zip', 'rar', '7z'].includes(fmt.tag.toLowerCase()) ? '<span class="format-pill badge-archive">DECOMPRESS</span>' : ''}
+            <strong class="game-title-text" title="${escaped(v.rawName)}">${escaped(v.cleanTitle)}</strong>
+            ${v.titleId ? `<span class="id-badge">${v.titleId}</span>` : ''}
+            <span class="meta-pill ${v.pillClass}">${v.tag}</span>
+            ${job.kind === 'multipart' ? '<span class="meta-pill pill-pkg">STITCHED</span>' : ''}
+            ${(job.is_zip || job.decompress) && ['rar', 'zip', '7z'].includes(v.tag.toLowerCase()) ? '<span class="meta-pill pill-archive">EXTRACT</span>' : ''}
           </div>
-          ${job.detail ? `<span style="font-size: 11px; color: var(--muted);">${escaped(job.detail)}</span>` : ''}
+          <div class="game-sub-text">
+            <span>${v.formatLabel}</span>
+            ${job.detail ? `<span style="opacity: 0.5;">·</span><span>${escaped(job.detail)}</span>` : ''}
+          </div>
         </div>
       </div>
     </td>
