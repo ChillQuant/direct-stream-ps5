@@ -421,7 +421,6 @@ class Integration(unittest.TestCase):
         self.assertEqual(info['filename'], 'game.pkg')
         self.assertTrue(info['ranges'])
         self.assertTrue(info['resumable'])
->>>>>>> 7629ff9 (feat: add multi-part file stitching engine with zero-performance-drop pipeline)
 
 if __name__=='__main__':unittest.main()
 
