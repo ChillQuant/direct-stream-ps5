@@ -1,0 +1,17 @@
+{
+  "name": "Direct Stream for PlayStation 5",
+  "short_name": "PS5 Streamer",
+  "description": "Stream downloads directly to PS5 storage",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

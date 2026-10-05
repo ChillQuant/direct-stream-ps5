@@ -41,21 +41,42 @@ A high-performance parallel transfer engine and local browser dashboard for stre
 ### Android (via Termux)
 Direct Stream runs natively on Android phones with **raw Wi-Fi throughput** and zero root required:
 
+#### ⚡ 1-Line Quick Setup (Recommended)
+Paste this single command into Termux to install prerequisites, download the app, and launch immediately:
+
 ```bash
-# 1. Update packages and install python + git
-pkg update && pkg install python git
+curl -sSL https://raw.githubusercontent.com/ChillQuant/direct-stream-ps5/feature/android-support/install_android.sh | bash
+```
+
+*(Note: Upon public release on `main`, the URL will be `.../main/install_android.sh`)*
+
+#### 🚀 Everyday Launch (Fastest)
+Once installed, you never need to type git commands or change folders again. Simply open Termux and type:
+```bash
+ps5
+```
+
+#### 📱 1-Tap Home Screen Launcher (No Terminal!)
+- **Chrome PWA**: When the dashboard opens in Chrome on your phone, tap the **3 dots** menu (⋮) → **"Add to Home screen"** / **"Install app"**. Tapping the icon on your home screen launches the app in full-screen standalone mode!
+- **Termux:Widget**: If you have the free [Termux:Widget](https://f-droid.org/en/packages/com.termux.widget/) add-on installed, add the **"PS5_Streamer"** widget to your home screen to launch with 1 tap.
+
+#### 🛠️ Manual Setup
+```bash
+# 1. Update packages & install python + git
+pkg update -y && pkg install -y python git
 
 # 2. Clone the repository
-git clone https://github.com/ChillQuant/direct-stream-ps5.git
+git clone -b feature/android-support https://github.com/ChillQuant/direct-stream-ps5.git
 cd direct-stream-ps5
 
-# 3. Start the streamer
+# 3. Start the streamer (auto-registers 'ps5' global command)
 ./run_android.sh
 ```
 
-- **Background WakeLock**: `./run_android.sh` automatically enables Android WakeLock so your phone won't sleep or throttle Wi-Fi during 50GB+ streaming transfers.
-- **Remote Access (`--host 0.0.0.0`)**: Pass `--host 0.0.0.0` if you want to control the Android stream server from your PC, Mac, or tablet on the same Wi-Fi.
+- **Background WakeLock**: Automatically enables Android WakeLock so your phone won't sleep or throttle Wi-Fi during 50GB+ streaming transfers.
+- **Remote Access (`--host 0.0.0.0`)**: Pass `--host 0.0.0.0` (or `ps5 --host 0.0.0.0`) if you want to control the Android stream server from your PC, Mac, or tablet on the same Wi-Fi.
 - **Phone Storage Access**: Run `termux-setup-storage` to stream local packages directly from `/sdcard/Download/`.
+
 
 ---
 

@@ -736,7 +736,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             self.send(200, self.server.manager.snapshot())
             return
-        assets = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/icon.svg": "icon.svg"}
+        assets = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/icon.svg": "icon.svg", "/manifest.json": "manifest.json"}
         if path not in assets:
             self.send(404, {"error": "Not found"})
             return
