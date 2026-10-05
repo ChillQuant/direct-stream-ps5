@@ -929,6 +929,21 @@ const updateAddPreview = () => {
 
   const ext = name.toLowerCase().split('?')[0].split('.').pop();
   let formatLabel = isUrl ? 'Direct link · Ready to stream' : 'Local file · Ready to stream';
+  let hostBadge = '';
+  if (isUrl) {
+    try {
+      const u = new URL(first);
+      const host = u.hostname.toLowerCase();
+      if (host.includes('rootz.so')) hostBadge = 'Rootz.so · Auto-resolving direct stream';
+      else if (host.includes('akirabox.')) hostBadge = 'AkiraBox · Auto-resolving direct stream';
+      else if (host.includes('datanodes.to')) hostBadge = 'DataNodes · Direct Stream (1-connection safe)';
+      else if (host.includes('vikingfile.com')) hostBadge = 'VikingFile · Direct Stream (1-connection safe)';
+      else if (host.includes('fileditch')) hostBadge = 'FileDitch · Direct Stream (Canonical CDN)';
+      else if (host.includes('rapidgator.net')) hostBadge = 'Rapidgator · Direct Stream (1-connection safe)';
+      else if (host.includes('drive.google.com')) hostBadge = 'Google Drive · Auto-resolving stream';
+      else if (host.includes('onedrive') || host.includes('1drv.ms')) hostBadge = 'OneDrive · Direct Stream';
+    } catch { }
+  }
   let smartDest = null;
 
   if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
@@ -953,7 +968,9 @@ const updateAddPreview = () => {
     if ($('preview-filename')) $('preview-filename').textContent = name;
   }
 
-  if ($('preview-filesize')) $('preview-filesize').textContent = formatLabel;
+  if ($('preview-filesize')) {
+    $('preview-filesize').textContent = hostBadge ? `⚡ ${hostBadge} · ${formatLabel}` : formatLabel;
+  }
 
   // Auto-route destination if user hasn't explicitly set a custom folder
   const currentDest = $('modal-dest-folder')?.value.trim();

@@ -202,6 +202,51 @@ class TestResolver(unittest.TestCase):
             "https://cdn.example.com/games/Spiderman.pkg.003",
         ])
 
+    def test_akirabox_pre_resolve(self):
+        url1 = "https://akirabox.to/abx7k2m9/file"
+        self.assertEqual(pre_resolve_url(url1), "https://akirabox.to/api/files/abx7k2m9/download")
+
+        url2 = "https://akirabox.com/game1234"
+        self.assertEqual(pre_resolve_url(url2), "https://akirabox.to/api/files/game1234/download")
+
+        # Static pages should not be rewritten
+        self.assertEqual(pre_resolve_url("https://akirabox.to/developers"), "https://akirabox.to/developers")
+
+    def test_fileditch_pre_resolve_and_extract(self):
+        url = "https://fileditchfiles.st/d/ps5_update.ffpfsc"
+        self.assertEqual(pre_resolve_url(url), "https://new.fileditch.com/ps5_update.ffpfsc")
+
+        html = '<a href="https://files.fileditch.com/b123/Demon_Souls.ffpfsc">Download</a>'
+        res = extract_download_link_from_html("https://new.fileditch.com/page", html)
+        self.assertEqual(res, "https://files.fileditch.com/b123/Demon_Souls.ffpfsc")
+
+    def test_datanodes_and_vikingfile_extract(self):
+        html_data = '<a href="https://s1.datanodes.to/d/xyz123/WRC.pkg">Download</a>'
+        res_data = extract_download_link_from_html("https://datanodes.to/download/xyz123", html_data)
+        self.assertEqual(res_data, "https://s1.datanodes.to/d/xyz123/WRC.pkg")
+
+        html_viking = 'var data = {"link": "https://s2.vikingfile.com/d/abc/UFC5.ffpfsc"};'
+        res_viking = extract_download_link_from_html("https://vikingfile.com/file/abc", html_viking)
+        self.assertEqual(res_viking, "https://s2.vikingfile.com/d/abc/UFC5.ffpfsc")
+
+    def test_host_headers_and_single_stream(self):
+        from resolver import get_request_headers_for_url, is_single_connection_host
+
+        h_data = get_request_headers_for_url("https://s1.datanodes.to/d/xyz/game.pkg")
+        self.assertEqual(h_data["Referer"], "https://datanodes.to/")
+
+        h_rootz = get_request_headers_for_url("https://cdn-files.alcyone.so/d/game.pkg")
+        self.assertEqual(h_rootz["Referer"], "https://rootz.so/")
+
+        h_viking = get_request_headers_for_url("https://s2.vikingfile.com/d/game.pkg")
+        self.assertEqual(h_viking["Referer"], "https://vikingfile.com/")
+
+        self.assertTrue(is_single_connection_host("https://s1.datanodes.to/d/xyz"))
+        self.assertTrue(is_single_connection_host("https://vikingfile.com/d/xyz"))
+        self.assertTrue(is_single_connection_host("https://akirabox.to/file/xyz"))
+        self.assertFalse(is_single_connection_host("https://archive.org/download/item/file.pkg"))
+
 
 if __name__ == "__main__":
     unittest.main()
+

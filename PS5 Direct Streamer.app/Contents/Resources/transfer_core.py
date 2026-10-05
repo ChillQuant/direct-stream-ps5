@@ -21,6 +21,8 @@ from resolver import (
     extract_download_link_from_html,
     parse_filename_from_headers,
     get_captcha_hint_if_applicable,
+    get_request_headers_for_url,
+    is_single_connection_host,
     parse_multipart_info,
     detect_multipart_sequence,
 )
@@ -141,7 +143,16 @@ class SecureRedirect(urllib.request.HTTPRedirectHandler):
         valid_url(newurl)
         if req.full_url.startswith("https:") and not newurl.startswith("https:"):
             raise TransferError("Blocked an HTTPS-to-HTTP redirect. Use a secure direct link.")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req:
+            # Preserve critical transfer headers (Range, User-Agent, Referer, Accept, etc.) across redirect
+            for k, v in req.headers.items():
+                if k.lower() not in ("host", "content-length"):
+                    new_req.add_header(k, v)
+            if "Referer" not in new_req.headers:
+                parsed_orig = urllib.parse.urlsplit(req.full_url)
+                new_req.add_header("Referer", f"{parsed_orig.scheme}://{parsed_orig.netloc}/")
+        return new_req
 
 
 def opener():
@@ -200,7 +211,7 @@ class SourceInfo:
             return False
         if self.kind == "multipart":
             return bool(self.parts) and all(p.resumable() and p.size is not None for p in self.parts)
-        return self.kind == "local" or (self.ranges and bool(self.etag or self.modified))
+        return self.kind == "local" or (self.ranges and (bool(self.etag or self.modified) or self.size is not None))
 
 
 def probe_source(kind, location, token, resolve_depth=0, decompress=True):
@@ -239,7 +250,8 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
     location = valid_url(location)
     if resolve_depth == 0:
         location = pre_resolve_url(location)
-    req = urllib.request.Request(location, headers={**HEADERS, "Range": "bytes=0-0"})
+    req_headers = get_request_headers_for_url(location, HEADERS)
+    req = urllib.request.Request(location, headers={**req_headers, "Range": "bytes=0-0"})
     try:
         response = opener().open(req, timeout=20)
     except urllib.error.HTTPError as e:
@@ -284,9 +296,10 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
         final_url = valid_url(response.geturl())
         if decompress and (is_zip_candidate(final_url) or is_zip_candidate(filename) or "application/zip" in h.get("Content-Type", "").lower()):
             try:
-                zip_meta = inspect_zip_archive("url", final_url, headers=HEADERS, total_size=size)
+                zip_headers = get_request_headers_for_url(final_url, HEADERS)
+                zip_meta = inspect_zip_archive("url", final_url, headers=zip_headers, total_size=size)
                 sel = zip_meta["selected"]
-                p_off = get_zip_payload_offset("url", final_url, sel["header_offset"], headers=HEADERS)
+                p_off = get_zip_payload_offset("url", final_url, sel["header_offset"], headers=zip_headers)
                 return SourceInfo(
                     kind="zip_url",
                     location=final_url,
@@ -457,6 +470,36 @@ class ParallelReader:
                             except OSError:
                                 pass
                         r = conn.getresponse()
+                        if r.status in (301, 302, 303, 307, 308):
+                            redir_hops = 0
+                            curr_url = self.source.location
+                            while r.status in (301, 302, 303, 307, 308) and redir_hops < 5:
+                                redir_hops += 1
+                                redir_loc = r.headers.get("Location")
+                                if not redir_loc:
+                                    break
+                                curr_url = urllib.parse.urljoin(curr_url, redir_loc)
+                                p = urllib.parse.urlsplit(curr_url)
+                                path = urllib.parse.urlunsplit(("", "", p.path or "/", p.query, ""))
+                                r.close()
+                                if conn:
+                                    self.token.untrack(conn)
+                                    with self.cv:
+                                        self.connections.discard(conn)
+                                    conn.close()
+                                    conn = None
+                                if p.scheme == "https":
+                                    conn = http.client.HTTPSConnection(p.hostname, p.port, timeout=20, context=tls_context())
+                                else:
+                                    conn = http.client.HTTPConnection(p.hostname, p.port, timeout=20)
+                                self.token.track(conn)
+                                with self.cv:
+                                    self.connections.add(conn)
+                                headers = {**self.base_headers, "Range": f"bytes={start}-{end}"}
+                                if "Referer" not in headers:
+                                    headers["Referer"] = f"{p.scheme}://{p.hostname}/"
+                                conn.request("GET", path, headers=headers)
+                                r = conn.getresponse()
                         if r.status in (408, 429, 500, 502, 503, 504):
                             # Release the connection before retrying a temporary source failure.
                             r.close()
@@ -595,9 +638,9 @@ class SequentialReader:
                         r.close()
                         raise TransferError("Server ignored resume. Stopped before appending incorrect bytes.")
                     parse_range(r.headers, self.offset, self.source.size - 1, self.source.size)
-                elif r.status != 200:
+                elif r.status not in (200, 206):
                     r.close()
-                    raise TransferError("Expected a complete HTTP response.")
+                    raise TransferError(f"Expected HTTP 200 or 206, got HTTP {r.status}.")
                 if self.source.etag and r.headers.get("ETag", self.source.etag) != self.source.etag:
                     r.close()
                     raise TransferError("Source ETag changed before the download started.")
@@ -832,14 +875,17 @@ class MultiPartReader:
 
 
 def make_reader(source, offset, settings, token, meter, on_part_change=None):
+    loc = source.location if hasattr(source, "location") and isinstance(source.location, str) else ""
+    headers = get_request_headers_for_url(loc, settings.get("_headers") or HEADERS)
     if source.kind.startswith("zip_"):
-        return ZipStreamingReader(source, settings["buffer_mb"], token, meter, settings.get("_headers"))
+        return ZipStreamingReader(source, settings["buffer_mb"], token, meter, headers)
     if source.kind == "multipart":
         return MultiPartReader(source, offset, settings, token, meter, on_part_change=on_part_change)
     if source.kind == "url" and source.ranges and source.size is not None and settings["streams"] > 1:
-        return ParallelReader(source, offset, settings["streams"], settings["buffer_mb"], settings["chunk_mb"], token, meter,
-                              settings.get("_headers"))
-    return SequentialReader(source, offset, settings["buffer_mb"], token, meter, settings.get("_headers"))
+        if not is_single_connection_host(source.location):
+            return ParallelReader(source, offset, settings["streams"], settings["buffer_mb"], settings["chunk_mb"], token, meter,
+                                  headers)
+    return SequentialReader(source, offset, settings["buffer_mb"], token, meter, headers)
 
 
 def connect_ftp(settings, token):
@@ -997,8 +1043,16 @@ def transfer(job, settings, token, report, save):
     ):
         job["name"] = source.filename
     old_identity = job.get("identity")
-    if old_identity and old_identity != source.identity():
-        raise TransferError("Source changed since this job started. Use Restart to begin a new partial file.")
+    link_updated = job.pop("link_updated", False)
+    if old_identity:
+        if link_updated:
+            if old_identity.get("size") is not None and source.size is not None and old_identity["size"] != source.size:
+                raise TransferError(f"New link file size ({source.size} bytes) does not match original ({old_identity['size']} bytes). Restart the job.")
+        elif old_identity != source.identity():
+            if old_identity.get("size") is not None and old_identity.get("size") == source.size and source.ranges:
+                pass
+            else:
+                raise TransferError("Source changed since this job started. Use Restart to begin a new partial file.")
     job["identity"] = source.identity()
     job["total"] = source.size
     job["resumable"] = source.resumable()

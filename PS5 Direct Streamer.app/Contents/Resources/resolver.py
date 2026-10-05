@@ -49,8 +49,22 @@ def pre_resolve_url(url: str) -> str:
         host, file_id = m_buzz.group(1), m_buzz.group(2)
         return f"https://{host}/{file_id}/download"
 
-    # 5. Qiwi.gg / Qiwi.to: https://qiwi.gg/file/<id> -> https://qiwi.gg/file/<id>
-    # (Resolved in HTML or left for direct API probe)
+    # 5. AkiraBox: https://akirabox.to/<id>/file or <id> -> https://akirabox.to/api/files/<id>/download
+    m_akira = re.match(r"^https?://(?:www\.)?(?:akirabox\.to|akirabox\.com)/([a-zA-Z0-9_-]+)(?:/(?:file|download))?/?$", url, re.I)
+    if m_akira:
+        file_id = m_akira.group(1)
+        if file_id.lower() not in ("premium", "developers", "blog", "contact-us", "terms", "privacy", "dmca", "login", "register", "offer", "ui", "user", "api"):
+            return f"https://akirabox.to/api/files/{file_id}/download"
+
+    # 6. FileDitch: https://fileditchfiles.st/... -> https://new.fileditch.com/...
+    m_fileditch = re.match(r"^https?://(?:www\.)?fileditchfiles\.st/(?:d/|file/)?([^?#]+)", url, re.I)
+    if m_fileditch:
+        subpath = m_fileditch.group(1)
+        return f"https://new.fileditch.com/{subpath}"
+
+    # 7. Rootz: canonicalize www.rootz.so -> rootz.so
+    if "www.rootz.so" in url.lower():
+        url = re.sub(r"^https?://www\.rootz\.so", "https://rootz.so", url, flags=re.I)
 
     return url
 
@@ -153,7 +167,72 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
         if m:
             return m.group(1).replace(r"\/", "/")
 
-    # 10. Generic Web Page Heuristics:
+    # 10. Rootz (rootz.so): Auto-resolve via Next.js RSC token & download-by-short API
+    if "rootz.so" in domain:
+        m_dl = re.search(r'href=["\'](/api/files/proxy-download/[^"\']+)["\']', html_text)
+        if m_dl:
+            return urllib.parse.urljoin("https://rootz.so", m_dl.group(1))
+        m_cdn = re.search(r'href=["\'](https?://[a-zA-Z0-9.-]*alcyone\.so/[^"\']+)["\']', html_text)
+        if m_cdn:
+            return m_cdn.group(1).replace("&amp;", "&")
+        m_token = re.search(r'shortId["\\\':\s]+([a-zA-Z0-9_-]+).*?pageToken["\\\':\s]+([a-zA-Z0-9_.-]+)', html_text)
+        if m_token:
+            short_id, page_token = m_token.group(1), m_token.group(2)
+            try:
+                import json
+                api_url = f"https://rootz.so/api/files/download-by-short?shortId={urllib.parse.quote(short_id)}"
+                api_req = urllib.request.Request(api_url, headers={
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                    "X-Page-Token": page_token,
+                    "Referer": page_url
+                })
+                with urllib.request.urlopen(api_req, timeout=10) as r:
+                    res_data = json.loads(r.read().decode())
+                    file_id = res_data.get("data", {}).get("fileId") or short_id
+                    return f"https://rootz.so/api/files/proxy-download/{file_id}"
+            except Exception:
+                pass
+
+    # 11. AkiraBox (akirabox.to, akirabox.com): Extract hotlink API download or CDN target
+    if "akirabox.to" in domain or "akirabox.com" in domain:
+        m_api = re.search(r'href=["\'](/api/files/[a-zA-Z0-9_-]+/download(?:\?[^"\']*)?)["\']', html_text)
+        if m_api:
+            return urllib.parse.urljoin(page_url, m_api.group(1))
+        m_cdn = re.search(r'href=["\'](https?://(?:storage|cdn|files)[a-zA-Z0-9.-]*akirabox\.[a-z]+/[^"\']+)["\']', html_text)
+        if m_cdn:
+            return m_cdn.group(1).replace("&amp;", "&")
+        m_id = re.search(r'/(?:file/)?([a-zA-Z0-9_-]+)(?:/file)?', parsed.path)
+        if m_id and m_id.group(1).lower() not in ("premium", "developers", "blog", "terms", "privacy", "dmca", "login", "register", "offer", "ui", "user", "api"):
+            return f"https://akirabox.to/api/files/{m_id.group(1)}/download"
+
+    # 12. DataNodes (datanodes.to): Extract direct storage/CDN link or file download
+    if "datanodes.to" in domain:
+        m_cdn = re.search(r'href=["\'](https?://[a-zA-Z0-9.-]*datanodes\.to/d/[^"\']+)["\']', html_text)
+        if m_cdn:
+            return m_cdn.group(1).replace("&amp;", "&")
+        m_dl = re.search(rf'href=["\'](https?://[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
+        if m_dl:
+            return m_dl.group(1).replace("&amp;", "&")
+
+    # 13. VikingFile (vikingfile.com): Extract link from script response or download button
+    if "vikingfile.com" in domain:
+        m_link = re.search(r'["\']link["\']:\s*["\'](https?://[^"\']+)["\']', html_text)
+        if m_link:
+            return m_link.group(1).replace(r"\/", "/").replace("&amp;", "&")
+        m_btn = re.search(r'id=["\']download-link["\'][^>]*href=["\'](https?://[^"\']+)["\']', html_text)
+        if m_btn and not m_btn.group(1).endswith("#"):
+            return m_btn.group(1).replace("&amp;", "&")
+
+    # 14. FileDitch (fileditchfiles.st, fileditch.com, new.fileditch.com, files.fileditch.com)
+    if "fileditch" in domain:
+        m_fd = re.search(rf'href=["\'](https?://(?:files|new)\.fileditch\.com/[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
+        if m_fd:
+            return m_fd.group(1).replace("&amp;", "&")
+        m_fd_any = re.search(r'href=["\'](https?://(?:files|new)\.fileditch\.com/[^"\']+)["\']', html_text, re.I)
+        if m_fd_any:
+            return m_fd_any.group(1).replace("&amp;", "&")
+
+    # 15. Generic Web Page Heuristics:
     # A) Meta refresh redirect (<meta http-equiv="refresh" content="...;url=(...)">)
     m_refresh = re.search(r'<meta[^>]*http-equiv=["\']refresh["\'][^>]*content=["\'][^"\']*url=([^"\'>\s]+)', html_text, re.I)
     if m_refresh:
@@ -252,12 +331,100 @@ def get_captcha_hint_if_applicable(url: str) -> str | None:
         "katfile.com": "Katfile requires solving a CAPTCHA in your browser before starting.",
         "nitroflare.com": "Nitroflare requires solving a CAPTCHA in your browser.",
         "uploadhaven.com": "UploadHaven requires waiting 15 seconds in your browser before generating a link.",
+        "datanodes.to": (
+            "DataNodes generates a direct link after a free countdown in your browser. "
+            "To stream directly to PS5: click 'Free Download' -> 'Start Download' in your browser, "
+            "right-click the download item in your browser's Downloads tab, choose 'Copy download link', "
+            "and paste that direct link into Direct Stream."
+        ),
+        "vikingfile.com": (
+            "VikingFile generates its direct link after solving Cloudflare Turnstile in your browser. "
+            "To stream immediately to PS5: click Download on VikingFile in your browser, copy the direct download link "
+            "from your browser's Downloads tab, and paste it into Direct Stream."
+        ),
+        "akirabox.to": (
+            "AkiraBox landing page is protected by Cloudflare. "
+            "Click Download once in your browser, copy the direct download link from your browser's Downloads tab, "
+            "and paste it into Direct Stream."
+        ),
+        "akirabox.com": (
+            "AkiraBox landing page is protected by Cloudflare. "
+            "Click Download once in your browser, copy the direct download link from your browser's Downloads tab, "
+            "and paste it into Direct Stream."
+        ),
+        "rootz.so": (
+            "Rootz link may be password protected or rate-limited. "
+            "Click Download in your browser, copy the download link from your browser's Downloads tab, "
+            "and paste it into Direct Stream."
+        ),
     }
 
     for host_domain, hint in hints.items():
         if host_domain in domain:
             return hint
     return None
+
+
+def get_request_headers_for_url(url: str, base_headers: dict | None = None) -> dict:
+    """Build optimized request headers for streaming from known hosts, including proper Referer and User-Agent."""
+    headers = dict(base_headers) if base_headers else {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
+        "Connection": "keep-alive",
+    }
+    if not url or not isinstance(url, str):
+        return headers
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        domain = parsed.netloc.lower()
+
+        if "datanodes.to" in domain:
+            headers["Referer"] = "https://datanodes.to/"
+        elif "rootz.so" in domain or "alcyone.so" in domain:
+            headers["Referer"] = "https://rootz.so/"
+        elif "vikingfile.com" in domain:
+            headers["Referer"] = "https://vikingfile.com/"
+        elif "akirabox.to" in domain or "akirabox.com" in domain:
+            headers["Referer"] = "https://akirabox.to/"
+        elif "fileditch" in domain:
+            headers["Referer"] = "https://new.fileditch.com/"
+        elif "mediafire.com" in domain:
+            headers["Referer"] = "https://www.mediafire.com/"
+        elif "1fichier.com" in domain:
+            headers["Referer"] = "https://1fichier.com/"
+        elif "Referer" not in headers and parsed.scheme and parsed.netloc:
+            headers["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
+    except Exception:
+        pass
+
+    return headers
+
+
+def is_single_connection_host(url: str) -> bool:
+    """Return True if host is known to limit free users to 1 concurrent connection or has single-use tokens."""
+    if not url or not isinstance(url, str):
+        return False
+    try:
+        domain = urllib.parse.urlsplit(url).netloc.lower()
+        single_hosts = (
+            "datanodes.to",
+            "vikingfile.com",
+            "akirabox.to",
+            "akirabox.com",
+            "fileditchfiles.st",
+            "fileditch.com",
+            "new.fileditch.com",
+            "1fichier.com",
+            "rapidgator.net",
+            "ddownload.com",
+            "katfile.com",
+            "nitroflare.com",
+        )
+        return any(h in domain for h in single_hosts)
+    except Exception:
+        return False
 
 
 def parse_multipart_info(filename: str) -> tuple[str, int] | None:

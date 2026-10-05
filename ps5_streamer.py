@@ -162,6 +162,17 @@ def friendly_error(e):
         return "FTP refused the operation. Check login, folder permissions, and payload compatibility."
     # URLError wraps the real cause in .reason; unwrap it so the message says what actually failed.
     cause = e.reason if isinstance(e, urllib.error.URLError) and isinstance(e.reason, BaseException) else e
+    if isinstance(e, urllib.error.HTTPError) or isinstance(cause, urllib.error.HTTPError):
+        code = getattr(e, "code", getattr(cause, "code", None))
+        if code in (401, 403):
+            return f"Download link access denied (HTTP {code}). The link may have expired or is one-time use; click 'Update link' to paste a fresh one."
+        if code in (404, 410):
+            return f"File not found on server (HTTP {code}). The link expired or was deleted; click 'Update link' to paste a fresh one."
+        if code == 429:
+            return "Download rate limit exceeded (HTTP 429). The hosting site is limiting requests; wait a few minutes or use fewer streams."
+        if code in (500, 502, 503, 504):
+            return f"Hosting provider server error (HTTP {code}). The server is temporarily unavailable."
+        return f"Download server returned HTTP {code}."
     if isinstance(cause, ssl.SSLCertVerificationError):
         return ("SSL certificate check failed on the download link. On macOS with python.org Python, open "
                 "/Applications/Python 3.x and run 'Install Certificates.command', then retry.")
@@ -555,8 +566,10 @@ class Manager:
             job = next((j for j in self.jobs if j["id"] == data.get("id")), None)
             if not job or job["id"] == self.current or job["kind"] != "url" or job["state"] == "completed":
                 raise TransferError("Pause a URL job before updating its link.")
-            job["source"] = valid_url(data.get("source", ""))
-            job["detail"] = "Link updated. Source identity will be checked before resume."
+            new_src = valid_url(data.get("source", ""))
+            job["source"] = pre_resolve_url(new_src)
+            job["link_updated"] = True
+            job["detail"] = "Link updated. Ready to resume with fresh link."
             self.save()
         return {"ok": True}
 
