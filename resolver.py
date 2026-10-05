@@ -433,33 +433,30 @@ def parse_multipart_info(filename: str) -> tuple[str, int] | None:
         return None
     name = Path(filename).name
 
-    # 1. Numbered split extension: e.g. Game.pkg.001, Game.pkg.002, Game.pkg.1
-    m = re.match(r"^(.*?\.pkg)\.(\d{1,4})$", name, re.I)
+    # 1. Numbered split extension: e.g. Game.pkg.001, Game.ffpfsc.001, Game.iso.001, Game.rar.001
+    m = re.match(r"^(.*?\.(?:pkg|ffpfsc|exfat|ufs|iso|bin|img|zip|rar|7z|tar|[a-z0-9]{2,6}))\b\.(\d{1,4})$", name, re.I)
     if m:
         return m.group(1), int(m.group(2))
 
-    # 2. Raw numbered extension: e.g. Game.001, Game.002 -> Game.pkg
+    # 2. Part pattern before extension: e.g. Game.part01.rar, Game.part1.pkg, Game_part02.ffpfsc
+    m = re.match(r"^(.*?)[._-]part(\d{1,4})\.([a-z0-9]{2,6})$", name, re.I)
+    if m:
+        return f"{m.group(1)}.{m.group(3)}", int(m.group(2))
+
+    # 3. Part pattern after extension: e.g. Game.pkg.part1, Game.rar.part02
+    m = re.match(r"^(.*?\.[a-z0-9]{2,6})[._-]part(\d{1,4})$", name, re.I)
+    if m:
+        return m.group(1), int(m.group(2))
+
+    # 4. Raw numbered extension: e.g. Game.001, Game.002
     m = re.match(r"^(.*?)\.(\d{2,4})$", name, re.I)
     if m:
-        base = m.group(1)
-        if not base.lower().endswith(".pkg"):
-            base += ".pkg"
-        return base, int(m.group(2))
-
-    # 3. Part in name before .pkg: e.g. Game.part01.pkg, Game_part1.pkg, Game-part02.pkg
-    m = re.match(r"^(.*?)[._-]part(\d{1,4})\.pkg$", name, re.I)
-    if m:
-        return m.group(1) + ".pkg", int(m.group(2))
-
-    # 4. Part after .pkg: e.g. Game.pkg.part1, Game.pkg_part02
-    m = re.match(r"^(.*?\.pkg)[._-]part(\d{1,4})$", name, re.I)
-    if m:
         return m.group(1), int(m.group(2))
 
-    # 5. Numerical suffix before .pkg: e.g. Game_1.pkg, Game_2.pkg
-    m = re.match(r"^(.*?)[_.](\d{1,3})\.pkg$", name, re.I)
+    # 5. Numerical suffix before extension: e.g. Game_1.pkg, Game_2.ffpfsc, Game.1.rar
+    m = re.match(r"^(.*?)[_.](\d{1,3})\.([a-z0-9]{2,6})$", name, re.I)
     if m:
-        return m.group(1) + ".pkg", int(m.group(2))
+        return f"{m.group(1)}.{m.group(3)}", int(m.group(2))
 
     return None
 

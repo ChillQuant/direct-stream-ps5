@@ -186,6 +186,10 @@ class TestResolver(unittest.TestCase):
         self.assertEqual(parse_multipart_info("GodOfWar.part01.pkg"), ("GodOfWar.pkg", 1))
         self.assertEqual(parse_multipart_info("GodOfWar_part2.pkg"), ("GodOfWar.pkg", 2))
         self.assertEqual(parse_multipart_info("Uncharted.pkg.part3"), ("Uncharted.pkg", 3))
+        self.assertEqual(parse_multipart_info("EldenRing.part1.rar"), ("EldenRing.rar", 1))
+        self.assertEqual(parse_multipart_info("EldenRing.part02.rar"), ("EldenRing.rar", 2))
+        self.assertEqual(parse_multipart_info("DemonSouls.ffpfsc.001"), ("DemonSouls.ffpfsc", 1))
+        self.assertEqual(parse_multipart_info("Halo.iso.001"), ("Halo.iso", 1))
 
         # Test sequence detection and auto-sorting
         unsorted_items = [

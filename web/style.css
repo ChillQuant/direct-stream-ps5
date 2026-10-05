@@ -2508,3 +2508,280 @@ dialog.studio-modal::backdrop {
     width: 100%;
   }
 }
+
+/* ========================================================
+   MODAL FEATURE BLOCKS (Archive & Multi-Part)
+   ======================================================== */
+.modal-feature-block {
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.feature-block-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.feature-block-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.feature-block-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.archive-switcher {
+  margin-top: 4px;
+}
+
+.archive-switcher button {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.stacked-files-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding-right: 4px;
+}
+
+.stacked-part-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  font-size: 11.5px;
+}
+
+.stacked-part-item .part-number {
+  font-weight: 700;
+  color: var(--studio-blue);
+  width: 22px;
+}
+
+.stacked-part-item .part-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.stacked-part-item .part-badge {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+}
+
+.stacked-target-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stacked-target-row strong {
+  color: #38bdf8;
+  font-family: var(--font-mono, monospace);
+}
+
+/* ========================================================
+   3D STACKED CARD APPEARANCE & INSPECTOR
+   ======================================================== */
+.card-stack-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  perspective: 600px;
+}
+
+.card-stack-wrapper::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 3px;
+  width: 44px;
+  height: 52px;
+  border-radius: 9px;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transform: rotate(4deg) scale(0.96);
+  z-index: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-stack-wrapper::after {
+  content: '';
+  position: absolute;
+  top: -1.5px;
+  left: 1.5px;
+  width: 44px;
+  height: 52px;
+  border-radius: 9px;
+  background: rgba(51, 65, 85, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transform: rotate(2deg) scale(0.98);
+  z-index: 1;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-stack-wrapper:hover::before {
+  transform: translate(4px, -3px) rotate(8deg) scale(0.96);
+}
+
+.card-stack-wrapper:hover::after {
+  transform: translate(2px, -1.5px) rotate(4deg) scale(0.98);
+}
+
+.card-stack-wrapper .ps-game-card {
+  position: relative;
+  z-index: 2;
+}
+
+.card-stack-badge {
+  position: absolute;
+  top: 3.5px;
+  right: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0.5px 3.5px;
+  border-radius: 3px;
+  background: #0284c7;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  line-height: 1;
+}
+
+.stack-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 5px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.stack-expand-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+}
+
+.stack-expand-btn.expanded .stack-chevron {
+  transform: rotate(180deg);
+}
+
+.stack-chevron {
+  transition: transform 0.2s ease;
+}
+
+.stack-parts-panel {
+  margin-top: 6px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: fadeIn 0.2s ease;
+}
+
+.stack-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.stack-panel-title {
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.stack-panel-dest {
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+}
+
+.stack-parts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.stack-part-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.stack-part-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.stack-part-row .part-idx {
+  font-weight: 700;
+  color: var(--muted);
+  width: 22px;
+}
+
+.stack-part-row .part-file {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.stack-part-row .part-type-badge {
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+

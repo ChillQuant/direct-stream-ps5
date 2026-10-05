@@ -323,8 +323,17 @@ function row(job, index) {
     primary = `<button class="button small outline" data-job="${job.id}" data-action="pause">Pause</button>`;
   }
 
+  const v = parseJobVisuals(job);
+  const isMulti = job.kind === 'multipart';
+  const partsCount = (job.parts && job.parts.length) || 2;
+  const isArchive = ['zip', 'zip64'].includes(v.tag.toLowerCase()) || job.is_zip || !!job.archive_info;
+
   let menu = `<button data-job="${job.id}" data-action="up">Move up ↑</button><button data-job="${job.id}" data-action="down">Move down ↓</button>`;
   if (job.kind === 'url' && !isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="edit">Update link</button>`;
+  if (isArchive && !isActive && job.state !== 'completed') {
+    const isExtracting = job.decompress !== false;
+    menu += `<button data-job="${job.id}" data-action="toggle_extract">${isExtracting ? '📁 Turn OFF extraction (Keep raw .zip)' : '⚡ Turn ON extraction (Decompress to PS5)'}</button>`;
+  }
   if (!isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
   if (job.state !== 'completed' && job.state !== 'cancelled') menu += `<button data-job="${job.id}" data-action="cancel">Cancel transfer</button>`;
   if (!isActive) menu += `<button data-job="${job.id}" data-action="remove">Remove from queue</button>`;
@@ -334,9 +343,7 @@ function row(job, index) {
   const statusDotClass = (job.state === 'running' || job.state === 'completed') ? 'green' : job.state === 'failed' ? 'error' : '';
   const statusDotStyle = job.state === 'queued' ? 'background: #1668e3;' : job.state === 'paused' ? 'background: #f59e0b;' : '';
 
-  const v = parseJobVisuals(job);
-
-  const cardHtml = `
+  let cardHtml = `
     <div class="ps-game-card ${v.cardClass}" title="${v.formatLabel}">
       <div class="card-glass-shine"></div>
       <span class="card-plat-pill">${v.platform}</span>
@@ -346,6 +353,22 @@ function row(job, index) {
       <span class="card-fmt-pill">${v.tag}</span>
     </div>
   `;
+
+  if (isMulti) {
+    cardHtml = `
+      <div class="card-stack-wrapper" title="${partsCount} parts stacked: merging into ${escaped(job.name)}">
+        <div class="ps-game-card ${v.cardClass} card-stack">
+          <div class="card-glass-shine"></div>
+          <span class="card-plat-pill">${v.platform}</span>
+          <div class="card-icon-center">
+            <svg class="card-vector"><use href="${v.iconHref}"/></svg>
+          </div>
+          <span class="card-fmt-pill">${v.tag}</span>
+          <span class="card-stack-badge">${partsCount}P</span>
+        </div>
+      </div>
+    `;
+  }
 
   return `<tr data-job-id="${job.id}" data-index="${index}" class="${isActive ? 'row-active' : ''}">
     <td class="col-chk"><input type="checkbox" class="row-select" data-id="${job.id}" ${isChecked ? 'checked' : ''}></td>
@@ -358,13 +381,39 @@ function row(job, index) {
             <strong class="game-title-text" title="${escaped(v.rawName)}">${escaped(v.cleanTitle)}</strong>
             ${v.titleId ? `<span class="id-badge">${v.titleId}</span>` : ''}
             <span class="meta-pill ${v.pillClass}">${v.tag}</span>
-            ${job.kind === 'multipart' ? '<span class="meta-pill pill-pkg">STITCHED</span>' : ''}
-            ${(job.is_zip || job.decompress) && ['rar', 'zip', '7z'].includes(v.tag.toLowerCase()) ? '<span class="meta-pill pill-archive">EXTRACT</span>' : ''}
+            ${isMulti ? `
+              <span class="meta-pill pill-pkg" style="display: inline-flex; align-items: center; gap: 4px;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                STACKED (${partsCount} PARTS)
+              </span>
+              <button type="button" class="stack-expand-btn" data-toggle-stack="${job.id}">
+                <svg class="stack-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                <span>Inspect ${partsCount} parts</span>
+              </button>
+            ` : ''}
+            ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? '⚡ EXTRACT' : '📁 RAW ARCHIVE'}</span>` : ''}
           </div>
           <div class="game-sub-text">
             <span>${v.formatLabel}</span>
             ${job.detail ? `<span style="opacity: 0.5;">·</span><span>${escaped(job.detail)}</span>` : ''}
           </div>
+          ${isMulti ? `
+            <div class="stack-parts-panel" id="stack-panel-${job.id}" hidden>
+              <div class="stack-panel-header">
+                <span class="stack-panel-title">📚 Merged Stream: ${escaped(job.name)}</span>
+                <span class="stack-panel-dest">PS5 target: ${escaped(job.folder || '/data/ShadowMount')}</span>
+              </div>
+              <div class="stack-parts-grid">
+                ${(job.parts || []).map((p, pIdx) => `
+                  <div class="stack-part-row">
+                    <span class="part-idx">#${pIdx + 1}</span>
+                    <span class="part-file" title="${escaped(p.name || p.source)}">${escaped(p.name || p.source.split('/').pop().split('?')[0])}</span>
+                    <span class="part-type-badge">${p.kind === 'local' ? 'Local File' : 'Direct Link'}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
         </div>
       </div>
     </td>
@@ -396,6 +445,20 @@ function row(job, index) {
 function bindQueueEvents() {
   const tbody = $('queue-body');
   if (!tbody) return;
+
+  // Expandable multipart stack inspector
+  tbody.querySelectorAll('.stack-expand-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const jobId = btn.dataset.toggleStack;
+      const panel = $(`stack-panel-${jobId}`);
+      if (panel) {
+        const isHidden = panel.hidden;
+        panel.hidden = !isHidden;
+        btn.classList.toggle('expanded', isHidden);
+      }
+    });
+  });
 
   // Row selection checkboxes
   tbody.querySelectorAll('.row-select').forEach(cb => {
@@ -835,20 +898,27 @@ document.addEventListener('click', async e => {
 function parseMultipartInfo(filename) {
   if (!filename || typeof filename !== 'string') return null;
   const name = filename.split('/').pop().split('\\').pop();
-  let m = name.match(/^(.*?\.pkg)\.(\d{1,4})$/i);
+
+  // 1. Numbered split extension: e.g. Game.pkg.001, Game.ffpfsc.001, Game.iso.001, Game.rar.001
+  let m = name.match(/^(.*?\.(?:pkg|ffpfsc|exfat|ufs|iso|bin|img|zip|rar|7z|tar|[a-z0-9]{2,6}))\b\.(\d{1,4})$/i);
   if (m) return { base: m[1], num: parseInt(m[2], 10) };
+
+  // 2. Part pattern before extension: e.g. Game.part01.rar, Game.part1.pkg, Game_part02.ffpfsc
+  m = name.match(/^(.*?)[._-]part(\d{1,4})\.([a-z0-9]{2,6})$/i);
+  if (m) return { base: `${m[1]}.${m[3]}`, num: parseInt(m[2], 10) };
+
+  // 3. Part pattern after extension: e.g. Game.pkg.part1, Game.rar.part02
+  m = name.match(/^(.*?\.[a-z0-9]{2,6})[._-]part(\d{1,4})$/i);
+  if (m) return { base: m[1], num: parseInt(m[2], 10) };
+
+  // 4. Raw numbered extension: e.g. Game.001, Game.002
   m = name.match(/^(.*?)\.(\d{2,4})$/i);
-  if (m) {
-    let base = m[1];
-    if (!base.toLowerCase().endsWith('.pkg')) base += '.pkg';
-    return { base, num: parseInt(m[2], 10) };
-  }
-  m = name.match(/^(.*?)[._-]part(\d{1,4})\.pkg$/i);
-  if (m) return { base: m[1] + '.pkg', num: parseInt(m[2], 10) };
-  m = name.match(/^(.*?\.pkg)[._-]part(\d{1,4})$/i);
   if (m) return { base: m[1], num: parseInt(m[2], 10) };
-  m = name.match(/^(.*?)[_.](\d{1,3})\.pkg$/i);
-  if (m) return { base: m[1] + '.pkg', num: parseInt(m[2], 10) };
+
+  // 5. Numerical suffix before extension: e.g. Game_1.pkg, Game_2.ffpfsc, Game.1.rar
+  m = name.match(/^(.*?)[_.](\d{1,3})\.([a-z0-9]{2,6})$/i);
+  if (m) return { base: `${m[1]}.${m[3]}`, num: parseInt(m[2], 10) };
+
   return null;
 }
 
@@ -876,38 +946,89 @@ function detectMultipartSequence(items) {
   return [true, parsed[0].base, parsed.map(p => p.item)];
 }
 
+let modalExtractMode = true;
+
+$('btn-extract-on')?.addEventListener('click', () => {
+  modalExtractMode = true;
+  $('btn-extract-on')?.classList.add('selected');
+  $('btn-extract-off')?.classList.remove('selected');
+  if ($('decompress-zip')) $('decompress-zip').checked = true;
+  const hint = $('archive-mode-hint');
+  if (hint) hint.textContent = '⚡ Decompresses the inner game file (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.';
+  updateAddPreview();
+});
+
+$('btn-extract-off')?.addEventListener('click', () => {
+  modalExtractMode = false;
+  $('btn-extract-off')?.classList.add('selected');
+  $('btn-extract-on')?.classList.remove('selected');
+  if ($('decompress-zip')) $('decompress-zip').checked = false;
+  const hint = $('archive-mode-hint');
+  if (hint) hint.textContent = '📁 Transfers the raw archive file intact directly to PS5 without extraction.';
+  updateAddPreview();
+});
+
 const updateAddPreview = () => {
   const isUrl = sourceKind === 'url';
   const val = isUrl ? $('source-urls')?.value.trim() : $('local-path')?.value.trim();
+  const archiveBlock = $('archive-mode-block');
+  const multiBlock = $('multipart-stack-block');
+
   if (!val) {
+    if (archiveBlock) archiveBlock.hidden = true;
+    if (multiBlock) multiBlock.hidden = true;
     if ($('preview-filename')) $('preview-filename').textContent = 'No game file selected';
     if ($('preview-filesize')) $('preview-filesize').textContent = 'Enter direct link or choose file';
     return;
   }
   const lines = val.split('\n').map(x => x.trim()).filter(Boolean);
   if (lines.length > 1) {
+    if (archiveBlock) archiveBlock.hidden = true;
     const items = lines.map(s => ({ source: s }));
-    const [isMulti, mergedName] = detectMultipartSequence(items);
+    const [isMulti, mergedName, sortedParts] = detectMultipartSequence(items);
     if (isMulti) {
-      if ($('preview-filename')) $('preview-filename').textContent = `⚡ Multi-Part Sequence (${lines.length} parts)`;
-      if ($('preview-filesize')) $('preview-filesize').textContent = `Auto-stitching into ${mergedName} on PS5 (0 GB disk space used)`;
+      if (multiBlock) {
+        multiBlock.hidden = false;
+        if ($('multipart-count-badge')) $('multipart-count-badge').textContent = `${sortedParts.length} PARTS`;
+        if ($('multipart-merged-target')) $('multipart-merged-target').textContent = mergedName;
+        const listEl = $('stacked-parts-list');
+        if (listEl) {
+          listEl.innerHTML = sortedParts.map((p, idx) => {
+            const clean = p.source.split('/').pop().split('?')[0] || p.source;
+            return `
+              <div class="stacked-part-item">
+                <span class="part-number">#${idx + 1}</span>
+                <span class="part-name" title="${escaped(p.source)}">${escaped(clean)}</span>
+                <span class="part-badge">Part ${idx + 1} of ${sortedParts.length}</span>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+      if ($('preview-filename')) $('preview-filename').textContent = `📚 Stacked Multi-Part: ${mergedName}`;
+      if ($('preview-filesize')) $('preview-filesize').textContent = `All ${sortedParts.length} parts recognized · merging seamlessly on PS5`;
       const ext = mergedName.toLowerCase().split('.').pop();
       if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
         if ($('modal-dest-folder')) $('modal-dest-folder').value = '/data/ShadowMount';
+      } else if (ext === 'pkg') {
+        if ($('modal-dest-folder')) $('modal-dest-folder').value = '/data/pkg';
       }
       return;
     } else {
+      if (multiBlock) multiBlock.hidden = true;
       if ($('preview-filename')) $('preview-filename').textContent = `${lines.length} individual files`;
       if ($('preview-filesize')) $('preview-filesize').textContent = 'Queued as separate transfers';
       return;
     }
   }
+
+  if (multiBlock) multiBlock.hidden = true;
   const first = lines[0] || '';
   let name = '';
   if (isUrl) {
     try {
       const u = new URL(first);
-      for (const p of ['filename', 'file_name', 'name', 'file']) {
+      for (const p of ['filename', 'file_name', 'name', 'file', 'fn', 'title']) {
         const v = u.searchParams.get(p);
         if (v && v.trim()) {
           const clean = decodeURIComponent(v.trim()).split('/').pop().split('\\').pop();
@@ -946,6 +1067,16 @@ const updateAddPreview = () => {
   }
   let smartDest = null;
 
+  const isZipArchive = ['zip', 'zip64'].includes(ext);
+  if (archiveBlock) {
+    if (isZipArchive) {
+      archiveBlock.hidden = false;
+      if ($('archive-type-pill')) $('archive-type-pill').textContent = ext.toUpperCase() + ' ARCHIVE';
+    } else {
+      archiveBlock.hidden = true;
+    }
+  }
+
   if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
     const extUpper = ext.toUpperCase();
     if ($('preview-filename')) $('preview-filename').textContent = name;
@@ -955,9 +1086,14 @@ const updateAddPreview = () => {
     if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? 'Direct link · PlayStation Package (.pkg)' : 'Local file · PlayStation Package (.pkg)';
     smartDest = '/data/pkg';
-  } else if (['zip', 'zip64'].includes(ext)) {
-    if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
-    formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
+  } else if (isZipArchive) {
+    if (modalExtractMode) {
+      if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
+      formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
+    } else {
+      if ($('preview-filename')) $('preview-filename').textContent = `📁 Raw Archive: ${name}`;
+      formatLabel = 'Transferring raw intact archive to PS5 (No extraction)';
+    }
   } else if (['rar', '7z', 'tar'].includes(ext)) {
     if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? 'Direct link · Archive' : 'Local file · Archive';
@@ -1005,7 +1141,7 @@ $('add-form').addEventListener('submit', async e => {
       items: items.map(it => ({ ...it, folder: destFolder })),
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
-      decompress: $('decompress-zip') ? $('decompress-zip').checked : true,
+      decompress: modalExtractMode,
       overwrite: $('overwrite').checked
     });
     $('add-dialog').close();

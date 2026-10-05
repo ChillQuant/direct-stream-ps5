@@ -909,6 +909,44 @@
       <button type="button" class="button outline tiny" id="change-preview-file">Change</button>
     </div>
 
+    <!-- Prominent Archive Extraction Mode Switcher -->
+    <div id="archive-mode-block" class="modal-feature-block" hidden>
+      <div class="feature-block-header">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span class="feature-block-title">📦 Archive Extraction</span>
+          <span id="archive-type-pill" class="meta-pill pill-archive">ZIP ARCHIVE</span>
+        </div>
+        <span class="feature-block-sub">Choose extraction method for this compressed archive</span>
+      </div>
+      <div class="segmented-pill-switcher archive-switcher" role="group" aria-label="Archive extraction mode">
+        <button type="button" id="btn-extract-on" class="selected" data-extract="true">
+          ⚡ Extract to PS5
+        </button>
+        <button type="button" id="btn-extract-off" data-extract="false">
+          📁 Stream Raw Archive (.zip)
+        </button>
+      </div>
+      <p id="archive-mode-hint" class="field-hint" style="margin-top: 4px;">
+        ⚡ Decompresses the inner game file (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.
+      </p>
+    </div>
+
+    <!-- Prominent Multi-Part Stacked Preview -->
+    <div id="multipart-stack-block" class="modal-feature-block" hidden>
+      <div class="feature-block-header">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span class="feature-block-title">📚 Multi-Part Sequence</span>
+          <span id="multipart-count-badge" class="meta-pill pill-pkg">3 PARTS</span>
+        </div>
+        <span class="feature-block-sub">All parts recognized and will merge into 1 file on PS5</span>
+      </div>
+      <div class="stacked-files-preview-list" id="stacked-parts-list"></div>
+      <div class="stacked-target-row">
+        <span>Target merged file on PS5:</span>
+        <strong id="multipart-merged-target">game.pkg</strong>
+      </div>
+    </div>
+
     <!-- Collapsible Advanced Options -->
     <details class="modal-advanced-accordion">
       <summary><svg><use href="#i-chevron-right"/></svg> Advanced options</summary>

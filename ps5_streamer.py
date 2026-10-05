@@ -376,6 +376,7 @@ class Manager:
                 "total": None,
                 "transferred": 0,
                 "overwrite": bool(data.get("overwrite", False)),
+                "decompress": bool(data.get("decompress", True)),
                 "created": time.time(),
                 "identity": None
             }]
@@ -513,6 +514,20 @@ class Manager:
                         self.jobs[i], self.jobs[ni] = self.jobs[ni], self.jobs[i]
                 elif action == "edit":
                     raise TransferError("Use the edit endpoint to change the source link.")
+                elif action == "toggle_extract":
+                    if job["id"] == self.current:
+                        raise TransferError("Pause the transfer before changing extraction settings.")
+                    if job["state"] == "completed":
+                        raise TransferError("This transfer is already completed.")
+                    curr = job.get("decompress", True)
+                    job["decompress"] = not curr
+                    job["identity"] = None
+                    job["stage_owned"] = False
+                    job["transferred"] = 0
+                    if job["decompress"]:
+                        job["detail"] = "Extraction enabled: will decompress directly on PS5"
+                    else:
+                        job["detail"] = "Extraction disabled: will stream raw archive as-is"
                 else:
                     raise TransferError("Unknown queue action.")
             self.save()
