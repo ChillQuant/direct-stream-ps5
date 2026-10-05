@@ -77,6 +77,12 @@ cd direct-stream-ps5
 - **Remote Access (`--host 0.0.0.0`)**: Pass `--host 0.0.0.0` (or `ps5 --host 0.0.0.0`) if you want to control the Android stream server from your PC, Mac, or tablet on the same Wi-Fi.
 - **Phone Storage Access**: Run `termux-setup-storage` to stream local packages directly from `/sdcard/Download/`.
 
+#### 🔑 Android Permissions (One-Time Setup)
+When launching for the first time, Android will prompt you for two system permissions:
+1. **📂 Storage / File Access**: Tap **Allow** when prompted so Direct Stream can access and stream local `.pkg` packages from your phone's `Downloads` folder.
+2. **🔋 Energy / Battery Optimization**: Tap **Allow** (or choose **Unrestricted** under *Android Settings → Apps → Termux → Battery*). This prevents Android from putting Wi-Fi to sleep or killing the background process when your screen locks during huge 50GB–100GB transfers!
+
+
 
 ---
 

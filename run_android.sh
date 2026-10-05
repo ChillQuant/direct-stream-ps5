@@ -3,17 +3,20 @@
 # DIRECT STREAM FOR PLAYSTATION 5 — Android / Termux Launcher
 # ==============================================================================
 
-# Acquire WakeLock so Android won't sleep Wi-Fi during 50GB+ streaming
+# 1. Acquire WakeLock so Android won't sleep Wi-Fi during 50GB+ streaming
 if command -v termux-wake-lock >/dev/null 2>&1; then
-    echo "🔒 Enabling Android WakeLock (preventing sleep)..."
+    echo "🔒 Enabling Background WakeLock..."
+    echo "   💡 If Android prompts to disable battery optimization, tap 'ALLOW' so streaming won't stop when screen locks."
     termux-wake-lock
 fi
 
-# Ensure shared storage is accessible if not already set up
+# 2. Ensure shared storage is accessible if not already set up
 if [ ! -d "$HOME/storage" ] && command -v termux-setup-storage >/dev/null 2>&1; then
-    echo "📂 Initializing Android shared storage access..."
+    echo "📂 Requesting Android File/Storage access..."
+    echo "   💡 Please tap 'ALLOW' on the system popup to enable streaming local files from Downloads."
     termux-setup-storage
 fi
+
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
