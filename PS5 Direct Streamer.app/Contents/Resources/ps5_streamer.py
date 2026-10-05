@@ -30,7 +30,7 @@ from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp
     valid_name, valid_url, check_ftp_storage, validate_source_url, MIB)
 from resolver import pre_resolve_url
 
-VERSION = "2.8.5"
+VERSION = "2.8.6"
 BASE = Path(__file__).resolve().parent
 DEFAULTS = {"host": "", "port": 1337, "folder": "/data/ShadowMount", "username": "anonymous",
             "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3}
