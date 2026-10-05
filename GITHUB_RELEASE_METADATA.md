@@ -27,7 +27,64 @@ ps5, playstation-5, ftp, ftp-streamer, parallel-download, direct-stream, zero-de
 
 ---
 
-## 2. GitHub Release Notes (v2.8.1 Hotfix)
+## 2. GitHub Release Notes (v2.8.5 — Android & Mobile Update)
+
+### Tag Version
+```text
+v2.8.5
+```
+
+### Release Title
+```text
+DIRECT STREAM FOR PLAYSTATION 5 v2.8.5 — Android Support & Mobile UI
+```
+
+### Release Description:
+```markdown
+## DIRECT STREAM FOR PLAYSTATION 5 (v2.8.5)
+
+Direct Stream for PlayStation 5 now runs natively on Android phones with **raw Wi-Fi throughput** and zero root required!
+
+---
+
+### What's New in v2.8.5
+
+- **Native Android & Termux Support**:
+  - Run directly on Android devices with zero root needed.
+  - **⚡ 1-Line Universal Installer**: Set up everything in one copy-paste command:
+    ```bash
+    curl -sSL https://raw.githubusercontent.com/ChillQuant/direct-stream-ps5/main/install_android.sh | bash
+    ```
+  - **🚀 Global `ps5` Command**: Automatically registered in Termux so you can launch by just typing `ps5` anywhere.
+  - **🔒 Background WakeLock (`termux-wake-lock`)**: Prevents Android from throttling Wi-Fi or putting Termux to sleep when the screen locks during 50GB–100GB transfers.
+  - **📂 Local Phone Storage (`termux-setup-storage`)**: Stream `.pkg` game packages directly from your phone's `/sdcard/Download/` folder.
+- **Mobile Responsive UI**:
+  - Brand-new single-column touch-optimized layout for mobile screens.
+  - **Sticky Bottom Navigation Bar**: One-handed thumb access to **Queue**, **Transfer**, **Settings**, and **Speed Test**.
+  - **PWA Standalone App**: Tap **"Add to Home screen"** in Chrome to install Direct Stream as a standalone app with its own icon and no browser URL bar.
+- **Universal Push Notifications**:
+  - Upgraded notifications to support both macOS Notification Center and Android (`termux-notification`) when transfers complete or fail.
+- **Cross-Platform Fixes & Hardening**:
+  - Persistent session tokens across mobile browser tabs and tab restoring.
+  - Cross-platform offline reconnect prompts.
+
+---
+
+### Downloads & Installation
+
+| Package | Target Platform | Instructions |
+| :--- | :--- | :--- |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-Windows.zip`** | Windows 10 / 11 | Extract and run `Launch Direct Stream for PlayStation 5.bat` |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-macOS.zip`** | macOS (Apple Silicon & Intel) | Extract and open `PS5 Direct Streamer.app` |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-PurePython.zip`** | Android / Linux / Cross-Platform | Includes `install_android.sh`, `run_android.sh`, and pure Python CLI |
+
+*Requires Python 3.9+ from [python.org](https://www.python.org/downloads/) or Termux.*
+```
+
+---
+
+## 3. GitHub Release Notes (v2.8.1 Hotfix)
+
 
 ### Tag Version
 ```text
