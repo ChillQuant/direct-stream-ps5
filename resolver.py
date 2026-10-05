@@ -204,7 +204,16 @@ def parse_filename_from_headers(headers, fallback_url: str = "") -> str:
                 return Path(name).name
 
     if fallback_url:
-        path = urllib.parse.urlsplit(fallback_url).path
+        parsed = urllib.parse.urlsplit(fallback_url)
+        # 1. Check query parameters first (e.g. ?filename=... or ?name=...)
+        query = urllib.parse.parse_qs(parsed.query)
+        for qk in ("filename", "file_name", "name", "file"):
+            if qk in query and query[qk][0]:
+                qname = urllib.parse.unquote(query[qk][0]).strip()
+                if qname:
+                    return Path(qname).name
+        # 2. Path fallback
+        path = parsed.path
         name = Path(path).name
         if name and name not in ("file", "download", "uc", "view", "index.html", "index.php"):
             return urllib.parse.unquote(name)

@@ -37,6 +37,26 @@ DEFAULTS = {"host": "", "port": 1337, "folder": "/data/ShadowMount", "username":
 ACTIVE = {"starting", "running", "retrying", "pausing", "cancelling"}
 
 
+def extract_url_filename(src):
+    """Extract real filename from URL query parameters (e.g. ?filename=...) or URL path."""
+    try:
+        parsed = urllib.parse.urlsplit(src)
+        q = urllib.parse.parse_qs(parsed.query)
+        for param in ("filename", "file_name", "name", "file"):
+            vals = q.get(param)
+            if vals and vals[0]:
+                clean = urllib.parse.unquote(vals[0]).strip().split("/")[-1].split("\\")[-1]
+                if clean and "." in clean:
+                    return clean
+        raw = urllib.parse.unquote(Path(parsed.path).name)
+        if raw:
+            return raw
+    except Exception:
+        pass
+    return "download.bin"
+
+
+
 def notify_user(title, message, sound="Glass"):
     try:
         clean_title = re.sub(r'["\\]', '', str(title))
@@ -232,9 +252,16 @@ class Manager:
             self.settings.pop("password", None)
             self.jobs = state.get("jobs", [])
             for job in self.jobs:
+                if job.get("kind") == "url" and job.get("source"):
+                    name = job.get("name", "")
+                    if re.match(r'^[a-f0-9-]{16,}$', name, re.IGNORECASE) or "." not in name:
+                        recovered = extract_url_filename(job["source"])
+                        if recovered and recovered not in ("download.bin", name) and "." in recovered:
+                            job["name"] = recovered
                 if job["state"] in ACTIVE or job["state"] == "queued":
                     job["state"] = "paused"
                     job["detail"] = "Restored after app restart. Resume when ready."
+            self.save()
         except FileNotFoundError:
             try:
                 old = json.loads((Path.home() / ".ps5_streamer.json").read_text())
@@ -305,7 +332,7 @@ class Manager:
                 if p_kind == "url":
                     src = pre_resolve_url(src)
                     valid_url(src)
-                    default = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
+                    default = extract_url_filename(src)
                 else:
                     src = os.path.abspath(os.path.expanduser(safe_text(src, "local file path", 8192)))
                     if not os.path.isfile(src):
@@ -348,7 +375,7 @@ class Manager:
                 if kind == "url":
                     src = pre_resolve_url(src)
                     valid_url(src)
-                    default = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
+                    default = extract_url_filename(src)
                 else:
                     src = os.path.abspath(os.path.expanduser(safe_text(src, "local file path", 8192)))
                     if not os.path.isfile(src):

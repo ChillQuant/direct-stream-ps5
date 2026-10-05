@@ -162,6 +162,13 @@ class TestResolver(unittest.TestCase):
         headers_utf8 = {"Content-Disposition": "attachment; filename*=UTF-8''Elden%20Ring%20v1.12.pkg"}
         self.assertEqual(parse_filename_from_headers(headers_utf8), "Elden Ring v1.12.pkg")
 
+    def test_query_parameter_filename(self):
+        url = "https://nexus.erth.tb-cdn.earth/dld/3c86a54a-0ea1-4fac-ab6e-5ac3c0f6f3fb?token=xyz&filename=%5BDLPSGAME.COM%5D-PPSA03527.rar"
+        self.assertEqual(parse_filename_from_headers({}, fallback_url=url), "[DLPSGAME.COM]-PPSA03527.rar")
+
+        url2 = "https://cdn.example.com/download/hash123?name=stellar_ru_sound.pkg"
+        self.assertEqual(parse_filename_from_headers({}, fallback_url=url2), "stellar_ru_sound.pkg")
+
     def test_captcha_hint(self):
         hint = get_captcha_hint_if_applicable("https://1fichier.com/?abc123xyz")
         self.assertIsNotNone(hint)

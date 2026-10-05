@@ -990,7 +990,11 @@ def transfer(job, settings, token, report, save):
         job["name"] = source.filename
         job["is_zip"] = True
         job["archive_info"] = source.archive_info
-    elif source.filename and job.get("name") in ("download.bin", "file", "view", "uc", ""):
+    elif source.filename and (
+        job.get("name") in ("download.bin", "file", "view", "uc", "")
+        or re.match(r'^[a-f0-9-]{16,}$', job.get("name", ""), re.IGNORECASE)
+        or "." not in job.get("name", "")
+    ):
         job["name"] = source.filename
     old_identity = job.get("identity")
     if old_identity and old_identity != source.identity():

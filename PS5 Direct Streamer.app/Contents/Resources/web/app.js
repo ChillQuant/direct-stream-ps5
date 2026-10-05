@@ -242,6 +242,25 @@ function updateBulkBar() {
   }
 }
 
+function getTitleId(name, source) {
+  const combined = ((name || '') + ' ' + (source || '')).toUpperCase();
+  const match = combined.match(/\b(PPSA\d{5}|CUSA\d{5})\b/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function getFormatInfo(name) {
+  const ext = ((name || '').split('?')[0].split('.').pop() || '').toLowerCase();
+  if (ext === 'pkg') return { tag: 'PKG', sub: 'PS PKG', theme: 'badge-pkg', label: 'PlayStation Package' };
+  if (ext === 'ffpfsc') return { tag: 'PFS', sub: 'PS5 PFS', theme: 'badge-pfs', label: 'PS5 PFS Disk Image' };
+  if (ext === 'exfat') return { tag: 'exFAT', sub: 'DISK', theme: 'badge-exfat', label: 'exFAT Disk Image' };
+  if (ext === 'ufs') return { tag: 'UFS', sub: 'SYSTEM', theme: 'badge-ufs', label: 'UFS Image' };
+  if (ext === 'rar') return { tag: 'RAR', sub: 'ARCHIVE', theme: 'badge-rar', label: 'RAR Archive' };
+  if (ext === 'zip' || ext === 'zip64') return { tag: 'ZIP', sub: 'ARCHIVE', theme: 'badge-zip', label: 'ZIP Archive' };
+  if (ext === '7z') return { tag: '7Z', sub: 'ARCHIVE', theme: 'badge-7z', label: '7Z Archive' };
+  if (ext === 'iso') return { tag: 'ISO', sub: 'OPTICAL', theme: 'badge-iso', label: 'ISO Image' };
+  return { tag: ext ? ext.toUpperCase().slice(0, 5) : 'FILE', sub: 'BINARY', theme: 'badge-default', label: (ext ? ext.toUpperCase() : 'Binary') };
+}
+
 function row(job, index) {
   const pct = job.total ? Math.min(100, job.transferred / job.total * 100) : (job.state === 'completed' ? 100 : 0);
   const isActive = activeStates.includes(job.state);
@@ -265,14 +284,47 @@ function row(job, index) {
   const statusDotClass = (job.state === 'running' || job.state === 'completed') ? 'green' : job.state === 'failed' ? 'error' : '';
   const statusDotStyle = job.state === 'queued' ? 'background: #1668e3;' : job.state === 'paused' ? 'background: #f59e0b;' : '';
 
+  const titleId = getTitleId(job.name, job.source);
+  const fmt = getFormatInfo(job.name);
+  const coverUrl = titleId ? `https://art.gametdb.com/ps4/cover/US/${titleId}.jpg` : '';
+  const coverAltUrl = titleId ? `https://art.gametdb.com/ps4/cover/EN/${titleId}.jpg` : '';
+
+  let visualHtml = '';
+  if (titleId) {
+    visualHtml = `
+      <div class="game-thumb-container" title="${titleId}">
+        <img class="game-cover-thumb" src="${coverUrl}" alt="${escaped(job.name)}" loading="lazy"
+          onerror="if(!this.dataset.triedAlt){this.dataset.triedAlt='1';this.src='${coverAltUrl}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}">
+        <div class="format-badge-box ${fmt.theme}" style="display:none;">
+          <span class="badge-tag">${fmt.tag}</span>
+          <span class="badge-sub">${titleId.slice(0, 4)}</span>
+        </div>
+      </div>`;
+  } else {
+    visualHtml = `
+      <div class="game-thumb-container" title="${fmt.label}">
+        <div class="format-badge-box ${fmt.theme}">
+          <span class="badge-tag">${fmt.tag}</span>
+          <span class="badge-sub">${fmt.sub}</span>
+        </div>
+      </div>`;
+  }
+
   return `<tr data-job-id="${job.id}" data-index="${index}" class="${isActive ? 'row-active' : ''}">
     <td class="col-chk"><input type="checkbox" class="row-select" data-id="${job.id}" ${isChecked ? 'checked' : ''}></td>
     <td class="col-num">${index + 1}</td>
     <td>
       <div class="queue-name">
-        <svg><use href="#i-file"/></svg>
-        <strong>${escaped(job.name)}</strong>
-        ${job.kind === 'multipart' ? '<span style="font-size:10px; padding:2px 6px; border-radius:4px; background:rgba(37,99,235,0.18); color:#60a5fa; border:1px solid rgba(96,165,250,0.3); font-weight:600; margin-left:6px; letter-spacing:0.02em;">STITCHED</span>' : ''}
+        ${visualHtml}
+        <div class="queue-meta" style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <strong style="word-break: break-all;">${escaped(job.name)}</strong>
+            ${titleId ? `<span class="title-id-pill">${titleId}</span>` : ''}
+            ${job.kind === 'multipart' ? '<span class="format-pill badge-pkg">STITCHED</span>' : ''}
+            ${(job.is_zip || job.decompress) && ['zip', 'rar', '7z'].includes(fmt.tag.toLowerCase()) ? '<span class="format-pill badge-archive">DECOMPRESS</span>' : ''}
+          </div>
+          ${job.detail ? `<span style="font-size: 11px; color: var(--muted);">${escaped(job.detail)}</span>` : ''}
+        </div>
       </div>
     </td>
     <td>${job.total ? bytes(job.total) : '—'}</td>
@@ -814,7 +866,19 @@ const updateAddPreview = () => {
   if (isUrl) {
     try {
       const u = new URL(first);
-      name = decodeURIComponent(u.pathname.split('/').pop()) || 'download.bin';
+      for (const p of ['filename', 'file_name', 'name', 'file']) {
+        const v = u.searchParams.get(p);
+        if (v && v.trim()) {
+          const clean = decodeURIComponent(v.trim()).split('/').pop().split('\\').pop();
+          if (clean && clean.includes('.')) {
+            name = clean;
+            break;
+          }
+        }
+      }
+      if (!name) {
+        name = decodeURIComponent(u.pathname.split('/').pop()) || 'download.bin';
+      }
     } catch {
       name = first;
     }
