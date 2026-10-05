@@ -45,10 +45,8 @@ Direct Stream runs natively on Android phones with **raw Wi-Fi throughput** and 
 Paste this single command into Termux to install prerequisites, download the app, and launch immediately:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/ChillQuant/direct-stream-ps5/feature/android-support/install_android.sh | bash
+curl -sSL https://raw.githubusercontent.com/ChillQuant/direct-stream-ps5/main/install_android.sh | bash
 ```
-
-*(Note: Upon public release on `main`, the URL will be `.../main/install_android.sh`)*
 
 #### 🚀 Everyday Launch (Fastest)
 Once installed, you never need to type git commands or change folders again. Simply open Termux and type:
@@ -66,12 +64,13 @@ ps5
 pkg update -y && pkg install -y python git
 
 # 2. Clone the repository
-git clone -b feature/android-support https://github.com/ChillQuant/direct-stream-ps5.git
+git clone https://github.com/ChillQuant/direct-stream-ps5.git
 cd direct-stream-ps5
 
 # 3. Start the streamer (auto-registers 'ps5' global command)
 ./run_android.sh
 ```
+
 
 - **Background WakeLock**: Automatically enables Android WakeLock so your phone won't sleep or throttle Wi-Fi during 50GB+ streaming transfers.
 - **Remote Access (`--host 0.0.0.0`)**: Pass `--host 0.0.0.0` (or `ps5 --host 0.0.0.0`) if you want to control the Android stream server from your PC, Mac, or tablet on the same Wi-Fi.

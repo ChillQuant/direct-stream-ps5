@@ -68,6 +68,8 @@ py_dir.mkdir(parents=True, exist_ok=True)
 for item in [
     'ps5_streamer.py',
     'transfer_core.py',
+    'run_android.sh',
+    'install_android.sh',
     'README.md',
     'LICENSE',
     'requirements.txt',
@@ -75,6 +77,7 @@ for item in [
     '.gitignore',
     'VALIDATION.md'
 ]:
+
     p = root / item
     if p.exists():
         shutil.copy2(p, py_dir / item)

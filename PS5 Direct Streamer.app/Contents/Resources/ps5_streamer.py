@@ -29,14 +29,14 @@ from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
     valid_name, valid_url, check_ftp_storage, validate_source_url, MIB)
 
-VERSION = "2.8.1"
+VERSION = "2.8.5"
 BASE = Path(__file__).resolve().parent
 DEFAULTS = {"host": "", "port": 1337, "folder": "/data/ShadowMount", "username": "anonymous",
             "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3}
 ACTIVE = {"starting", "running", "retrying", "pausing", "cancelling"}
 
 
-def notify_macos(title, message, sound="Glass"):
+def notify_user(title, message, sound="Glass"):
     try:
         clean_title = re.sub(r'["\\]', '', str(title))
         clean_msg = re.sub(r'["\\]', '', str(message))
@@ -49,6 +49,10 @@ def notify_macos(title, message, sound="Glass"):
             subprocess.Popen(["termux-notification", "--title", clean_title, "--content", clean_msg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
+
+
+notify_macos = notify_user
+
 
 
 def open_browser(url):

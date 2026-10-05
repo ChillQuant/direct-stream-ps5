@@ -19,7 +19,8 @@ fi
 
 # 2. Target installation directory
 TARGET_DIR="$HOME/direct-stream-ps5"
-BRANCH="${BRANCH:-feature/android-support}"
+BRANCH="${BRANCH:-main}"
+
 
 if [ -d "$TARGET_DIR/.git" ]; then
     echo "🔄 Existing installation found. Updating to latest version..."
