@@ -787,8 +787,8 @@ const updateAddPreview = () => {
   const isUrl = sourceKind === 'url';
   const val = isUrl ? $('source-urls')?.value.trim() : $('local-path')?.value.trim();
   if (!val) {
-    if ($('preview-filename')) $('preview-filename').textContent = 'No package selected';
-    if ($('preview-filesize')) $('preview-filesize').textContent = 'Enter URL or choose local package';
+    if ($('preview-filename')) $('preview-filename').textContent = 'No game file selected';
+    if ($('preview-filesize')) $('preview-filesize').textContent = 'Enter direct link or choose file';
     return;
   }
   const lines = val.split('\n').map(x => x.trim()).filter(Boolean);
@@ -796,40 +796,64 @@ const updateAddPreview = () => {
     const items = lines.map(s => ({ source: s }));
     const [isMulti, mergedName] = detectMultipartSequence(items);
     if (isMulti) {
-      if ($('preview-filename')) $('preview-filename').textContent = `⚡ Multi-Part Package (${lines.length} parts)`;
+      if ($('preview-filename')) $('preview-filename').textContent = `⚡ Multi-Part Sequence (${lines.length} parts)`;
       if ($('preview-filesize')) $('preview-filesize').textContent = `Auto-stitching into ${mergedName} on PS5 (0 GB disk space used)`;
+      const ext = mergedName.toLowerCase().split('.').pop();
+      if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+        if ($('modal-dest-folder')) $('modal-dest-folder').value = '/data/ShadowMount';
+      }
       return;
     } else {
-      if ($('preview-filename')) $('preview-filename').textContent = `${lines.length} individual packages`;
+      if ($('preview-filename')) $('preview-filename').textContent = `${lines.length} individual files`;
       if ($('preview-filesize')) $('preview-filesize').textContent = 'Queued as separate transfers';
       return;
     }
   }
-  const first = lines[0];
+  const first = lines[0] || '';
+  let name = '';
   if (isUrl) {
     try {
       const u = new URL(first);
-      const name = decodeURIComponent(u.pathname.split('/').pop()) || 'package.pkg';
-      if (name.toLowerCase().endsWith('.zip') || name.toLowerCase().endsWith('.zip64')) {
-        if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
-        if ($('preview-filesize')) $('preview-filesize').textContent = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
-      } else {
-        if ($('preview-filename')) $('preview-filename').textContent = name;
-        if ($('preview-filesize')) $('preview-filesize').textContent = 'Direct download link · Package file';
-      }
+      name = decodeURIComponent(u.pathname.split('/').pop()) || 'download.bin';
     } catch {
-      if ($('preview-filename')) $('preview-filename').textContent = first;
-      if ($('preview-filesize')) $('preview-filesize').textContent = 'Direct link';
+      name = first;
     }
   } else {
-    const name = first.split('/').pop() || 'local.pkg';
-    if (name.toLowerCase().endsWith('.zip') || name.toLowerCase().endsWith('.zip64')) {
-      if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
-      if ($('preview-filesize')) $('preview-filesize').textContent = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
-    } else {
-      if ($('preview-filename')) $('preview-filename').textContent = name;
-      if ($('preview-filesize')) $('preview-filesize').textContent = 'Local file · Ready to stream';
-    }
+    name = first.split('/').pop() || 'local.bin';
+  }
+
+  const ext = name.toLowerCase().split('?')[0].split('.').pop();
+  let formatLabel = isUrl ? 'Direct link · Ready to stream' : 'Local file · Ready to stream';
+  let smartDest = null;
+
+  if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+    const extUpper = ext.toUpperCase();
+    if ($('preview-filename')) $('preview-filename').textContent = name;
+    formatLabel = isUrl ? `Direct link · PS5 Native ${extUpper} Disk Image` : `Local file · PS5 Native ${extUpper} Disk Image`;
+    smartDest = '/data/ShadowMount';
+  } else if (ext === 'pkg') {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
+    formatLabel = isUrl ? 'Direct link · PlayStation Package (.pkg)' : 'Local file · PlayStation Package (.pkg)';
+    smartDest = '/data/pkg';
+  } else if (['zip', 'zip64'].includes(ext)) {
+    if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
+    formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
+  } else if (['rar', '7z', 'tar'].includes(ext)) {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
+    formatLabel = isUrl ? 'Direct link · Archive' : 'Local file · Archive';
+  } else if (['iso', 'bin', 'img'].includes(ext)) {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
+    formatLabel = isUrl ? 'Direct link · Disc Image' : 'Local file · Disc Image';
+  } else {
+    if ($('preview-filename')) $('preview-filename').textContent = name;
+  }
+
+  if ($('preview-filesize')) $('preview-filesize').textContent = formatLabel;
+
+  // Auto-route destination if user hasn't explicitly set a custom folder
+  const currentDest = $('modal-dest-folder')?.value.trim();
+  if (smartDest && (!currentDest || currentDest === '/data/PS5Direct' || currentDest === '/data/ShadowMount' || currentDest === '/data/pkg')) {
+    if ($('modal-dest-folder')) $('modal-dest-folder').value = smartDest;
   }
 };
 
@@ -849,12 +873,14 @@ $('add-form').addEventListener('submit', async e => {
     $('add-error').textContent = 'Leave Save as blank when adding multiple individual files.';
     return;
   }
+  const destFolder = $('modal-dest-folder')?.value.trim();
   const button = e.submitter;
   button.disabled = true;
   try {
     const r = await api('jobs', {
       kind: sourceKind,
-      items: items,
+      folder: destFolder,
+      items: items.map(it => ({ ...it, folder: destFolder })),
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
       decompress: $('decompress-zip') ? $('decompress-zip').checked : true,

@@ -317,7 +317,7 @@
           <div id="queue-empty" class="empty-state" hidden>
             <div class="empty-icon-wrap"><svg><use href="#i-transfer"/></svg></div>
             <h3>Queue is clear</h3>
-            <p>Paste a download link or drop package files anywhere to start streaming.</p>
+            <p>Paste a direct download link or drop game files / packages anywhere to start streaming.</p>
             <button class="button primary small" data-add><svg><use href="#i-plus"/></svg>Add Transfer</button>
           </div>
 
@@ -863,15 +863,15 @@
       <label for="source-urls">Direct download URL</label>
       <div class="input-with-icon">
         <svg class="field-icon"><use href="#i-link"/></svg>
-        <textarea id="source-urls" rows="2" placeholder="https://example.com/studio/Studio%20archive.pkg" spellcheck="false" required></textarea>
+        <textarea id="source-urls" rows="2" placeholder="https://example.com/downloads/Demon_Souls.ffpfsc or .pkg / .exfat" spellcheck="false" required></textarea>
       </div>
     </div>
 
     <!-- Local Path Field -->
     <div id="local-fields" class="modal-field-block" hidden>
-      <label for="local-path">Local package path</label>
+      <label for="local-path">Local game file / disk image path</label>
       <div class="input-group">
-        <input id="local-path" placeholder="/Users/you/Downloads/game.pkg" spellcheck="false">
+        <input id="local-path" placeholder="/Users/you/Downloads/game.ffpfsc" spellcheck="false">
         <button id="pick-file" type="button" class="button outline small">Browse file</button>
         <button id="pick-folder" type="button" class="button outline small">Browse folder</button>
       </div>
@@ -883,20 +883,20 @@
       <div class="input-with-button">
         <div class="input-with-icon flex-1">
           <svg class="field-icon"><use href="#i-folder"/></svg>
-          <input id="modal-dest-folder" value="/data/PS5Direct" spellcheck="false">
+          <input id="modal-dest-folder" value="/data/ShadowMount" spellcheck="false">
         </div>
         <button type="button" class="button outline small" data-page="files" data-close="add-dialog">Browse</button>
       </div>
     </div>
 
-    <!-- Detected Package Preview Box -->
+    <!-- Detected File Preview Box -->
     <div class="file-preview-card">
-      <div class="preview-icon-box">
+      <div class="preview-icon-box" id="preview-format-icon">
         <svg><use href="#i-file"/></svg>
       </div>
       <div class="preview-meta">
-        <strong id="preview-filename">No package selected</strong>
-        <span id="preview-filesize">Enter URL or choose local package</span>
+        <strong id="preview-filename">No game file selected</strong>
+        <span id="preview-filesize">Enter direct link or choose file</span>
       </div>
       <button type="button" class="button outline tiny" id="change-preview-file">Change</button>
     </div>

@@ -132,7 +132,16 @@ class TestZipStreamer(unittest.TestCase):
             self.assertIsNotNone(best)
             self.assertEqual(best.filename, "EP0001-CUSA99999_00.pkg")
 
-        # Fallback to largest file when no .pkg present
+        # Prioritize native PS5 .ffpfsc or .exfat over generic files
+        zip_ps5_path = os.path.join(self.test_dir, "ps5_game.zip")
+        with zipfile.ZipFile(zip_ps5_path, "w") as zf:
+            zf.writestr("instructions.txt", b"instructions")
+            zf.writestr("Demon_Souls_PPSA01411.ffpfsc", RAW_PKG_CONTENT)
+            best = select_best_member(zf.infolist())
+            self.assertIsNotNone(best)
+            self.assertEqual(best.filename, "Demon_Souls_PPSA01411.ffpfsc")
+
+        # Fallback to largest file when no primary game format present
         with zipfile.ZipFile(self.zip_non_pkg_path, "r") as zf:
             best = select_best_member(zf.infolist())
             self.assertIsNotNone(best)

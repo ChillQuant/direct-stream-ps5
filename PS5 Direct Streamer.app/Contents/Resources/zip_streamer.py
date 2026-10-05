@@ -129,11 +129,12 @@ def select_best_member(infolist):
     if not candidates:
         return None
 
-    # First look for .pkg
-    pkg_files = [c for c in candidates if c.filename.lower().endswith(".pkg")]
-    if pkg_files:
-        pkg_files.sort(key=lambda x: x.file_size, reverse=True)
-        return pkg_files[0]
+    # First look for primary game formats (.ffpfsc, .exfat, .ufs, .pkg, .iso, .bin)
+    primary_exts = (".ffpfsc", ".exfat", ".ufs", ".pkg", ".iso", ".bin")
+    game_files = [c for c in candidates if any(c.filename.lower().endswith(ext) for ext in primary_exts)]
+    if game_files:
+        game_files.sort(key=lambda x: x.file_size, reverse=True)
+        return game_files[0]
 
     # Fallback to largest payload
     candidates.sort(key=lambda x: x.file_size, reverse=True)

@@ -1007,7 +1007,8 @@ def transfer(job, settings, token, report, save):
     try:
         report("status", "Connecting to PS5")
         ftp = connect_ftp(settings, token)
-        ensure_folder(ftp, settings["folder"])
+        target_folder = valid_folder(job.get("folder") or settings["folder"])
+        ensure_folder(ftp, target_folder)
         name = valid_name(job["name"])
         part = f"{name}.{job['id']}.ps5part"
         existing = remote_size(ftp, name)
@@ -1024,7 +1025,7 @@ def transfer(job, settings, token, report, save):
         job["stage_owned"] = True
         save()
         job["transferred"] = offset
-        free_space = check_ftp_storage(ftp, settings["folder"])
+        free_space = check_ftp_storage(ftp, target_folder)
         if free_space is not None and source.size is not None:
             needed = max(0, source.size - offset)
             if needed > free_space:
