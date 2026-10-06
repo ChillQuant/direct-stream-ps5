@@ -287,6 +287,72 @@ class TestResolver(unittest.TestCase):
             self.assertTrue(item["ranges"])
             self.assertTrue(item["resumable"])
 
+    def test_rootz_multipart_detection(self):
+        from resolver import parse_multipart_info, detect_multipart_sequence
+        self.assertEqual(parse_multipart_info("[DLPSGAME.COM]-PPSA18216.part1.rar"), ("[DLPSGAME.COM]-PPSA18216.rar", 1))
+        self.assertEqual(parse_multipart_info("[DLPSGAME.COM]-PPSA18216.part2.rar"), ("[DLPSGAME.COM]-PPSA18216.rar", 2))
+
+        items = [
+            {"source": "https://www.rootz.so/d/1YQcsa", "name": "[DLPSGAME.COM]-PPSA18216.part2.rar"},
+            {"source": "https://www.rootz.so/d/1cSTk8", "name": "[DLPSGAME.COM]-PPSA18216.part1.rar"},
+        ]
+        is_mp, merged_name, sorted_items = detect_multipart_sequence(items)
+        self.assertTrue(is_mp)
+        self.assertEqual(merged_name, "[DLPSGAME.COM]-PPSA18216.rar")
+        self.assertEqual(sorted_items[0]["name"], "[DLPSGAME.COM]-PPSA18216.part1.rar")
+        self.assertEqual(sorted_items[1]["name"], "[DLPSGAME.COM]-PPSA18216.part2.rar")
+
+    def test_manager_bulk_merge_and_merge_next(self):
+        from ps5_streamer import Manager
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        m = Manager(tmp)
+
+        # Add 2 separate jobs (as happened when added without sequence info)
+        res1 = m.add_jobs({
+            "kind": "url",
+            "items": [
+                {"source": "https://www.rootz.so/d/1cSTk8", "name": "[DLPSGAME.COM]-PPSA18216.part1.rar"},
+                {"source": "https://www.rootz.so/d/1YQcsa", "name": "[DLPSGAME.COM]-PPSA18216.part2.rar"}
+            ],
+            "combine_multipart": False
+        })
+        self.assertEqual(res1["count"], 2)
+        self.assertEqual(len(m.jobs), 2)
+        id1 = m.jobs[0]["id"]
+        id2 = m.jobs[1]["id"]
+
+        # Now trigger bulk_merge on id1 and id2
+        merge_res = m.action("bulk_merge", extra={"ids": [id1, id2]})
+        self.assertTrue(merge_res["ok"])
+        self.assertEqual(len(m.jobs), 1)
+        merged = m.jobs[0]
+        self.assertEqual(merged["kind"], "multipart")
+        self.assertEqual(merged["name"], "[DLPSGAME.COM]-PPSA18216.rar")
+        self.assertEqual(len(merged["parts"]), 2)
+        self.assertEqual(merged["parts"][0]["name"], "[DLPSGAME.COM]-PPSA18216.part1.rar")
+        self.assertEqual(merged["parts"][1]["name"], "[DLPSGAME.COM]-PPSA18216.part2.rar")
+
+    def test_manager_auto_merge_on_add(self):
+        from ps5_streamer import Manager
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        m = Manager(tmp)
+
+        # Add jobs with verified names
+        res = m.add_jobs({
+            "kind": "multipart",
+            "items": [
+                {"source": "https://www.rootz.so/d/1cSTk8", "name": "[DLPSGAME.COM]-PPSA18216.part1.rar"},
+                {"source": "https://www.rootz.so/d/1YQcsa", "name": "[DLPSGAME.COM]-PPSA18216.part2.rar"}
+            ],
+            "combine_multipart": True
+        })
+        self.assertEqual(res["count"], 1)
+        self.assertEqual(len(m.jobs), 1)
+        self.assertEqual(m.jobs[0]["kind"], "multipart")
+        self.assertEqual(m.jobs[0]["name"], "[DLPSGAME.COM]-PPSA18216.rar")
+
 
 if __name__ == "__main__":
     unittest.main()

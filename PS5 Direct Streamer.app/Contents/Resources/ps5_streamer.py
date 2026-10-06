@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """PS5 Transfer 2 — private local dashboard and serial transfer queue."""
 import argparse
+import concurrent.futures
 import copy
 import ftplib
 import ipaddress
@@ -333,6 +334,27 @@ class Manager:
             raise TransferError("Add between 1 and 100 files at a time.")
         combine = data.get("combine_multipart")
         is_seq, detected_name, sorted_items = detect_multipart_sequence(items)
+        if not is_seq and len(items) > 1 and kind in ("url", "multipart"):
+            tok = StopToken()
+            def _probe_item(it):
+                src = it.get("source", "").strip()
+                if not src:
+                    return
+                curr_name = it.get("name", "")
+                if not curr_name or not parse_multipart_info(curr_name):
+                    try:
+                        resolved = pre_resolve_url(src)
+                        info = probe_source("url", resolved, tok, decompress=False)
+                        if info.filename:
+                            it["name"] = info.filename
+                    except Exception:
+                        pass
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(items), 8)) as executor:
+                list(executor.map(_probe_item, items))
+
+            is_seq, detected_name, sorted_items = detect_multipart_sequence(items)
+
         if kind == "multipart" or (combine is not False and is_seq) or (combine is True and len(items) > 1):
             use_items = sorted_items if is_seq else items
             target_name = valid_name(data.get("name") or (items[0].get("name") if len(items) == 1 else "") or detected_name or "combined.bin")
@@ -475,6 +497,83 @@ class Manager:
                 if self.current in ids:
                     raise TransferError("Pause the active transfer before removing it.")
                 self.jobs = [j for j in self.jobs if j["id"] not in ids]
+            elif action == "bulk_merge":
+                ids = list(extra.get("ids", []))
+                if len(ids) < 2:
+                    raise TransferError("Select at least 2 jobs to merge.")
+                if self.current and self.current in ids:
+                    raise TransferError("Pause the active transfer before merging.")
+
+                target_jobs = [j for j in self.jobs if j["id"] in ids]
+                if len(target_jobs) < 2:
+                    raise TransferError("At least 2 jobs must exist in the queue to merge.")
+                for j in target_jobs:
+                    if j["state"] == "completed":
+                        raise TransferError("Cannot merge completed transfers.")
+
+                all_parts = []
+                for j in target_jobs:
+                    if j.get("kind") == "multipart" and j.get("parts"):
+                        for p in j["parts"]:
+                            all_parts.append(dict(p))
+                    else:
+                        p_name = j.get("name") or extract_url_filename(j.get("source", "")) or "part.bin"
+                        all_parts.append({
+                            "source": j.get("source", ""),
+                            "kind": j.get("kind", "url"),
+                            "name": p_name
+                        })
+
+                is_seq, detected_name, sorted_parts = detect_multipart_sequence(all_parts)
+                if not is_seq:
+                    tok = StopToken()
+                    for p in all_parts:
+                        if p.get("kind") == "url" and not parse_multipart_info(p.get("name", "")):
+                            try:
+                                resolved = pre_resolve_url(p["source"])
+                                info = probe_source("url", resolved, tok, decompress=False)
+                                if info.filename:
+                                    p["name"] = info.filename
+                            except Exception:
+                                pass
+                    is_seq, detected_name, sorted_parts = detect_multipart_sequence(all_parts)
+
+                use_parts = sorted_parts if is_seq else all_parts
+                target_name = valid_name(extra.get("name") or detected_name or (use_parts[0]["name"] if is_seq else "merged_archive.bin"))
+
+                dest_folder = target_jobs[0].get("folder") or self.settings.get("folder", "/data/ShadowMount")
+                ext = Path(target_name).suffix.lower()
+                if ext in (".ffpfsc", ".exfat", ".ufs"):
+                    dest_folder = "/data/ShadowMount"
+                elif ext == ".pkg" and self.settings.get("folder") == "/data/ShadowMount":
+                    dest_folder = "/data/pkg"
+
+                total_sizes = [j.get("total") for j in target_jobs if j.get("total") is not None]
+                merged_total = sum(total_sizes) if len(total_sizes) == len(target_jobs) else None
+
+                merged_job = {
+                    "id": secrets.token_hex(6),
+                    "name": target_name,
+                    "source": f"{len(use_parts)} parts: {target_name}",
+                    "parts": use_parts,
+                    "folder": dest_folder,
+                    "kind": "multipart",
+                    "state": "queued",
+                    "detail": f"Merged ({len(use_parts)} parts) · direct PS5 stitch",
+                    "total": merged_total,
+                    "transferred": 0,
+                    "overwrite": any(bool(j.get("overwrite")) for j in target_jobs),
+                    "decompress": any(bool(j.get("decompress", True)) for j in target_jobs),
+                    "created": min(j.get("created", time.time()) for j in target_jobs),
+                    "identity": None
+                }
+
+                first_idx = min(self.jobs.index(j) for j in target_jobs)
+                self.jobs = [j for j in self.jobs if j["id"] not in ids]
+                self.jobs.insert(first_idx, merged_job)
+                self.save()
+                self.wake.set()
+                return {"ok": True, "merged_id": merged_job["id"], "name": target_name, "parts_count": len(use_parts)}
             elif action == "validate_links":
                 threading.Thread(target=self._validate_queued_links, daemon=True, name="link-validator").start()
                 return {"ok": True, "message": "Link validation started in background"}
@@ -514,6 +613,20 @@ class Manager:
                         self.jobs[i], self.jobs[ni] = self.jobs[ni], self.jobs[i]
                 elif action == "edit":
                     raise TransferError("Use the edit endpoint to change the source link.")
+                elif action == "merge_next":
+                    if job["id"] == self.current:
+                        raise TransferError("Pause the transfer before merging.")
+                    if job["state"] == "completed":
+                        raise TransferError("Cannot merge completed transfers.")
+                    idx = self.jobs.index(job)
+                    if idx + 1 >= len(self.jobs):
+                        raise TransferError("No subsequent transfer found to merge with.")
+                    next_job = self.jobs[idx + 1]
+                    if next_job["id"] == self.current:
+                        raise TransferError("Pause the next transfer before merging.")
+                    if next_job["state"] == "completed":
+                        raise TransferError("Cannot merge with a completed transfer.")
+                    return self.action("bulk_merge", extra={"ids": [job["id"], next_job["id"]]})
                 elif action == "toggle_extract":
                     if job["id"] == self.current:
                         raise TransferError("Pause the transfer before changing extraction settings.")
@@ -561,9 +674,9 @@ class Manager:
                             if info["valid"]:
                                 if info["size"] is not None:
                                     target["total"] = info["size"]
+                                if info.get("filename") and (target["name"] in ("download.bin", "file", "view", "uc", "", j.get("name")) or not Path(target["name"]).suffix):
+                                    target["name"] = info.get("filename")
                                 if info.get("is_zip"):
-                                    if info.get("filename") and target["name"] in ("download.bin", "file", "view", "uc", "", j.get("name")):
-                                        target["name"] = info.get("filename")
                                     target["detail"] = f"ZIP Archive · Streaming '{info.get('filename')}' directly to PS5"
                                 else:
                                     status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"

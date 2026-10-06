@@ -248,6 +248,10 @@ function updateBulkBar() {
   if (selectedJobs.size > 0) {
     bar.hidden = false;
     $('bulk-count').textContent = `${selectedJobs.size} selected`;
+    const mergeBtn = $('bulk-merge');
+    if (mergeBtn) {
+      mergeBtn.hidden = selectedJobs.size < 2;
+    }
   } else {
     bar.hidden = true;
   }
@@ -352,6 +356,9 @@ function row(job, index) {
   }
   if (!isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
   if (job.state !== 'completed' && job.state !== 'cancelled') menu += `<button data-job="${job.id}" data-action="cancel">Cancel transfer</button>`;
+  if (!isActive && job.state !== 'completed' && index + 1 < (state.jobs || []).length) {
+    menu += `<button data-job="${job.id}" data-action="merge_next">Merge with next part ↓</button>`;
+  }
   if (!isActive) menu += `<button data-job="${job.id}" data-action="remove">Remove from queue</button>`;
 
   const isChecked = selectedJobs.has(job.id);
@@ -935,16 +942,39 @@ function parseMultipartInfo(filename) {
   return null;
 }
 
+const verifiedMetadata = {};
+
+function getVerifiedInfo(url) {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  const withoutSlash = trimmed.replace(/\/+$/, '');
+  return verifiedMetadata[trimmed] || verifiedMetadata[withoutSlash] || verifiedMetadata[withoutSlash + '/'] || null;
+}
+
 function detectMultipartSequence(items) {
   if (!items || items.length <= 1) return [false, '', items];
   const parsed = [];
   const baseNames = new Set();
   for (const it of items) {
     let raw = it.name || '';
+    const vMeta = getVerifiedInfo(it.source);
+    if (!raw || (!parseMultipartInfo(raw) && vMeta && vMeta.filename)) {
+      raw = vMeta?.filename || raw;
+    }
     if (!raw && it.source) {
       try {
         const u = new URL(it.source);
-        raw = decodeURIComponent(u.pathname.split('/').pop());
+        for (const p of ['filename', 'file_name', 'name', 'file', 'fn', 'title']) {
+          const v = u.searchParams.get(p);
+          if (v && v.trim()) {
+            const clean = decodeURIComponent(v.trim()).split('/').pop().split('\\').pop();
+            if (clean && clean.includes('.')) {
+              raw = clean;
+              break;
+            }
+          }
+        }
+        if (!raw) raw = decodeURIComponent(u.pathname.split('/').pop());
       } catch (e) {
         raw = it.source.split('/').pop().split('\\').pop();
       }
@@ -952,7 +982,7 @@ function detectMultipartSequence(items) {
     const info = parseMultipartInfo(raw);
     if (!info) return [false, '', items];
     baseNames.add(info.base.toLowerCase());
-    parsed.push({ num: info.num, item: it, base: info.base });
+    parsed.push({ num: info.num, item: { ...it, name: raw }, base: info.base });
   }
   if (baseNames.size !== 1) return [false, '', items];
   parsed.sort((a, b) => a.num - b.num);
@@ -998,7 +1028,10 @@ const updateAddPreview = () => {
   if ($('file-preview-card')) $('file-preview-card').hidden = false;
   const lines = val.split('\n').map(x => x.trim()).filter(Boolean);
   if (lines.length > 1) {
-    const items = lines.map(s => ({ source: s }));
+    const items = lines.map(s => ({
+      source: s,
+      name: getVerifiedInfo(s)?.filename || ''
+    }));
     const [isMulti, mergedName, sortedParts] = detectMultipartSequence(items);
     if (isMulti) {
       if ($('file-preview-card')) $('file-preview-card').hidden = true;
@@ -1009,12 +1042,14 @@ const updateAddPreview = () => {
         const listEl = $('stacked-parts-list');
         if (listEl) {
           listEl.innerHTML = sortedParts.map((p, idx) => {
-            const clean = p.source.split('/').pop().split('?')[0] || p.source;
+            const vInfo = getVerifiedInfo(p.source);
+            const clean = p.name || vInfo?.filename || p.source.split('/').pop().split('?')[0] || p.source;
+            const sizeStr = vInfo?.size_formatted ? ` · ${vInfo.size_formatted}` : '';
             return `
               <div class="stacked-part-item">
                 <span class="part-number">#${idx + 1}</span>
                 <span class="part-name" title="${escaped(p.source)}">${escaped(clean)}</span>
-                <span class="part-badge">Part ${idx + 1} of ${sortedParts.length}</span>
+                <span class="part-badge">Part ${idx + 1} of ${sortedParts.length}${sizeStr}</span>
               </div>
             `;
           }).join('');
@@ -1026,6 +1061,16 @@ const updateAddPreview = () => {
         archiveBlock.hidden = !isMultiArchive;
         if (isMultiArchive && $('archive-type-pill')) {
           $('archive-type-pill').textContent = ext.toUpperCase() + ' ARCHIVE';
+        }
+        const hint = $('archive-mode-hint');
+        if (hint) {
+          if (ext === 'zip' || ext === 'zip64') {
+            hint.textContent = modalExtractMode
+              ? '⚡ Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.'
+              : '📁 Streams the raw multi-part archive directly onto PS5 without extraction.';
+          } else {
+            hint.textContent = '⚡ Multi-part archive will be seamlessly stitched into a unified file directly on PS5.';
+          }
         }
       }
       if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
@@ -1048,23 +1093,27 @@ const updateAddPreview = () => {
   const first = lines[0] || '';
   let name = '';
   if (isUrl) {
-    try {
-      const u = new URL(first);
-      for (const p of ['filename', 'file_name', 'name', 'file', 'fn', 'title']) {
-        const v = u.searchParams.get(p);
-        if (v && v.trim()) {
-          const clean = decodeURIComponent(v.trim()).split('/').pop().split('\\').pop();
-          if (clean && clean.includes('.')) {
-            name = clean;
-            break;
+    const vInfo = verifiedMetadata[first] || verifiedMetadata[first.trim()];
+    if (vInfo && vInfo.filename) {
+      name = vInfo.filename;
+    }
+    if (!name) {
+      try {
+        const u = new URL(first);
+        for (const p of ['filename', 'file_name', 'name', 'file', 'fn', 'title']) {
+          const v = u.searchParams.get(p);
+          if (v && v.trim()) {
+            const clean = decodeURIComponent(v.trim()).split('/').pop().split('\\').pop();
+            if (clean && clean.includes('.')) {
+              name = clean;
+              break;
+            }
           }
         }
+        if (!name) name = decodeURIComponent(u.pathname.split('/').pop()) || 'download.bin';
+      } catch (e) {
+        name = first.split('/').pop().split('\\').pop() || 'download.bin';
       }
-      if (!name) {
-        name = decodeURIComponent(u.pathname.split('/').pop()) || 'download.bin';
-      }
-    } catch {
-      name = first;
     }
   } else {
     name = first.split('/').pop() || 'local.bin';
@@ -1137,11 +1186,14 @@ const updateAddPreview = () => {
   }
 };
 
-const resetVerifyStatus = () => {
+const resetVerifyStatus = (clearMetadata = false) => {
   const box = $('url-verification-status');
   if (box) {
     box.hidden = true;
     box.innerHTML = '';
+  }
+  if (clearMetadata) {
+    for (const k in verifiedMetadata) delete verifiedMetadata[k];
   }
   const btn = $('btn-verify-links');
   if (btn) {
@@ -1192,6 +1244,18 @@ const runVerifyLinks = async () => {
     if (!res || !res.results || !res.results.length) {
       throw new Error('No verification response received.');
     }
+
+    // Cache verified results by URL
+    res.results.forEach(r => {
+      if (r.url) {
+        verifiedMetadata[r.url] = r;
+        verifiedMetadata[r.url.trim()] = r;
+      }
+      if (r.resolved_url) {
+        verifiedMetadata[r.resolved_url] = r;
+        verifiedMetadata[r.resolved_url.trim()] = r;
+      }
+    });
 
     if (res.results.length === 1) {
       const item = res.results[0];
@@ -1278,6 +1342,9 @@ const runVerifyLinks = async () => {
         </div>
       `;
     }
+
+    // Refresh add preview with the newly verified filenames
+    updateAddPreview();
   } catch (err) {
     if (box) {
       box.hidden = false;
@@ -1311,15 +1378,18 @@ $('source-urls')?.addEventListener('input', () => {
 });
 $('local-path')?.addEventListener('input', updateAddPreview);
 $('btn-verify-links')?.addEventListener('click', runVerifyLinks);
-$('add-dialog')?.addEventListener('close', resetVerifyStatus);
+$('add-dialog')?.addEventListener('close', () => resetVerifyStatus(true));
 
 // Forms
 $('add-form').addEventListener('submit', async e => {
   e.preventDefault();
   const raw = sourceKind === 'url' ? $('source-urls').value : $('local-path').value;
   const sources = raw.split('\n').map(x => x.trim()).filter(Boolean);
-  const items = sources.map(source => ({ source, name: $('file-name').value.trim() }));
-  const [isMulti, mergedName] = detectMultipartSequence(items);
+  const items = sources.map(source => ({
+    source,
+    name: getVerifiedInfo(source)?.filename || ''
+  }));
+  const [isMulti, mergedName, sortedParts] = detectMultipartSequence(items);
   const willStitch = isMulti && ($('combine-multipart')?.checked !== false);
 
   if (sources.length > 1 && $('file-name').value.trim() && !willStitch) {
@@ -1330,10 +1400,15 @@ $('add-form').addEventListener('submit', async e => {
   const button = e.submitter;
   button.disabled = true;
   try {
+    const jobItems = (willStitch ? sortedParts : items).map(it => ({
+      source: it.source,
+      name: it.name || getVerifiedInfo(it.source)?.filename || '',
+      folder: destFolder
+    }));
     const r = await api('jobs', {
-      kind: sourceKind,
+      kind: willStitch ? 'multipart' : sourceKind,
       folder: destFolder,
-      items: items.map(it => ({ ...it, folder: destFolder })),
+      items: jobItems,
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
       decompress: modalExtractMode,
@@ -1344,8 +1419,8 @@ $('add-form').addEventListener('submit', async e => {
     $('local-path').value = '';
     $('file-name').value = '';
     $('overwrite').checked = false;
-    resetVerifyStatus();
-    toast(`${r.count} transfer${r.count === 1 ? '' : 's'} added to queue`);
+    resetVerifyStatus(true);
+    toast(willStitch ? `Merged multi-part stream (${sortedParts.length} parts) added to queue` : `${r.count} transfer${r.count === 1 ? '' : 's'} added to queue`);
     page('transfers');
     await poll();
     if (!state.settings.host) openSettings();
@@ -1599,6 +1674,16 @@ $('select-all').addEventListener('change', e => {
     });
   }
   document.querySelectorAll('.row-select').forEach(cb => { cb.checked = checked; });
+  updateBulkBar();
+});
+
+$('bulk-merge')?.addEventListener('click', async () => {
+  if (selectedJobs.size < 2) {
+    toast('Select at least 2 parts to merge', true);
+    return;
+  }
+  await perform('action', { action: 'bulk_merge', ids: Array.from(selectedJobs) }, 'Merged selected transfers into a single multi-part stream');
+  selectedJobs.clear();
   updateBulkBar();
 });
 
