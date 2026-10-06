@@ -10,8 +10,8 @@
   <title>DIRECT STREAM FOR PLAYSTATION 5</title>
   <link rel="icon" href="/icon.svg">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=2.9.3">
-  <script src="/app.js?v=2.9.3" defer></script>
+  <link rel="stylesheet" href="/style.css?v=2.9.4">
+  <script src="/app.js?v=2.9.4" defer></script>
 </head>
 <body>
 
@@ -277,6 +277,9 @@
               <p id="queue-subtitle" class="section-desc">Direct queue streaming · one FTP upload at a time</p>
             </div>
             <div class="queue-action-buttons">
+              <button id="quick-start-queue" class="button primary small" title="Start or pause the transfer queue">
+                <svg><use href="#i-play"/></svg><span id="quick-start-label">Start Queue</span>
+              </button>
               <button id="quick-browse-file" class="button outline small">
                 <svg><use href="#i-file"/></svg>Add files
               </button>
@@ -286,6 +289,18 @@
               <button class="button outline small" data-add>
                 <svg><use href="#i-link"/></svg>Add link
               </button>
+            </div>
+          </div>
+
+          <!-- Smart Merge Suggestion Banner -->
+          <div id="smart-merge-banner" class="smart-merge-banner" hidden>
+            <div class="smart-merge-info">
+              <svg class="smart-merge-icon"><use href="#i-transfer"/></svg>
+              <span>Split archive parts detected: <strong id="smart-merge-name">archive.rar</strong> (<span id="smart-merge-count">2 parts</span>)</span>
+            </div>
+            <div class="smart-merge-actions">
+              <button id="btn-smart-merge" type="button" class="button small primary">Merge parts</button>
+              <button id="btn-smart-dismiss" type="button" class="icon-circle-btn small" title="Dismiss suggestion">×</button>
             </div>
           </div>
 
@@ -574,7 +589,7 @@
 
           <!-- Bottom Notice -->
           <div class="files-bottom-notice">
-            <span class="info-circle-icon">ℹ</span>
+            <svg class="info-svg"><use href="#i-alert"/></svg>
             <span>Browsing is read-only. Files can be added via the Transfers page.</span>
           </div>
         </article>
@@ -887,15 +902,22 @@
       </div>
     </div>
 
-    <!-- Destination on PS5 Field -->
-    <div class="modal-field-block">
-      <label for="modal-dest-folder">Destination on PS5</label>
-      <div class="input-with-button">
-        <div class="input-with-icon flex-1">
-          <svg class="field-icon"><use href="#i-folder"/></svg>
-          <input id="modal-dest-folder" value="/data/ShadowMount" spellcheck="false">
+    <!-- Prominent Multi-Part Stacked Preview -->
+    <div id="multipart-stack-block" class="modal-feature-block" hidden>
+      <div class="feature-block-header">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span class="feature-block-title">
+            <svg class="feature-title-icon"><use href="#i-transfer"/></svg>
+            Multi-Part Sequence
+          </span>
+          <span id="multipart-count-badge" class="meta-pill pill-pkg">3 PARTS</span>
         </div>
-        <button type="button" class="button outline small" data-page="files" data-close="add-dialog">Browse</button>
+        <span class="feature-block-sub">All parts recognized and will merge into 1 continuous stream on PS5</span>
+      </div>
+      <div class="stacked-files-preview-list" id="stacked-parts-list"></div>
+      <div class="stacked-target-row">
+        <span>Target merged file on PS5:</span>
+        <strong id="multipart-merged-target">game.pkg</strong>
       </div>
     </div>
 
@@ -914,37 +936,47 @@
     <div id="archive-mode-block" class="modal-feature-block" hidden>
       <div class="feature-block-header">
         <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span class="feature-block-title">📦 Archive Extraction</span>
+          <span class="feature-block-title">
+            <svg class="feature-title-icon"><use href="#i-archive-crate"/></svg>
+            Archive Extraction
+          </span>
           <span id="archive-type-pill" class="meta-pill pill-archive">ZIP ARCHIVE</span>
         </div>
         <span class="feature-block-sub">Choose extraction method for this compressed archive</span>
       </div>
       <div class="segmented-pill-switcher archive-switcher" role="group" aria-label="Archive extraction mode">
         <button type="button" id="btn-extract-on" class="selected" data-extract="true">
-          ⚡ Extract to PS5
+          <svg class="feature-btn-icon"><use href="#i-transfer"/></svg>Extract to PS5
         </button>
         <button type="button" id="btn-extract-off" data-extract="false">
-          📁 Stream Raw Archive (.zip)
+          <svg class="feature-btn-icon"><use href="#i-archive-crate"/></svg>Stream Raw Archive
         </button>
       </div>
       <p id="archive-mode-hint" class="field-hint" style="margin-top: 4px;">
-        ⚡ Decompresses the inner game file (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.
+        Decompresses the inner game file (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB local disk space.
       </p>
     </div>
 
-    <!-- Prominent Multi-Part Stacked Preview -->
-    <div id="multipart-stack-block" class="modal-feature-block" hidden>
-      <div class="feature-block-header">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span class="feature-block-title">📚 Multi-Part Sequence</span>
-          <span id="multipart-count-badge" class="meta-pill pill-pkg">3 PARTS</span>
-        </div>
-        <span class="feature-block-sub">All parts recognized and will merge into 1 file on PS5</span>
+    <!-- Destination on PS5 Field with Presets -->
+    <div class="modal-field-block">
+      <div class="field-label-row">
+        <label for="modal-dest-folder">Destination on PS5</label>
+        <span class="dest-recommended-hint" id="dest-hint">ShadowMount (Games)</span>
       </div>
-      <div class="stacked-files-preview-list" id="stacked-parts-list"></div>
-      <div class="stacked-target-row">
-        <span>Target merged file on PS5:</span>
-        <strong id="multipart-merged-target">game.pkg</strong>
+      <div class="dest-presets-row" role="group" aria-label="PS5 Destination folder preset">
+        <button type="button" class="dest-preset-btn selected" data-dest="/data/ShadowMount">
+          ShadowMount
+        </button>
+        <button type="button" class="dest-preset-btn" data-dest="/data/pkg">
+          Packages (/data/pkg)
+        </button>
+        <button type="button" class="dest-preset-btn" data-dest="custom">
+          Custom
+        </button>
+      </div>
+      <div class="input-with-icon" id="dest-input-wrap">
+        <svg class="field-icon"><use href="#i-folder"/></svg>
+        <input id="modal-dest-folder" value="/data/ShadowMount" spellcheck="false" placeholder="/data/ShadowMount">
       </div>
     </div>
 

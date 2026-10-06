@@ -3091,3 +3091,166 @@ dialog.studio-modal::backdrop {
   color: var(--muted);
 }
 
+/* ========================================================
+   ADAPTIVE IDLE LIVE CARD
+   ======================================================== */
+.live-transfer-card.is-idle {
+  padding: 16px 20px;
+  gap: 8px;
+  margin-bottom: 20px;
+  background: var(--surface);
+  transition: all 0.2s ease;
+}
+
+.live-transfer-card.is-idle .progress-bar-track,
+.live-transfer-card.is-idle .telemetry-pillars,
+.live-transfer-card.is-idle .telemetry-graph-wrapper,
+.live-transfer-card.is-idle .graph-x-axis {
+  display: none !important;
+}
+
+.live-transfer-card.is-idle .transfer-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+.live-transfer-card.is-idle .transfer-progress-meta {
+  margin-top: 0;
+}
+
+/* ========================================================
+   DESTINATION PRESETS IN MODAL
+   ======================================================== */
+.dest-presets-row {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 8px;
+}
+
+.dest-preset-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.dest-preset-btn:hover {
+  border-color: var(--line-hover);
+  color: var(--ink);
+  background: var(--bg-subtle);
+}
+
+.dest-preset-btn.selected {
+  background: var(--studio-blue-subtle);
+  border-color: rgba(22, 104, 227, 0.4);
+  color: var(--studio-blue);
+  box-shadow: 0 1px 2px rgba(22, 104, 227, 0.08);
+}
+
+.dest-recommended-hint {
+  font-size: 11px;
+  color: var(--studio-blue);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ========================================================
+   SMART MERGE SUGGESTION BANNER
+   ======================================================== */
+.smart-merge-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #1e40af;
+  animation: fadeIn 0.2s ease;
+}
+
+.smart-merge-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.smart-merge-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--studio-blue);
+  flex-shrink: 0;
+}
+
+.smart-merge-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ========================================================
+   CLEAN STUDIO ICONS & ALIGNMENTS (ZERO EMOJIS)
+   ======================================================== */
+.feature-title-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 5px;
+  color: var(--studio-blue);
+  display: inline-block;
+}
+
+.feature-btn-icon {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
+  margin-right: 6px;
+  display: inline-block;
+}
+
+.info-svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  flex-shrink: 0;
+  vertical-align: -2px;
+}
+
+.part-status-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+  margin-right: 4px;
+  display: inline-block;
+}
+
+.part-status-icon.ok {
+  color: var(--green-buffer);
+}
+
+.part-status-icon.err {
+  color: #ef4444;
+}
+
+.file-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 6px;
+  color: var(--studio-blue);
+  display: inline-block;
+}
+
+

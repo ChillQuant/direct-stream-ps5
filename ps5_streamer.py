@@ -925,7 +925,7 @@ class Manager:
                         token.wait(0.5)
                     result = {"state": "done", "kind": kind, "bps": best[0],
                         "best_label": best[1], "best_config": best[2],
-                        "message": "🏆 Optimal config: " + best[1] + f" ({best[0]/1e6:.1f} MB/s)\n\n" + "\n".join(lines) +
+                        "message": "Optimal config: " + best[1] + f" ({best[0]/1e6:.1f} MB/s)\n\n" + "\n".join(lines) +
                                    "\n\nEach tier tested against actual direct download chunks. Bytes discarded from RAM."}
             elif kind == "source":
                 source = probe_source("url", data.get("source", ""), token)

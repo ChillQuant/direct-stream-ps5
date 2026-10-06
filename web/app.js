@@ -165,7 +165,7 @@ function updatePipelineCalc() {
   const pillEl = $('page-pipeline-calc');
   if (textEl) {
     if (buffer < minRequired) {
-      textEl.textContent = `⚠️ Buffer (${buffer} MiB) < required ${minRequired} MiB (${streams} streams × ${chunk} MiB chunk)`;
+      textEl.textContent = `Warning: Buffer (${buffer} MiB) < required ${minRequired} MiB (${streams} streams × ${chunk} MiB chunk)`;
       if (pillEl) pillEl.classList.add('calc-warning');
     } else {
       textEl.textContent = `${streams} streams × ${chunk} MiB = ${minRequired} MiB min · ${buffer} MiB RAM (${slots} slots cushion)`;
@@ -348,16 +348,16 @@ function row(job, index) {
   const partsCount = (job.parts && job.parts.length) || 2;
   const isArchive = ['zip', 'zip64'].includes(v.tag.toLowerCase()) || job.is_zip || !!job.archive_info;
 
-  let menu = `<button data-job="${job.id}" data-action="up">Move up ↑</button><button data-job="${job.id}" data-action="down">Move down ↓</button>`;
+  let menu = `<button data-job="${job.id}" data-action="up">Move up</button><button data-job="${job.id}" data-action="down">Move down</button>`;
   if (job.kind === 'url' && !isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="edit">Update link</button>`;
   if (isArchive && !isActive && job.state !== 'completed') {
     const isExtracting = job.decompress !== false;
-    menu += `<button data-job="${job.id}" data-action="toggle_extract">${isExtracting ? '📁 Turn OFF extraction (Keep raw .zip)' : '⚡ Turn ON extraction (Decompress to PS5)'}</button>`;
+    menu += `<button data-job="${job.id}" data-action="toggle_extract">${isExtracting ? 'Disable extraction (Stream raw archive)' : 'Enable extraction (Decompress to PS5)'}</button>`;
   }
   if (!isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
   if (job.state !== 'completed' && job.state !== 'cancelled') menu += `<button data-job="${job.id}" data-action="cancel">Cancel transfer</button>`;
   if (!isActive && job.state !== 'completed' && index + 1 < (state.jobs || []).length) {
-    menu += `<button data-job="${job.id}" data-action="merge_next">Merge with next part ↓</button>`;
+    menu += `<button data-job="${job.id}" data-action="merge_next">Merge with next part</button>`;
   }
   if (!isActive) menu += `<button data-job="${job.id}" data-action="remove">Remove from queue</button>`;
 
@@ -411,7 +411,7 @@ function row(job, index) {
                 <svg class="stack-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
               </button>
             ` : ''}
-            ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? '⚡ Extract' : '📁 Raw'}</span>` : ''}
+            ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? 'Extract' : 'Raw'}</span>` : ''}
           </div>
           <div class="game-sub-text">
             <span>${v.formatLabel}</span>
@@ -420,7 +420,7 @@ function row(job, index) {
           ${isMulti ? `
             <div class="stack-parts-panel" id="stack-panel-${job.id}" hidden>
               <div class="stack-panel-header">
-                <span class="stack-panel-title">📚 Merged Stream: ${escaped(job.name)}</span>
+                <span class="stack-panel-title">Merged Stream: ${escaped(job.name)}</span>
                 <span class="stack-panel-dest">PS5 target: ${escaped(job.folder || '/data/ShadowMount')}</span>
               </div>
               <div class="stack-parts-grid">
@@ -525,12 +525,39 @@ function bindQueueEvents() {
   });
 }
 
+let dismissedSmartMergeBase = null;
+
+function findConsecutiveMultipartJobs(jobs) {
+  if (!jobs || jobs.length < 2) return null;
+  const candidates = jobs.filter(j => j.state === 'queued' || j.state === 'idle');
+  if (candidates.length < 2) return null;
+  for (let i = 0; i < candidates.length - 1; i++) {
+    const p1 = parseMultipartInfo(candidates[i].name);
+    if (!p1) continue;
+    const group = [candidates[i]];
+    for (let j = i + 1; j < candidates.length; j++) {
+      const p2 = parseMultipartInfo(candidates[j].name);
+      if (p2 && p2.base.toLowerCase() === p1.base.toLowerCase()) {
+        group.push(candidates[j]);
+      } else {
+        break;
+      }
+    }
+    if (group.length >= 2) {
+      return { base: p1.base, jobs: group };
+    }
+  }
+  return null;
+}
+
 function render(s) {
   state = s;
   const jobs = s.jobs;
   const active = jobs.find(j => j.id === s.active);
   const m = s.metrics || {};
   const pending = jobs.filter(j => !['completed', 'cancelled'].includes(j.state)).length;
+
+  $('live-panel')?.classList.toggle('is-idle', !active || active.state !== 'running');
 
   // Sound chime detection on completed jobs
   const completedJobs = new Set(jobs.filter(j => j.state === 'completed').map(j => j.id));
@@ -670,6 +697,35 @@ function render(s) {
   $('start-queue').disabled = !!s.running || diagnosticBusy || !jobs.some(j => j.state === 'queued');
   $('pause-all').disabled = !s.running && !s.active;
   $('clear-completed').disabled = !jobs.some(j => j.state === 'completed');
+
+  const quickStartBtn = $('quick-start-queue');
+  if (quickStartBtn) {
+    const isRunning = !!s.running;
+    const hasActive = !!active;
+    const hasQueued = jobs.some(j => j.state === 'queued');
+    quickStartBtn.disabled = diagnosticBusy || (!isRunning && !hasActive && !hasQueued);
+    if (isRunning || (active && active.state === 'running')) {
+      quickStartBtn.className = 'button outline small';
+      quickStartBtn.innerHTML = '<svg><use href="#i-pause"/></svg><span id="quick-start-label">Pause Queue</span>';
+    } else {
+      quickStartBtn.className = 'button primary small';
+      quickStartBtn.innerHTML = '<svg><use href="#i-play"/></svg><span id="quick-start-label">Start Queue</span>';
+    }
+  }
+
+  const smartBanner = $('smart-merge-banner');
+  if (smartBanner) {
+    const consecutive = findConsecutiveMultipartJobs(jobs);
+    if (consecutive && consecutive.base !== dismissedSmartMergeBase && !active) {
+      smartBanner.hidden = false;
+      smartBanner.dataset.base = consecutive.base;
+      smartBanner.dataset.ids = consecutive.jobs.map(j => j.id).join(',');
+      if ($('smart-merge-name')) $('smart-merge-name').textContent = consecutive.base;
+      if ($('smart-merge-count')) $('smart-merge-count').textContent = `${consecutive.jobs.length} parts`;
+    } else {
+      smartBanner.hidden = true;
+    }
+  }
 
   const qSub = $('queue-subtitle');
   if (qSub) {
@@ -991,13 +1047,54 @@ function detectMultipartSequence(items) {
 
 let modalExtractMode = true;
 
+function setDestPreset(dest) {
+  const input = $('modal-dest-folder');
+  const hint = $('dest-hint');
+  const buttons = document.querySelectorAll('.dest-preset-btn');
+  buttons.forEach(b => {
+    b.classList.toggle('selected', b.dataset.dest === dest);
+  });
+  if (dest === '/data/ShadowMount') {
+    if (input) input.value = '/data/ShadowMount';
+    if (hint) hint.textContent = 'ShadowMount (Games & PFS Images)';
+  } else if (dest === '/data/pkg') {
+    if (input) input.value = '/data/pkg';
+    if (hint) hint.textContent = 'Packages (/data/pkg)';
+  } else if (dest === 'custom') {
+    if (hint) hint.textContent = 'Custom console directory';
+    input?.focus();
+  }
+}
+
+document.querySelectorAll('.dest-preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setDestPreset(btn.dataset.dest);
+  });
+});
+
+$('modal-dest-folder')?.addEventListener('input', e => {
+  const val = e.target.value.trim();
+  const buttons = document.querySelectorAll('.dest-preset-btn');
+  const hint = $('dest-hint');
+  if (val === '/data/ShadowMount') {
+    buttons.forEach(b => b.classList.toggle('selected', b.dataset.dest === '/data/ShadowMount'));
+    if (hint) hint.textContent = 'ShadowMount (Games & PFS Images)';
+  } else if (val === '/data/pkg') {
+    buttons.forEach(b => b.classList.toggle('selected', b.dataset.dest === '/data/pkg'));
+    if (hint) hint.textContent = 'Packages (/data/pkg)';
+  } else {
+    buttons.forEach(b => b.classList.toggle('selected', b.dataset.dest === 'custom'));
+    if (hint) hint.textContent = 'Custom console directory';
+  }
+});
+
 $('btn-extract-on')?.addEventListener('click', () => {
   modalExtractMode = true;
   $('btn-extract-on')?.classList.add('selected');
   $('btn-extract-off')?.classList.remove('selected');
   if ($('decompress-zip')) $('decompress-zip').checked = true;
   const hint = $('archive-mode-hint');
-  if (hint) hint.textContent = '⚡ Decompresses the inner game file (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.';
+  if (hint) hint.textContent = 'Decompresses inner game package (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.';
   updateAddPreview();
 });
 
@@ -1007,7 +1104,7 @@ $('btn-extract-off')?.addEventListener('click', () => {
   $('btn-extract-on')?.classList.remove('selected');
   if ($('decompress-zip')) $('decompress-zip').checked = false;
   const hint = $('archive-mode-hint');
-  if (hint) hint.textContent = '📁 Transfers the raw archive file intact directly to PS5 without extraction.';
+  if (hint) hint.textContent = 'Transfers raw intact archive directly to PS5 without extraction.';
   updateAddPreview();
 });
 
@@ -1066,17 +1163,17 @@ const updateAddPreview = () => {
         if (hint) {
           if (ext === 'zip' || ext === 'zip64') {
             hint.textContent = modalExtractMode
-              ? '⚡ Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.'
-              : '📁 Streams the raw multi-part archive directly onto PS5 without extraction.';
+              ? 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.'
+              : 'Streams raw multi-part archive directly onto PS5 without extraction.';
           } else {
-            hint.textContent = '⚡ Multi-part archive will be seamlessly stitched into a unified file directly on PS5.';
+            hint.textContent = 'Multi-part archive will be seamlessly stitched into a unified file directly on PS5.';
           }
         }
       }
-      if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
-        if ($('modal-dest-folder')) $('modal-dest-folder').value = '/data/ShadowMount';
+      if (['ffpfsc', 'exfat', 'ufs', 'iso', 'bin', 'img'].includes(ext)) {
+        setDestPreset('/data/ShadowMount');
       } else if (ext === 'pkg') {
-        if ($('modal-dest-folder')) $('modal-dest-folder').value = '/data/pkg';
+        setDestPreset('/data/pkg');
       }
       return;
     } else {
@@ -1148,6 +1245,7 @@ const updateAddPreview = () => {
     }
   }
 
+  const isZipArchive = ['zip', 'zip64'].includes(ext);
   if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
     const extUpper = ext.toUpperCase();
     if ($('preview-filename')) $('preview-filename').textContent = name;
@@ -1159,10 +1257,10 @@ const updateAddPreview = () => {
     smartDest = '/data/pkg';
   } else if (isZipArchive) {
     if (modalExtractMode) {
-      if ($('preview-filename')) $('preview-filename').textContent = `📦 ZIP Archive: ${name}`;
+      if ($('preview-filename')) $('preview-filename').textContent = `ZIP Archive: ${name}`;
       formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
     } else {
-      if ($('preview-filename')) $('preview-filename').textContent = `📁 Raw Archive: ${name}`;
+      if ($('preview-filename')) $('preview-filename').textContent = `Raw Archive: ${name}`;
       formatLabel = 'Transferring raw intact archive to PS5 (No extraction)';
     }
   } else if (['rar', '7z', 'tar'].includes(ext)) {
@@ -1176,13 +1274,13 @@ const updateAddPreview = () => {
   }
 
   if ($('preview-filesize')) {
-    $('preview-filesize').textContent = hostBadge ? `⚡ ${hostBadge} · ${formatLabel}` : formatLabel;
+    $('preview-filesize').textContent = hostBadge ? `${hostBadge} · ${formatLabel}` : formatLabel;
   }
 
   // Auto-route destination if user hasn't explicitly set a custom folder
   const currentDest = $('modal-dest-folder')?.value.trim();
   if (smartDest && (!currentDest || currentDest === '/data/PS5Direct' || currentDest === '/data/ShadowMount' || currentDest === '/data/pkg')) {
-    if ($('modal-dest-folder')) $('modal-dest-folder').value = smartDest;
+    setDestPreset(smartDest);
   }
 };
 
@@ -1269,7 +1367,7 @@ const runVerifyLinks = async () => {
               <div class="verify-meta-pills">
                 <span class="verify-pill size">${escaped(item.size_formatted)}</span>
                 <span class="verify-pill ${item.ranges ? 'range' : 'range-warn'}">
-                  ${item.ranges ? '⚡ Parallel streams supported' : '⚠️ Single stream only'}
+                  ${item.ranges ? 'Parallel streams supported' : 'Single stream only'}
                 </span>
               </div>
             </div>
@@ -1286,14 +1384,10 @@ const runVerifyLinks = async () => {
           $('file-name').value = item.filename;
         }
         const ext = item.filename.toLowerCase().split('.').pop();
-        if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
-          if ($('modal-dest-folder') && (!$('modal-dest-folder').value || $('modal-dest-folder').value === '/data/pkg')) {
-            $('modal-dest-folder').value = '/data/ShadowMount';
-          }
+        if (['ffpfsc', 'exfat', 'ufs', 'iso', 'bin', 'img'].includes(ext)) {
+          setDestPreset('/data/ShadowMount');
         } else if (ext === 'pkg') {
-          if ($('modal-dest-folder') && (!$('modal-dest-folder').value || $('modal-dest-folder').value === '/data/ShadowMount')) {
-            $('modal-dest-folder').value = '/data/pkg';
-          }
+          setDestPreset('/data/pkg');
         }
       } else {
         box.innerHTML = `
@@ -1331,7 +1425,7 @@ const runVerifyLinks = async () => {
             ${res.results.map((r, i) => `
               <div class="verify-part-row">
                 <span class="verify-part-name" title="${escaped(r.filename || r.url)}">
-                  ${r.ok ? '✓' : '✗'} Part ${i + 1}: ${escaped(r.filename || r.url.split('/').pop().split('?')[0] || r.url)}
+                  <svg class="part-status-icon ${r.ok ? 'ok' : 'err'}"><use href="${r.ok ? '#i-check' : '#i-alert'}"/></svg>Part ${i + 1}: ${escaped(r.filename || r.url.split('/').pop().split('?')[0] || r.url)}
                 </span>
                 <span class="verify-pill ${r.ok ? 'size' : 'range-warn'}">
                   ${r.ok ? escaped(r.size_formatted) : 'Failed'}
@@ -1658,6 +1752,38 @@ $('start-queue').addEventListener('click', async () => {
 $('pause-all').addEventListener('click', () => perform('action', { action: 'pause_all' }));
 $('clear-completed').addEventListener('click', () => perform('action', { action: 'clear_completed' }));
 
+$('quick-start-queue')?.addEventListener('click', async () => {
+  if (!state.settings.host) {
+    openSettings();
+    return;
+  }
+  if (state.running || (state.active && state.jobs.some(j => j.id === state.active && j.state === 'running'))) {
+    await perform('action', { action: 'pause_all' });
+  } else {
+    await perform('action', { action: 'start' });
+  }
+});
+
+$('btn-smart-dismiss')?.addEventListener('click', () => {
+  const banner = $('smart-merge-banner');
+  if (banner) {
+    banner.hidden = true;
+    if (banner.dataset.base) {
+      dismissedSmartMergeBase = banner.dataset.base;
+    }
+  }
+});
+
+$('btn-smart-merge')?.addEventListener('click', async () => {
+  const banner = $('smart-merge-banner');
+  const idsStr = banner?.dataset.ids;
+  if (!idsStr) return;
+  const ids = idsStr.split(',').filter(Boolean);
+  if (ids.length < 2) return;
+  await perform('action', { action: 'bulk_merge', ids }, `Merged ${ids.length} parts into 1 continuous stream`);
+  if (banner) banner.hidden = true;
+});
+
 // Link validation action
 $('validate-links').addEventListener('click', async () => {
   await perform('action', { action: 'validate_links' }, 'Validating queued download links…');
@@ -1864,7 +1990,7 @@ function renderConsoleFiles(files, filter = '') {
   tbody.innerHTML = list.map(f => {
     const fullPath = curFolder === '' ? `/${f.name}` : `${curFolder}/${f.name}`;
     return `<tr>
-    <td><div class="file-cell">${f.type === 'dir' ? `<button type="button" class="folder-button text-button" data-folder="${escaped(f.name)}"><span class="folder-icon">📁</span><strong>${escaped(f.name)}</strong></button>` : `<svg class="file-icon"><use href="#i-file"/></svg><strong>${escaped(f.name)}</strong>`}</div></td>
+    <td><div class="file-cell">${f.type === 'dir' ? `<button type="button" class="folder-button text-button" data-folder="${escaped(f.name)}"><svg class="file-icon"><use href="#i-folder"/></svg><strong>${escaped(f.name)}</strong></button>` : `<svg class="file-icon"><use href="#i-file"/></svg><strong>${escaped(f.name)}</strong>`}</div></td>
     <td>${f.type === 'dir' ? 'Folder' : f.name.endsWith('.pkg') ? 'Package' : f.name.endsWith('.ps5part') ? 'Partial' : 'File'}</td>
     <td>${f.size !== '' ? bytes(Number(f.size)) : '—'}</td>
     <td>${f.time || '—'}</td>
