@@ -220,13 +220,16 @@ function selectKind(kind) {
   const pickFolderBtn = $('pick-folder');
   if (pickFileBtn && pickFolderBtn) {
     if (kind === 'folder') {
+      pickFolderBtn.hidden = false;
+      pickFileBtn.hidden = true;
       pickFolderBtn.className = 'button solid small';
-      pickFileBtn.className = 'button outline small';
     } else {
+      pickFileBtn.hidden = false;
+      pickFolderBtn.hidden = true;
       pickFileBtn.className = 'button solid small';
-      pickFolderBtn.className = 'button outline small';
     }
   }
+  updateAddPreview();
 }
 
 function openAdd(kind='url') {
@@ -1443,7 +1446,12 @@ const updateAddPreview = () => {
   }
 
   const isZipArchive = ['zip', 'zip64'].includes(ext);
-  if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+  if (sourceKind === 'folder') {
+    if ($('preview-filename')) $('preview-filename').textContent = `Folder: ${name}`;
+    formatLabel = 'Local directory · Full folder hierarchy';
+    smartDest = '/data/ShadowMount';
+    if (archiveBlock) archiveBlock.hidden = true;
+  } else if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
     const extUpper = ext.toUpperCase();
     if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? `Direct link · PS5 Native ${extUpper} Disk Image` : `Local file · PS5 Native ${extUpper} Disk Image`;
@@ -1676,20 +1684,26 @@ $('add-form').addEventListener('submit', async e => {
   e.preventDefault();
   const raw = sourceKind === 'url' ? $('source-urls').value : $('local-path').value;
   const sources = raw.split('\n').map(x => x.trim()).filter(Boolean);
+  if (!sources.length) {
+    $('add-error').textContent = sourceKind === 'url'
+      ? 'Enter a direct download URL.'
+      : (sourceKind === 'folder' ? 'Choose or enter a folder path.' : 'Choose or enter a file path.');
+    return;
+  }
   const items = sources.map(source => ({
     source,
-    name: getVerifiedInfo(source)?.filename || ''
+    name: (sourceKind === 'folder' ? $('file-name').value.trim() : '') || getVerifiedInfo(source)?.filename || ''
   }));
   const [isMulti, mergedName, sortedParts] = detectMultipartSequence(items);
-  const willStitch = isMulti && ($('combine-multipart')?.checked !== false);
+  const willStitch = (sourceKind !== 'folder') && isMulti && ($('combine-multipart')?.checked !== false);
 
   if (sources.length > 1 && $('file-name').value.trim() && !willStitch) {
     $('add-error').textContent = 'Leave Save as blank when adding multiple individual files.';
     return;
   }
   const destFolder = $('modal-dest-folder')?.value.trim();
-  const button = e.submitter;
-  button.disabled = true;
+  const button = e.submitter || $('add-dialog')?.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
   try {
     const jobItems = (willStitch ? sortedParts : items).map(it => ({
       source: it.source,
@@ -1702,7 +1716,7 @@ $('add-form').addEventListener('submit', async e => {
       items: jobItems,
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
-      decompress: modalExtractMode,
+      decompress: (sourceKind === 'folder' ? false : modalExtractMode),
       overwrite: $('overwrite').checked
     });
     $('add-dialog').close();
@@ -1718,7 +1732,7 @@ $('add-form').addEventListener('submit', async e => {
   } catch (err) {
     $('add-error').textContent = err.message;
   } finally {
-    button.disabled = false;
+    if (button) button.disabled = false;
   }
 });
 
@@ -1855,8 +1869,10 @@ $('pick-file').addEventListener('click', async () => {
     const r = await api('pick', { type: 'file' });
     if (r.paths && r.paths.length > 0) {
       $('local-path').value = r.paths.join('\n');
+      updateAddPreview();
     } else if (r.path) {
       $('local-path').value = r.path;
+      updateAddPreview();
     } else if (r.picker_unsupported) {
       toast('File picker dialog not available in terminal/mobile mode. Enter or paste the file path directly.', true);
     }
@@ -1877,6 +1893,7 @@ $('pick-folder').addEventListener('click', async () => {
       if (r.name && !$('file-name').value.trim()) {
         $('file-name').value = r.name;
       }
+      updateAddPreview();
       const sizeStr = r.total_size ? ` (${bytes(r.total_size)})` : '';
       const countStr = r.files_count !== undefined ? `${r.files_count} files` : 'folder';
       toast(`Folder selected: ${r.name || r.path} · ${countStr}${sizeStr}`);
@@ -1890,8 +1907,14 @@ $('pick-folder').addEventListener('click', async () => {
   }
 });
 
-$('add-local').addEventListener('click', () => openAdd('local'));
-$('add-local-folder').addEventListener('click', () => openAdd('folder'));
+$('add-local').addEventListener('click', () => {
+  openAdd('local');
+  $('pick-file')?.click();
+});
+$('add-local-folder').addEventListener('click', () => {
+  openAdd('folder');
+  $('pick-folder')?.click();
+});
 
 // Quick Stream Command Bar
 async function quickAddUrl(url) {
@@ -1926,13 +1949,14 @@ const quickFileBtn = $('quick-browse-file');
 if (quickFileBtn) {
   quickFileBtn.addEventListener('click', () => {
     openAdd('local');
-    $('pick-file').click();
+    $('pick-file')?.click();
   });
 }
 const quickFolderBtn = $('quick-browse-folder');
 if (quickFolderBtn) {
   quickFolderBtn.addEventListener('click', () => {
     openAdd('folder');
+    $('pick-folder')?.click();
   });
 }
 

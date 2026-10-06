@@ -421,7 +421,7 @@ class Manager:
                         default = Path(src).name
                     else:
                         raise TransferError("Local file or folder not found. Use Choose file or folder, or enter its full path.")
-                name = valid_name(item.get("name") or default or "download.bin")
+                name = valid_name(item.get("name") or (data.get("name") if len(items) == 1 else "") or default or "download.bin")
                 dest_folder = item.get("folder") or data.get("folder")
                 if dest_folder:
                     dest_base = valid_folder(dest_folder)
@@ -446,7 +446,10 @@ class Manager:
                                 f_bytes += os.path.getsize(os.path.join(r, f))
                             except OSError:
                                 pass
-                    target_folder = f"{dest_base.rstrip('/')}/{name}"
+                    if dest_base.rstrip("/").endswith("/" + name):
+                        target_folder = dest_base.rstrip("/")
+                    else:
+                        target_folder = f"{dest_base.rstrip('/')}/{name}"
                     new.append({
                         "id": secrets.token_hex(6),
                         "name": name,
@@ -1173,19 +1176,24 @@ class Handler(BaseHTTPRequestHandler):
                 paths, folder_path = [], ""
                 picker_unsupported = False
                 if sys.platform == "darwin":
-                    if pick_type == "folder":
-                        script = 'POSIX path of (choose folder with prompt "Choose folder containing PS5 game images or packages")'
-                        proc = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=120)
-                        folder_path = proc.stdout.strip() if proc.returncode == 0 else ""
-                    else:
-                        script = 'set chosen to choose file with prompt "Choose game files or packages to send to PS5" with multiple selections allowed\n' \
-                                 'set outPaths to ""\n' \
-                                 'repeat with aFile in chosen\n' \
-                                 '  set outPaths to outPaths & (POSIX path of aFile) & linefeed\n' \
-                                 'end repeat\n' \
-                                 'return outPaths'
-                        proc = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=120)
-                        paths = [p.strip() for p in proc.stdout.splitlines() if p.strip()] if proc.returncode == 0 else []
+                    try:
+                        if pick_type == "folder":
+                            script = 'tell application (path to frontmost application as text) to POSIX path of (choose folder with prompt "Choose folder containing PS5 game images or packages")'
+                            proc = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=120)
+                            folder_path = proc.stdout.strip() if proc.returncode == 0 else ""
+                        else:
+                            script = 'tell application (path to frontmost application as text)\n' \
+                                     '  set chosen to choose file with prompt "Choose game files or packages to send to PS5" with multiple selections allowed\n' \
+                                     'end tell\n' \
+                                     'set outPaths to ""\n' \
+                                     'repeat with aFile in chosen\n' \
+                                     '  set outPaths to outPaths & (POSIX path of aFile) & linefeed\n' \
+                                     'end repeat\n' \
+                                     'return outPaths'
+                            proc = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True, timeout=120)
+                            paths = [p.strip() for p in proc.stdout.splitlines() if p.strip()] if proc.returncode == 0 else []
+                    except Exception:
+                        paths, folder_path = [], ""
                 elif sys.platform == "win32":
                     try:
                         if pick_type == "folder":
