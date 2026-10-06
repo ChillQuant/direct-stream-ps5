@@ -840,7 +840,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def send(self, code, body, content_type="application/json"):
+    def send(self, code, body, content_type="application/json", extra_headers=None):
         if not isinstance(body, bytes):
             body = json.dumps(body, ensure_ascii=False, allow_nan=False).encode()
         self.send_response(code)
@@ -850,6 +850,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        if extra_headers:
+            for hk, hv in extra_headers.items():
+                self.send_header(hk, hv)
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -865,9 +868,18 @@ class Handler(BaseHTTPRequestHandler):
         if origin and origin != "http://" + expected:
             self.send(403, {"error": "Cross-origin requests are not allowed"})
             return False
-        if auth and not secrets.compare_digest(self.headers.get("X-Session-Token", ""), self.server.token):
-            self.send(401, {"error": "This app session expired. Reopen the app."})
-            return False
+        if auth:
+            req_token = self.headers.get("X-Session-Token", "")
+            if not req_token and "Cookie" in self.headers:
+                cookie_str = self.headers.get("Cookie", "")
+                for part in cookie_str.split(";"):
+                    k, _, v = part.strip().partition("=")
+                    if k == "ps5_session":
+                        req_token = v
+                        break
+            if not secrets.compare_digest(req_token, self.server.token):
+                self.send(401, {"error": "This app session expired. Reopen the app."})
+                return False
         return True
 
     def do_GET(self):
@@ -882,7 +894,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send(404, {"error": "Not found"})
             return
         file = BASE / "web" / assets[path]
-        self.send(200, file.read_bytes(), mimetypes.guess_type(str(file))[0] or "application/octet-stream")
+        extra = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+        if path == "/":
+            extra["Set-Cookie"] = f"ps5_session={self.server.token}; Path=/; SameSite=Lax"
+        self.send(200, file.read_bytes(), mimetypes.guess_type(str(file))[0] or "application/octet-stream", extra_headers=extra)
 
     def do_POST(self):
         if not self.allowed(True):

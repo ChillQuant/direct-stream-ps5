@@ -10,8 +10,8 @@
   <title>DIRECT STREAM FOR PLAYSTATION 5</title>
   <link rel="icon" href="/icon.svg">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=2.9.0">
-  <script src="/app.js?v=2.9.0" defer></script>
+  <link rel="stylesheet" href="/style.css?v=2.9.1">
+  <script src="/app.js?v=2.9.1" defer></script>
 </head>
 <body>
 
@@ -332,10 +332,10 @@
               <span class="verified-tip"><svg><use href="#i-check"/></svg>Files verified byte-for-byte before atomic PS5 finalization</span>
             </div>
             <div class="queue-footer-actions">
-              <button id="start-queue" class="button small">Start Queue</button>
-              <button id="pause-all" class="button small">Pause Queue</button>
-              <button id="clear-completed" class="button small quiet">Clear Completed</button>
-              <button id="validate-links" class="button small quiet" title="Verify HTTP direct links without downloading">Verify Links</button>
+              <button id="start-queue" class="button primary small">Start Queue</button>
+              <button id="pause-all" class="button outline small">Pause Queue</button>
+              <button id="clear-completed" class="button outline small">Clear Completed</button>
+              <button id="validate-links" class="button outline small" title="Verify HTTP direct links without downloading">Verify Links</button>
             </div>
           </div>
         </article>
@@ -398,14 +398,9 @@
               <div class="mini-chart-canvas">
                 <svg viewBox="0 0 400 64" preserveAspectRatio="none">
                   <path class="mini-grid" d="M0 10 H400 M0 36 H400 M0 58 H400"/>
-                  <path d="M0 56 Q30 52 60 40 T120 28 T180 22 T240 26 T300 24 T360 20 L400 24" fill="none" stroke="#1668e3" stroke-width="2" stroke-linecap="round"/>
-                  <circle cx="60" cy="40" r="3" fill="#1668e3"/>
-                  <circle cx="120" cy="28" r="3" fill="#1668e3"/>
-                  <circle cx="180" cy="22" r="3" fill="#1668e3"/>
-                  <circle cx="240" cy="26" r="3" fill="#1668e3"/>
-                  <circle cx="300" cy="24" r="3" fill="#1668e3"/>
-                  <circle cx="360" cy="20" r="3" fill="#1668e3"/>
+                  <path id="diag-speed-baseline" class="mini-grid" d="M0 58 H400" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="3 3"/>
                 </svg>
+                <div id="diag-chart-placeholder" class="chart-empty-hint">Run scan to graph sustained network throughput</div>
               </div>
             </div>
             <div class="mini-chart-x">
@@ -445,13 +440,9 @@
               <div class="mini-chart-canvas">
                 <svg viewBox="0 0 400 64" preserveAspectRatio="none">
                   <path class="mini-grid" d="M0 10 H400 M0 36 H400 M0 58 H400"/>
-                  <path d="M0 56 Q40 50 80 42 T160 34 T240 28 T320 24 L400 21" fill="none" stroke="#1668e3" stroke-width="2" stroke-linecap="round"/>
-                  <circle cx="80" cy="42" r="3" fill="#1668e3"/>
-                  <circle cx="160" cy="34" r="3" fill="#1668e3"/>
-                  <circle cx="240" cy="28" r="3" fill="#1668e3"/>
-                  <circle cx="320" cy="24" r="3" fill="#1668e3"/>
-                  <circle cx="380" cy="22" r="3" fill="#1668e3"/>
+                  <path id="local-speed-baseline" class="mini-grid" d="M0 58 H400" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="3 3"/>
                 </svg>
+                <div id="local-chart-placeholder" class="chart-empty-hint">Select file to measure local transmission</div>
               </div>
             </div>
             <div class="mini-chart-x">
@@ -468,8 +459,8 @@
                 <svg><use href="#i-check"/></svg>
               </div>
               <div class="rec-copy">
-                <h3>Wired connection recommended</h3>
-                <p>Your network is performing well. A wired connection will provide the most consistent results.</p>
+                <h3>Gigabit Ethernet Baseline Recommended</h3>
+                <p>Connect your Mac and PS5 over Gigabit Ethernet or 5GHz Wi-Fi for maximum sustained transfer speed.</p>
               </div>
             </div>
             <div class="rec-preset-block">
@@ -536,6 +527,8 @@
             <div class="files-nav-buttons">
               <button type="button" class="icon-btn small" id="files-back-btn" title="Back"><svg><use href="#i-chevron-left"/></svg></button>
               <button type="button" class="icon-btn small" id="files-fwd-btn" title="Forward"><svg><use href="#i-chevron-right"/></svg></button>
+              <button type="button" class="icon-btn small" id="parent-folder" title="Up to Parent Directory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="m18 15-6-6-6 6"/></svg></button>
+              <button type="button" class="icon-btn small" id="root-folder-btn" title="Root Directory" style="font-weight:700;font-size:12px;">/</button>
             </div>
 
             <form id="browse-form" class="files-breadcrumb-form">
@@ -551,15 +544,11 @@
               <input id="files-search" type="search" placeholder="Search files...">
             </div>
 
+            <span id="browse-message" class="browse-status-msg" style="font-size:11.5px;color:var(--muted);white-space:nowrap;">Read-only</span>
+
             <button type="button" class="icon-btn small" id="files-refresh-btn" title="Refresh files list">
               <svg><use href="#i-refresh"/></svg>
             </button>
-          </div>
-
-          <div class="files-shortcuts-subbar">
-            <button class="button outline small" type="button" id="parent-folder">↑ Parent</button>
-            <button class="button outline small" type="button" id="root-folder-btn">/</button>
-            <span id="browse-message" class="browse-status-msg">Read-only connection active.</span>
           </div>
 
           <!-- Files Table -->
@@ -739,15 +728,15 @@
               <div class="form-field">
                 <label for="page-setting-streams">Parallel streams</label>
                 <select id="page-setting-streams">
-                  <option value="1">1 stream (Single stream / No range)</option>
-                  <option value="2">2 streams (Low-Bandwidth / Wi-Fi)</option>
-                  <option value="4">4 streams (Standard Entry Broadband)</option>
-                  <option value="6">6 streams (Stable Mid-Bandwidth)</option>
-                  <option value="8">8 streams (Balanced Default)</option>
-                  <option value="12">12 streams (High-Speed Fiber)</option>
-                  <option value="16" selected>16 streams (Fast Turbo / Recommended)</option>
-                  <option value="24">24 streams (Ultra Fiber)</option>
-                  <option value="32">32 streams (Max LAN Saturation)</option>
+                  <option value="1">1 stream · Single</option>
+                  <option value="2">2 streams · Low/Wi-Fi</option>
+                  <option value="4">4 streams · Standard</option>
+                  <option value="6">6 streams · Stable</option>
+                  <option value="8">8 streams · Balanced</option>
+                  <option value="12">12 streams · Fast</option>
+                  <option value="16" selected>16 streams · Turbo (Optimal)</option>
+                  <option value="24">24 streams · Ultra</option>
+                  <option value="32">32 streams · Max LAN</option>
                 </select>
                 <small class="field-hint">Concurrent HTTP range requests.</small>
               </div>
@@ -755,11 +744,11 @@
               <div class="form-field">
                 <label for="page-setting-chunk_mb">Chunk slice size</label>
                 <select id="page-setting-chunk_mb">
-                  <option value="2">2 MiB (Low-Bandwidth / Wi-Fi)</option>
-                  <option value="4">4 MiB (Standard Entry Broadband)</option>
-                  <option value="8" selected>8 MiB (Balanced / Recommended)</option>
-                  <option value="16">16 MiB (Ultra-Wide Pipeline)</option>
-                  <option value="32">32 MiB (Max Saturation)</option>
+                  <option value="2">2 MiB · Wi-Fi</option>
+                  <option value="4">4 MiB · Standard</option>
+                  <option value="8" selected>8 MiB · Balanced</option>
+                  <option value="16">16 MiB · Wide</option>
+                  <option value="32">32 MiB · Max</option>
                 </select>
                 <small class="field-hint">Size of each downloaded segment.</small>
               </div>
@@ -767,15 +756,15 @@
               <div class="form-field">
                 <label for="page-setting-buffer_mb">RAM buffer</label>
                 <select id="page-setting-buffer_mb">
-                  <option value="32">32 MiB (Wi-Fi Tier)</option>
-                  <option value="64">64 MiB (Standard Entry)</option>
-                  <option value="96">96 MiB (Stable Mid-Bandwidth)</option>
-                  <option value="128">128 MiB (Balanced Default)</option>
-                  <option value="192">192 MiB (High-Speed Fiber)</option>
-                  <option value="256" selected>256 MiB (Fast Turbo / Recommended)</option>
-                  <option value="384">384 MiB (Ultra-Wide Pipeline)</option>
-                  <option value="512">512 MiB (Max Saturation)</option>
-                  <option value="1024">1024 MiB (1 GB High-Memory)</option>
+                  <option value="32">32 MiB · Minimal</option>
+                  <option value="64">64 MiB · Standard</option>
+                  <option value="96">96 MiB · Stable</option>
+                  <option value="128">128 MiB · Balanced</option>
+                  <option value="192">192 MiB · High-speed</option>
+                  <option value="256" selected>256 MiB · Turbo (Optimal)</option>
+                  <option value="384">384 MiB · Ultra</option>
+                  <option value="512">512 MiB · Max</option>
+                  <option value="1024">1024 MiB · 1 GB High-RAM</option>
                 </select>
                 <small class="field-hint">Memory ring buffer preventing pipeline stalls.</small>
               </div>
@@ -821,7 +810,7 @@
 
           <div class="settings-footer-row">
             <button type="button" id="settings-reset-defaults" class="button outline">Reset to defaults</button>
-            <button type="button" id="mobile-quit" class="button outline danger">Quit app</button>
+            <button type="button" id="mobile-quit" class="button outline danger mobile-only" hidden>Quit app</button>
             <button type="submit" class="button primary">Save changes</button>
           </div>
         </form>
@@ -870,9 +859,15 @@
         <svg class="field-icon"><use href="#i-link"/></svg>
         <textarea id="source-urls" rows="2" placeholder="https://example.com/downloads/Demon_Souls.ffpfsc or .pkg / .exfat" spellcheck="false" required></textarea>
       </div>
-      <p class="field-hint" style="margin-top: 6px; font-size: 11.5px; opacity: 0.85;">
-        ⚡ Auto-resolves <strong>Rootz.so</strong>, <strong>AkiraBox</strong>, <strong>DataNodes</strong>, <strong>VikingFile</strong>, <strong>FileDitch</strong>, <strong>Rapidgator</strong> &amp; Google Drive. For sites generating dynamic links after clicking Download, paste that link here.
-      </p>
+      <div class="resolver-tag-row">
+        <span class="resolver-label">Auto-resolvers:</span>
+        <span class="resolver-chip">AkiraBox</span>
+        <span class="resolver-chip">Rootz</span>
+        <span class="resolver-chip">DataNodes</span>
+        <span class="resolver-chip">VikingFile</span>
+        <span class="resolver-chip">FileDitch</span>
+        <span class="resolver-chip">Google Drive</span>
+      </div>
     </div>
 
     <!-- Local Path Field -->
@@ -898,15 +893,14 @@
     </div>
 
     <!-- Detected File Preview Box -->
-    <div class="file-preview-card">
+    <div class="file-preview-card" id="file-preview-card" hidden>
       <div class="preview-icon-box" id="preview-format-icon">
         <svg><use href="#i-file"/></svg>
       </div>
       <div class="preview-meta">
-        <strong id="preview-filename">No game file selected</strong>
-        <span id="preview-filesize">Enter direct link or choose file</span>
+        <strong id="preview-filename">Detected file</strong>
+        <span id="preview-filesize"></span>
       </div>
-      <button type="button" class="button outline tiny" id="change-preview-file">Change</button>
     </div>
 
     <!-- Prominent Archive Extraction Mode Switcher -->

@@ -1,13 +1,28 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escaped = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fragment = new URLSearchParams(location.hash.slice(1));
-let token = fragment.get('session') || sessionStorage.getItem('ps5-session') || localStorage.getItem('ps5-session') || '';
-if (fragment.has('session')) {
-  sessionStorage.setItem('ps5-session', token);
-  try { localStorage.setItem('ps5-session', token); } catch (_) {}
-  history.replaceState(null, '', location.pathname);
+function readToken() {
+  const frag = new URLSearchParams(location.hash.slice(1));
+  const tFromHash = frag.get('session');
+  if (tFromHash) {
+    sessionStorage.setItem('ps5-session', tFromHash);
+    try { localStorage.setItem('ps5-session', tFromHash); } catch (_) {}
+    return tFromHash;
+  }
+  const match = document.cookie.match(/(?:^|;\s*)ps5_session=([^;]+)/);
+  if (match) return decodeURIComponent(match[1]);
+  return sessionStorage.getItem('ps5-session') || localStorage.getItem('ps5-session') || '';
 }
+
+let token = readToken();
+
+window.addEventListener('hashchange', () => {
+  const nextTok = readToken();
+  if (nextTok && nextTok !== token) {
+    token = nextTok;
+    poll();
+  }
+});
 
 
 let state = null;
@@ -382,16 +397,13 @@ function row(job, index) {
             ${v.titleId ? `<span class="id-badge">${v.titleId}</span>` : ''}
             <span class="meta-pill ${v.pillClass}">${v.tag}</span>
             ${isMulti ? `
-              <span class="meta-pill pill-pkg" style="display: inline-flex; align-items: center; gap: 4px;">
+              <button type="button" class="stack-expand-btn" data-toggle-stack="${job.id}" title="Inspect all ${partsCount} parts">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                STACKED (${partsCount} PARTS)
-              </span>
-              <button type="button" class="stack-expand-btn" data-toggle-stack="${job.id}">
+                <span>${partsCount} parts stacked</span>
                 <svg class="stack-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-                <span>Inspect ${partsCount} parts</span>
               </button>
             ` : ''}
-            ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? '⚡ EXTRACT' : '📁 RAW ARCHIVE'}</span>` : ''}
+            ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? '⚡ Extract' : '📁 Raw'}</span>` : ''}
           </div>
           <div class="game-sub-text">
             <span>${v.formatLabel}</span>
@@ -535,7 +547,7 @@ function render(s) {
   if ($('mobile-connection-dot')) $('mobile-connection-dot').className = 'dot ' + (s.connection.state === 'connected' ? 'green' : s.connection.state === 'error' ? 'error' : '');
   const connText = $('connection-status-text');
   if (connText) {
-    connText.textContent = s.connection.state === 'connected' ? 'Connected' : s.connection.state === 'error' ? 'Offline' : 'Checking…';
+    connText.textContent = s.connection.state === 'connected' ? 'Connected' : s.connection.state === 'error' ? 'Offline' : (s.settings.host ? 'Ready' : 'Add PS5 IP');
   }
   const connPill = $('connection-pill');
   if (connPill) {
@@ -547,8 +559,8 @@ function render(s) {
 
   // Settings page connection indicator
   if ($('page-conn-dot')) $('page-conn-dot').className = 'dot ' + (s.connection.state === 'connected' ? 'green' : s.connection.state === 'error' ? 'error' : '');
-  if ($('page-conn-status')) $('page-conn-status').textContent = s.connection.state === 'connected' ? 'Connected' : s.connection.state === 'error' ? 'Disconnected' : 'Checking…';
-  if ($('page-conn-msg')) $('page-conn-msg').textContent = s.connection.state === 'connected' ? 'PS5 ready for transfers' : (s.connection.message || 'Check IP and network');
+  if ($('page-conn-status')) $('page-conn-status').textContent = s.connection.state === 'connected' ? 'Connected' : s.connection.state === 'error' ? 'Disconnected' : (s.settings.host ? 'Ready' : 'Unconfigured');
+  if ($('page-conn-msg')) $('page-conn-msg').textContent = s.connection.state === 'connected' ? 'PS5 ready for transfers' : (s.connection.state === 'unknown' ? (s.settings.host ? 'Click Test connection to verify' : 'Enter PS5 address above') : (s.connection.message || 'Check IP and network'));
 
   if ($('pipeline-settings')) $('pipeline-settings').textContent = `${s.settings.streams} streams · ${s.settings.buffer_mb} MiB RAM`;
   if ($('source-mode')) $('source-mode').textContent = active?.kind === 'local' ? 'Local file · zero RAM copy' : (active?.kind === 'multipart' ? 'Multi-part stitch · direct PS5 stream' : 'Direct stream · async buffers');
@@ -977,16 +989,18 @@ const updateAddPreview = () => {
   if (!val) {
     if (archiveBlock) archiveBlock.hidden = true;
     if (multiBlock) multiBlock.hidden = true;
+    if ($('file-preview-card')) $('file-preview-card').hidden = true;
     if ($('preview-filename')) $('preview-filename').textContent = 'No game file selected';
     if ($('preview-filesize')) $('preview-filesize').textContent = 'Enter direct link or choose file';
     return;
   }
+  if ($('file-preview-card')) $('file-preview-card').hidden = false;
   const lines = val.split('\n').map(x => x.trim()).filter(Boolean);
   if (lines.length > 1) {
-    if (archiveBlock) archiveBlock.hidden = true;
     const items = lines.map(s => ({ source: s }));
     const [isMulti, mergedName, sortedParts] = detectMultipartSequence(items);
     if (isMulti) {
+      if ($('file-preview-card')) $('file-preview-card').hidden = true;
       if (multiBlock) {
         multiBlock.hidden = false;
         if ($('multipart-count-badge')) $('multipart-count-badge').textContent = `${sortedParts.length} PARTS`;
@@ -1005,9 +1019,14 @@ const updateAddPreview = () => {
           }).join('');
         }
       }
-      if ($('preview-filename')) $('preview-filename').textContent = `📚 Stacked Multi-Part: ${mergedName}`;
-      if ($('preview-filesize')) $('preview-filesize').textContent = `All ${sortedParts.length} parts recognized · merging seamlessly on PS5`;
       const ext = mergedName.toLowerCase().split('.').pop();
+      const isMultiArchive = ['zip', 'zip64', 'rar', '7z'].includes(ext);
+      if (archiveBlock) {
+        archiveBlock.hidden = !isMultiArchive;
+        if (isMultiArchive && $('archive-type-pill')) {
+          $('archive-type-pill').textContent = ext.toUpperCase() + ' ARCHIVE';
+        }
+      }
       if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
         if ($('modal-dest-folder')) $('modal-dest-folder').value = '/data/ShadowMount';
       } else if (ext === 'pkg') {
@@ -1016,6 +1035,8 @@ const updateAddPreview = () => {
       return;
     } else {
       if (multiBlock) multiBlock.hidden = true;
+      if (archiveBlock) archiveBlock.hidden = true;
+      if ($('file-preview-card')) $('file-preview-card').hidden = false;
       if ($('preview-filename')) $('preview-filename').textContent = `${lines.length} individual files`;
       if ($('preview-filesize')) $('preview-filesize').textContent = 'Queued as separate transfers';
       return;
@@ -1067,9 +1088,9 @@ const updateAddPreview = () => {
   }
   let smartDest = null;
 
-  const isZipArchive = ['zip', 'zip64'].includes(ext);
+  const isArchive = ['zip', 'zip64', 'rar', '7z', 'tar', 'gz'].includes(ext);
   if (archiveBlock) {
-    if (isZipArchive) {
+    if (isArchive) {
       archiveBlock.hidden = false;
       if ($('archive-type-pill')) $('archive-type-pill').textContent = ext.toUpperCase() + ' ARCHIVE';
     } else {
