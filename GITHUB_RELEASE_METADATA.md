@@ -118,7 +118,7 @@ git push origin main --tags
 
 ---
 
-## 4. GitHub Release Notes (v2.9.0 — On-The-Fly Archive Decompression)
+## 4. GitHub Release Notes (v2.9.0 — The Ultimate Direct Stream Release)
 
 ### Tag Version
 ```text
@@ -127,31 +127,43 @@ v2.9.0
 
 ### Release Title
 ```text
-DIRECT STREAM FOR PLAYSTATION 5 v2.9.0 — On-The-Fly Archive Decompressor
+DIRECT STREAM FOR PLAYSTATION 5 v2.9.0 — Folders, Archive Streaming & Multi-Part Stitcher
 ```
 
 ### Release Description:
 ```markdown
 ## DIRECT STREAM FOR PLAYSTATION 5 (v2.9.0)
 
-Stream and extract compressed `.zip` archives directly into PlayStation 5 storage in RAM with **Zero Local Disk Space Required**!
+The largest release yet! Stream compressed `.zip` archives, recursive game directories, split multi-part packages, and direct cloud links straight into PlayStation 5 storage with **Zero Local Disk Overhead** and an authentic, emoji-free studio dashboard.
 
 ---
 
 ### What's New in v2.9.0
 
-- **On-The-Fly Streaming Decompression**:
-  - Extract `.zip` (Deflate & Stored) directly to PS5 FTP storage in real-time.
+- **Full Game Folder Uploads**:
+  - Stream complete game directory hierarchies directly to `/data/ShadowMount/<GameFolder>` or custom paths over high-speed FTP.
+  - Recursively creates destination directories on the PS5.
+  - Preserves exact directory structure, skips already-verified files on resume, and automatically maintains RFC binary mode integrity.
+  - Native file & folder pickers on macOS and Windows automatically foregrounded.
+
+- **On-The-Fly Streaming Archive Decompression**:
+  - Extract `.zip` (Deflate & Stored) directly to PS5 FTP storage in real-time in RAM.
   - **0 GB Local Disk Used**: Stream a 70 GB zipped game from a phone or laptop with only 2 GB of free storage.
-- **Sub-Second Remote Header Probing**:
-  - Inspects remote ZIP directories in ~100 ms via lightweight HTTP Range requests (~64 KB).
-  - Automatically identifies the inner `.pkg` file and its uncompressed size.
-- **Tough Data Integrity Guards**:
+  - Remote central directory probing in ~100 ms via HTTP Range requests (~64 KB).
   - Accurate PS5 storage pre-check against uncompressed file size.
-  - Strict size verification before atomic rename.
-  - Prevents corrupted mid-stream resumes on compressed bitstreams.
-- **Web Dashboard Integration**:
-  - Automatic `.zip` detection badge in the UI with an on-the-fly decompression toggle.
+
+- **Multi-Part File Stitching Pipeline**:
+  - Automatically detects, sorts, and stitches split multi-part files (`.001`, `.002`, `.part1`, etc.) into a unified single package directly on the PS5.
+  - 3D Multi-Part Sequence Inspector in the UI with live stacked preview.
+
+- **Smart Direct Download Link Resolvers**:
+  - Direct streaming from 11 popular cloud hosts: MediaFire, PixelDrain, Google Drive, Archive.org, GoFile, AkiraBox, Rootz, DataNodes, VikingFile, and FileDitch.
+  - Pre-flight link verifier in the Add Transfer dialog checks reachability, file size, headers, and range support before queueing.
+
+- **Authentic PlayStation Studio UI Overhaul**:
+  - Complete zero-emoji purge across all dashboard dialogs, cards, toasts, and status bars.
+  - Real PlayStation game cards with official system badges (`PS5`, `PKG`, `PFS`, `exFAT`, `DIR`, `ARCHIVE`).
+  - Redesigned Diagnostics benchmark comparison matrix with real-time latency and winner badges.
 
 ---
 
