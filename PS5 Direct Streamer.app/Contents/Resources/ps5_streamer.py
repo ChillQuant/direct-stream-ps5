@@ -327,8 +327,8 @@ class Manager:
 
     def add_jobs(self, data):
         kind = data.get("kind", "url")
-        if kind not in ("url", "local", "multipart"):
-            raise TransferError("Choose a direct link or a local file.")
+        if kind not in ("url", "local", "multipart", "folder"):
+            raise TransferError("Choose a direct link, a local file, or a folder.")
         items = data.get("items", [])
         if not isinstance(items, list) or not 1 <= len(items) <= 100:
             raise TransferError("Add between 1 and 100 files at a time.")
@@ -410,29 +410,76 @@ class Manager:
                     src = pre_resolve_url(src)
                     valid_url(src)
                     default = extract_url_filename(src)
+                    item_kind = "url"
                 else:
                     src = os.path.abspath(os.path.expanduser(safe_text(src, "local file path", 8192)))
-                    if not os.path.isfile(src):
-                        raise TransferError("Local file not found. Use Choose file or enter its full path.")
-                    default = Path(src).name
+                    if os.path.isdir(src):
+                        item_kind = "folder"
+                        default = Path(src).name
+                    elif os.path.isfile(src):
+                        item_kind = "local"
+                        default = Path(src).name
+                    else:
+                        raise TransferError("Local file or folder not found. Use Choose file or folder, or enter its full path.")
                 name = valid_name(item.get("name") or default or "download.bin")
                 dest_folder = item.get("folder") or data.get("folder")
                 if dest_folder:
-                    dest_folder = valid_folder(dest_folder)
+                    dest_base = valid_folder(dest_folder)
                 else:
                     ext = Path(name).suffix.lower()
                     if ext in (".ffpfsc", ".exfat", ".ufs"):
-                        dest_folder = "/data/ShadowMount"
+                        dest_base = "/data/ShadowMount"
                     elif ext == ".pkg" and self.settings.get("folder") == "/data/ShadowMount":
-                        dest_folder = "/data/pkg"
+                        dest_base = "/data/pkg"
                     else:
-                        dest_folder = self.settings.get("folder", "/data/ShadowMount")
-                new.append({"id": secrets.token_hex(6), "name": name, "source": src, "kind": kind,
-                    "folder": dest_folder,
-                    "state": "queued", "detail": "Waiting to start", "total": None, "transferred": 0,
-                    "overwrite": bool(data.get("overwrite", False)),
-                    "decompress": bool(data.get("decompress", True)),
-                    "created": time.time(), "identity": None})
+                        dest_base = self.settings.get("folder", "/data/ShadowMount")
+
+                if item_kind == "folder":
+                    f_count = 0
+                    f_bytes = 0
+                    for r, _, fnames in os.walk(src):
+                        for f in fnames:
+                            if f.startswith(".") or f == "Thumbs.db":
+                                continue
+                            f_count += 1
+                            try:
+                                f_bytes += os.path.getsize(os.path.join(r, f))
+                            except OSError:
+                                pass
+                    target_folder = f"{dest_base.rstrip('/')}/{name}"
+                    new.append({
+                        "id": secrets.token_hex(6),
+                        "name": name,
+                        "source": src,
+                        "kind": "folder",
+                        "folder": target_folder,
+                        "files_count": f_count,
+                        "completed_files": [],
+                        "state": "queued",
+                        "detail": f"Queued folder ({f_count} files) · waiting to start",
+                        "total": f_bytes,
+                        "transferred": 0,
+                        "overwrite": bool(data.get("overwrite", False)),
+                        "decompress": False,
+                        "created": time.time(),
+                        "identity": None
+                    })
+                else:
+                    new.append({
+                        "id": secrets.token_hex(6),
+                        "name": name,
+                        "source": src,
+                        "kind": item_kind,
+                        "folder": dest_base,
+                        "state": "queued",
+                        "detail": "Waiting to start",
+                        "total": None,
+                        "transferred": 0,
+                        "overwrite": bool(data.get("overwrite", False)),
+                        "decompress": bool(data.get("decompress", True)),
+                        "created": time.time(),
+                        "identity": None
+                    })
         with self.lock:
             if len(self.jobs) + len(new) > 500:
                 raise TransferError("Queue is full. Clear completed jobs first.")
@@ -1166,15 +1213,29 @@ class Handler(BaseHTTPRequestHandler):
                         picker_unsupported = True
 
                 if pick_type == "folder":
-                    found = []
+                    total_size = 0
+                    file_count = 0
+                    folder_name = ""
                     if folder_path and os.path.isdir(folder_path):
+                        folder_name = os.path.basename(folder_path.rstrip("/\\"))
                         for r, _, fnames in os.walk(folder_path):
-                            for f in sorted(fnames):
-                                if f.lower().endswith((".pkg", ".bin", ".iso", ".tar")):
-                                    found.append(os.path.join(r, f))
-                            if len(found) >= 100:
-                                break
-                    result = {"paths": found, "path": folder_path, "picker_unsupported": picker_unsupported and not folder_path}
+                            for f in fnames:
+                                if f.startswith(".") or f == "Thumbs.db":
+                                    continue
+                                file_count += 1
+                                try:
+                                    total_size += os.path.getsize(os.path.join(r, f))
+                                except OSError:
+                                    pass
+                    result = {
+                        "is_folder": True,
+                        "path": folder_path,
+                        "name": folder_name,
+                        "files_count": file_count,
+                        "total_size": total_size,
+                        "paths": [folder_path] if folder_path else [],
+                        "picker_unsupported": picker_unsupported and not folder_path
+                    }
                 else:
                     result = {"paths": paths, "path": paths[0] if paths else "", "picker_unsupported": picker_unsupported and not paths}
             elif route == "/api/verify":

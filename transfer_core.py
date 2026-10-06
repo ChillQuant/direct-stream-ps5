@@ -2,6 +2,7 @@
 import ftplib
 import hashlib
 import http.client
+import io
 import math
 import os
 import posixpath
@@ -211,7 +212,7 @@ class SourceInfo:
             return False
         if self.kind == "multipart":
             return bool(self.parts) and all(p.resumable() and p.size is not None for p in self.parts)
-        return self.kind == "local" or (self.ranges and (bool(self.etag or self.modified) or self.size is not None))
+        return self.kind == "local" or (self.ranges and bool(self.etag or self.modified))
 
 
 def probe_source(kind, location, token, resolve_depth=0, decompress=True):
@@ -1024,8 +1025,225 @@ def windowed_rates(hist, now, snap, window=15.0):
     return (snap["uploaded"] - up0) / dt, (snap["downloaded"] - down0) / dt
 
 
+def transfer_folder(job, settings, token, report, save):
+    """Recursively transfers an entire folder to the PS5 via FTP, preserving directory structure.
+    Tracks completed_files so that resumed or restarted transfers skip already verified files."""
+    report("status", "Scanning folder contents")
+    src_dir = os.path.abspath(os.path.expanduser(job["source"]))
+    if not os.path.isdir(src_dir):
+        raise TransferError(f"Local folder not found: {src_dir}")
+
+    # Gather all readable files excluding OS junk
+    file_entries = []  # (rel_path, abs_path, size)
+    for root, dirs, files in os.walk(src_dir):
+        dirs.sort()
+        for f in sorted(files):
+            if f.startswith(".") or f == "Thumbs.db":
+                continue
+            abs_p = os.path.join(root, f)
+            rel_p = os.path.relpath(abs_p, src_dir).replace("\\", "/")
+            try:
+                sz = os.path.getsize(abs_p)
+                file_entries.append((rel_p, abs_p, sz))
+            except OSError:
+                pass
+
+    if not file_entries:
+        raise TransferError("Local folder is empty or contains no readable files.")
+
+    total_bytes = sum(sz for _, _, sz in file_entries)
+    job["total"] = total_bytes
+    job["files_count"] = len(file_entries)
+
+    completed_list = job.get("completed_files") or []
+    valid_rel_paths = {rel_p for rel_p, _, _ in file_entries}
+    completed_set = set(completed_list).intersection(valid_rel_paths)
+    cumulative_transferred = sum(sz for rel_p, _, sz in file_entries if rel_p in completed_set)
+    job["transferred"] = cumulative_transferred
+    job["completed_files"] = list(completed_set)
+    job["resumable"] = True
+    save()
+
+    report("source", {
+        "ranges": True,
+        "resumable": True,
+        "size": total_bytes,
+        "is_zip": False,
+        "archive_info": None,
+        "is_folder": True,
+        "files_count": len(file_entries)
+    })
+
+    ftp = None
+    data_socket = None
+    clean = False
+    meter = Meter()
+
+    try:
+        report("status", "Connecting to PS5")
+        ftp = connect_ftp(settings, token)
+        base_target_folder = valid_folder(job.get("folder") or settings["folder"])
+        ensure_folder(ftp, base_target_folder)
+
+        free_space = check_ftp_storage(ftp, base_target_folder)
+        needed = max(0, total_bytes - cumulative_transferred)
+        if free_space is not None and needed > free_space:
+            raise TransferError(f"Insufficient PS5 disk space: needs {needed/1e9:.2f} GB, but only {free_space/1e9:.2f} GB is available.")
+
+        started = last = time.monotonic()
+        previous = meter.snapshot()
+        hist = [(started, previous["uploaded"], previous["downloaded"])]
+
+        for idx, (rel_p, abs_p, file_sz) in enumerate(file_entries):
+            token.check()
+            if rel_p in completed_set:
+                continue
+
+            rel_dir = os.path.dirname(rel_p)
+            file_name = os.path.basename(rel_p)
+            if rel_dir:
+                remote_dir = f"{base_target_folder.rstrip('/')}/{rel_dir}"
+            else:
+                remote_dir = base_target_folder
+
+            ensure_folder(ftp, remote_dir)
+
+            # Check if remote file exists and is already identical in size
+            dest_size = remote_size(ftp, file_name)
+            if dest_size is not None and dest_size == file_sz and not job.get("overwrite"):
+                completed_set.add(rel_p)
+                job["completed_files"] = list(completed_set)
+                cumulative_transferred += file_sz
+                job["transferred"] = cumulative_transferred
+                save()
+                continue
+
+            part_name = f"{file_name}.{job['id']}.ps5part"
+            partial_size = remote_size(ftp, part_name)
+            file_offset = partial_size if (partial_size and partial_size <= file_sz) else 0
+
+            report("status", f"Streaming {rel_p} ({idx + 1}/{len(file_entries)})")
+
+            if file_sz == 0:
+                try:
+                    ftp.storlines("STOR " + part_name, io.BytesIO(b""))
+                    if remote_size(ftp, file_name) is not None and job.get("overwrite"):
+                        try:
+                            ftp.delete(file_name)
+                        except Exception:
+                            pass
+                    ftp.rename(part_name, file_name)
+                except ftplib.all_errors as ex:
+                    raise TransferError(f"Failed to create empty file {rel_p}: {ex}")
+                completed_set.add(rel_p)
+                job["completed_files"] = list(completed_set)
+                save()
+                continue
+
+            try:
+                data_socket = token.track(ftp.transfercmd("STOR " + part_name, rest=file_offset or None))
+            except ftplib.error_perm as e:
+                raise TransferError(f"PS5 FTP refused upload/resume for {rel_p}.") from e
+
+            try:
+                data_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2 * MIB)
+            except OSError:
+                pass
+            data_socket.settimeout(30)
+
+            sent_in_file = file_offset
+            with open(abs_p, "rb") as f:
+                if file_offset:
+                    f.seek(file_offset)
+                while not token.event.is_set():
+                    token.check()
+                    chunk = f.read(128 * 1024)
+                    if not chunk:
+                        break
+                    cap = settings.get("limit_mbps", 0) * 1_000_000
+                    if cap:
+                        wait = (meter.snapshot()["uploaded"] + len(chunk)) / cap - (time.monotonic() - started)
+                        if wait > 0:
+                            token.wait(wait)
+                    t_send = time.monotonic()
+                    data_socket.sendall(chunk)
+                    meter.add(uploaded=len(chunk), sending=time.monotonic() - t_send)
+                    sent_in_file += len(chunk)
+                    now = time.monotonic()
+                    if now - last >= 0.4:
+                        snap = meter.snapshot()
+                        up, down = windowed_rates(hist, now, snap)
+                        current_overall = cumulative_transferred + (sent_in_file - file_offset)
+                        job["transferred"] = current_overall
+                        rem = max(0, total_bytes - current_overall)
+                        eta = rem / up if up > 0 else None
+                        bottleneck = "Speed cap enabled" if settings.get("limit_mbps") else "PS5 / local network"
+                        report("progress", {
+                            "transferred": current_overall,
+                            "total": total_bytes,
+                            "upload_bps": up,
+                            "download_bps": 0,
+                            "buffered": 0,
+                            "buffer_capacity": settings.get("buffer_mb", 32) * MIB,
+                            "elapsed": now - started,
+                            "eta": eta,
+                            "bottleneck": bottleneck,
+                            "offset": cumulative_transferred,
+                            "current_file": rel_p,
+                            "file_index": idx + 1,
+                            "file_count": len(file_entries)
+                        })
+                        last = now
+
+            token.untrack(data_socket)
+            data_socket.close()
+            data_socket = None
+            ftp.voidresp()
+
+            token.check()
+            actual = remote_size(ftp, part_name)
+            if actual != file_sz:
+                raise TransferError(f"Size mismatch on {rel_p}: expected {file_sz}, received {actual}.")
+
+            if remote_size(ftp, file_name) is not None and job.get("overwrite"):
+                try:
+                    ftp.delete(file_name)
+                except Exception:
+                    pass
+
+            try:
+                ftp.rename(part_name, file_name)
+            except ftplib.all_errors as e:
+                raise TransferError(f"Rename failed for {rel_p}: {e}")
+
+            cumulative_transferred += file_sz
+            completed_set.add(rel_p)
+            job["completed_files"] = list(completed_set)
+            job["transferred"] = cumulative_transferred
+            job["detail"] = f"Transferred {len(completed_set)}/{len(file_entries)} files"
+            save()
+
+        report("status", "Verifying folder structure")
+        clean = True
+        job["transferred"] = total_bytes
+        job["total"] = total_bytes
+        job["detail"] = f"Completed ({len(file_entries)} files verified)"
+        report("complete", {
+            "size": total_bytes,
+            "files_count": len(file_entries),
+            "verification": "All files transferred and verified"
+        })
+    finally:
+        if data_socket:
+            token.untrack(data_socket)
+            data_socket.close()
+        close_ftp(ftp, token, clean)
+
+
 def transfer(job, settings, token, report, save):
     """One transfer attempt. Partial files are uniquely owned by the persisted job ID."""
+    if job.get("kind") == "folder":
+        return transfer_folder(job, settings, token, report, save)
     report("status", "Inspecting source")
     if job.get("kind") == "multipart":
         source = probe_multipart_source(job.get("parts") or job["source"], token, target_filename=job.get("name"))
@@ -1050,10 +1268,7 @@ def transfer(job, settings, token, report, save):
             if old_identity.get("size") is not None and source.size is not None and old_identity["size"] != source.size:
                 raise TransferError(f"New link file size ({source.size} bytes) does not match original ({old_identity['size']} bytes). Restart the job.")
         elif old_identity != source.identity():
-            if old_identity.get("size") is not None and old_identity.get("size") == source.size and source.ranges:
-                pass
-            else:
-                raise TransferError("Source changed since this job started. Use Restart to begin a new partial file.")
+            raise TransferError("Source changed since this job started. Use Restart to begin a new partial file.")
     job["identity"] = source.identity()
     job["total"] = source.size
     job["resumable"] = source.resumable()

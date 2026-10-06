@@ -140,6 +140,53 @@ class Integration(unittest.TestCase):
         source=self.root/'local.bin';source.write_bytes(PAYLOAD);j=self.job();j.update(kind='local',source=str(source));self.run_job(j);self.assertEqual(self.dest(j).read_bytes(),PAYLOAD)
     def test_zero_byte_local_upload(self):
         source=self.root/'empty.bin';source.write_bytes(b'');j=self.job();j.update(kind='local',source=str(source));self.run_job(j);self.assertEqual(self.dest(j).stat().st_size,0)
+    def test_folder_upload(self):
+        folder_dir = self.root / 'game_folder'
+        folder_dir.mkdir(parents=True, exist_ok=True)
+        (folder_dir / 'eboot.bin').write_bytes(b'EBOOT_BINARY_DATA')
+        sub = folder_dir / 'sce_sys'
+        sub.mkdir(parents=True, exist_ok=True)
+        (sub / 'param.sfo').write_bytes(b'PARAM_SFO_DATA')
+        sub2 = folder_dir / 'data' / 'audio'
+        sub2.mkdir(parents=True, exist_ok=True)
+        (sub2 / 'bgm.wav').write_bytes(b'WAV_AUDIO_DATA')
+        j = {
+            'id': 'folder_job_1',
+            'name': 'game_folder',
+            'kind': 'folder',
+            'source': str(folder_dir),
+            'folder': '/target/nested/game_folder',
+            'transferred': 0,
+            'completed_files': []
+        }
+        events = self.run_job(j)
+        self.assertEqual(events[-1][0], 'complete')
+        self.assertEqual(j['transferred'], len(b'EBOOT_BINARY_DATA') + len(b'PARAM_SFO_DATA') + len(b'WAV_AUDIO_DATA'))
+        self.assertEqual(j['files_count'], 3)
+        self.assertEqual((self.root / 'target' / 'nested' / 'game_folder' / 'eboot.bin').read_bytes(), b'EBOOT_BINARY_DATA')
+        self.assertEqual((self.root / 'target' / 'nested' / 'game_folder' / 'sce_sys' / 'param.sfo').read_bytes(), b'PARAM_SFO_DATA')
+        self.assertEqual((self.root / 'target' / 'nested' / 'game_folder' / 'data' / 'audio' / 'bgm.wav').read_bytes(), b'WAV_AUDIO_DATA')
+    def test_folder_upload_resume_skips_completed(self):
+        folder_dir = self.root / 'game_folder_resume'
+        folder_dir.mkdir(parents=True, exist_ok=True)
+        (folder_dir / 'file1.bin').write_bytes(b'11111')
+        (folder_dir / 'file2.bin').write_bytes(b'22222')
+        target_f1 = self.root / 'target' / 'nested' / 'game_folder_resume' / 'file1.bin'
+        target_f1.parent.mkdir(parents=True, exist_ok=True)
+        target_f1.write_bytes(b'11111')
+        j = {
+            'id': 'folder_job_2',
+            'name': 'game_folder_resume',
+            'kind': 'folder',
+            'source': str(folder_dir),
+            'folder': '/target/nested/game_folder_resume',
+            'transferred': 5,
+            'completed_files': ['file1.bin']
+        }
+        events = self.run_job(j)
+        self.assertEqual(events[-1][0], 'complete')
+        self.assertEqual(j['transferred'], 10)
+        self.assertEqual((self.root / 'target' / 'nested' / 'game_folder_resume' / 'file2.bin').read_bytes(), b'22222')
     def test_bounded_buffer(self):
         tok=StopToken();m=Meter();src=probe_source('url',self.url(),tok);reader=make_reader(src,0,{**self.cfg,'buffer_mb':4},tok,m)
         try:

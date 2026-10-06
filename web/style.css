@@ -1050,7 +1050,15 @@ a { color: inherit; text-decoration: none; }
 }
 .theme-iso .card-plat-pill { color: #ecfeff; border-color: rgba(34, 211, 238, 0.4); }
 .theme-iso .card-fmt-pill { color: #22d3ee; }
-.theme-iso .card-vector { color: #67e8f9; filter: drop-shadow(0 0 5px rgba(6, 182, 212, 0.7)); }
+/* Folder / Directory */
+.theme-folder {
+  background: radial-gradient(circle at 50% 30%, #4c1d95 0%, #2e1065 60%, #170733 100%);
+  border-color: rgba(167, 139, 250, 0.4);
+  box-shadow: 0 3px 8px rgba(124, 58, 237, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.theme-folder .card-plat-pill { color: #f5f3ff; border-color: rgba(196, 181, 253, 0.4); }
+.theme-folder .card-fmt-pill { color: #c4b5fd; }
+.theme-folder .card-vector { color: #ddd6fe; filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.7)); }
 
 /* Default / Binary */
 .theme-default {
@@ -1119,6 +1127,11 @@ a { color: inherit; text-decoration: none; }
   background: #fffbeb;
   color: #d97706;
   border: 1px solid #fde68a;
+}
+.meta-pill.pill-folder {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
 }
 
 .row-progress {

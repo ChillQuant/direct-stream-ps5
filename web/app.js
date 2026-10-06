@@ -203,16 +203,29 @@ function populateSettingsInputs() {
 }
 
 function selectKind(kind) {
-  sourceKind = (kind === 'folder') ? 'local' : kind;
+  sourceKind = kind;
   document.querySelectorAll('[data-kind]').forEach(el => {
     el.classList.toggle('selected', el.dataset.kind === kind);
   });
   if ($('url-fields')) $('url-fields').hidden = sourceKind !== 'url';
   if ($('local-fields')) $('local-fields').hidden = sourceKind === 'url';
-  if (kind === 'folder') {
-    $('pick-folder')?.click();
-  } else if (kind === 'local' && (!$('local-path')?.value)) {
-    $('pick-file')?.click();
+  const label = $('local-path-label');
+  if (label) {
+    label.textContent = kind === 'folder' ? 'Local game directory / folder path' : 'Local game file / disk image path';
+  }
+  if ($('local-path')) {
+    $('local-path').placeholder = kind === 'folder' ? '/Users/you/Downloads/CUSA12345 or game directory' : '/Users/you/Downloads/game.ffpfsc';
+  }
+  const pickFileBtn = $('pick-file');
+  const pickFolderBtn = $('pick-folder');
+  if (pickFileBtn && pickFolderBtn) {
+    if (kind === 'folder') {
+      pickFolderBtn.className = 'button solid small';
+      pickFileBtn.className = 'button outline small';
+    } else {
+      pickFileBtn.className = 'button solid small';
+      pickFolderBtn.className = 'button outline small';
+    }
   }
 }
 
@@ -280,7 +293,14 @@ function parseJobVisuals(job) {
   let formatLabel = 'Direct File';
   let pillClass = 'pill-pkg';
 
-  if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+  if (job.kind === 'folder') {
+    platform = platform || (isPs5 ? 'PS5' : isPs4 ? 'PS4' : 'DIR');
+    tag = 'DIR';
+    cardClass = 'theme-folder';
+    iconHref = '#i-folder';
+    formatLabel = 'Game Directory';
+    pillClass = 'pill-folder';
+  } else if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
     platform = platform || 'PS5';
     tag = ext === 'ffpfsc' ? 'PFS' : ext === 'exfat' ? 'exFAT' : 'UFS';
     cardClass = ext === 'ffpfsc' ? 'theme-ps5-pfs' : 'theme-ps5-disk';
@@ -404,6 +424,7 @@ function row(job, index) {
             <strong class="game-title-text" title="${escaped(v.rawName)}">${escaped(v.cleanTitle)}</strong>
             ${v.titleId ? `<span class="id-badge">${v.titleId}</span>` : ''}
             <span class="meta-pill ${v.pillClass}">${v.tag}</span>
+            ${job.kind === 'folder' ? `<span class="meta-pill pill-folder">${job.files_count ? job.files_count + ' files' : 'Folder'}</span>` : ''}
             ${isMulti ? `
               <button type="button" class="stack-expand-btn" data-toggle-stack="${job.id}" title="Inspect all ${partsCount} parts">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -1851,11 +1872,14 @@ $('pick-folder').addEventListener('click', async () => {
   b.disabled = true;
   try {
     const r = await api('pick', { type: 'folder' });
-    if (r.paths && r.paths.length > 0) {
-      $('local-path').value = r.paths.join('\n');
-      toast(`Found ${r.paths.length} packages in folder`);
-    } else if (r.path) {
+    if (r.path) {
       $('local-path').value = r.path;
+      if (r.name && !$('file-name').value.trim()) {
+        $('file-name').value = r.name;
+      }
+      const sizeStr = r.total_size ? ` (${bytes(r.total_size)})` : '';
+      const countStr = r.files_count !== undefined ? `${r.files_count} files` : 'folder';
+      toast(`Folder selected: ${r.name || r.path} · ${countStr}${sizeStr}`);
     } else if (r.picker_unsupported) {
       toast('Folder picker dialog not available in terminal/mobile mode. Enter or paste the folder path directly.', true);
     }
@@ -1867,10 +1891,7 @@ $('pick-folder').addEventListener('click', async () => {
 });
 
 $('add-local').addEventListener('click', () => openAdd('local'));
-$('add-local-folder').addEventListener('click', () => {
-  openAdd('local');
-  $('pick-folder').click();
-});
+$('add-local-folder').addEventListener('click', () => openAdd('folder'));
 
 // Quick Stream Command Bar
 async function quickAddUrl(url) {
@@ -1911,8 +1932,7 @@ if (quickFileBtn) {
 const quickFolderBtn = $('quick-browse-folder');
 if (quickFolderBtn) {
   quickFolderBtn.addEventListener('click', () => {
-    openAdd('local');
-    $('pick-folder').click();
+    openAdd('folder');
   });
 }
 
