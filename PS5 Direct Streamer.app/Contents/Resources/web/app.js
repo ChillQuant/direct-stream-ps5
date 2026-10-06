@@ -550,6 +550,209 @@ function findConsecutiveMultipartJobs(jobs) {
   return null;
 }
 
+function parseBenchmarkTiers(d) {
+  if (d.tiers && Array.isArray(d.tiers) && d.tiers.length > 0) {
+    return d.tiers;
+  }
+  if (!d.message) return [];
+  const tiers = [];
+  const regex = /([\d.]+)\s*MB\/s\s*·\s*([^·\n]+?)(?:\s*\(first data:\s*(\d+)\s*ms\))?(?=(?:\s+[\d.]+\s*MB\/s|\s*$|\s*Each tier tested|\n))/gi;
+  let m;
+  while ((m = regex.exec(d.message)) !== null) {
+    const mbps = parseFloat(m[1]);
+    const fullLabel = m[2].trim();
+    const latency = m[3] ? parseInt(m[3], 10) : 0;
+    const cleanLabel = fullLabel.split('(')[0].trim();
+    const specs = fullLabel.includes('(') ? fullLabel.split('(')[1].replace(/\)$/, '').trim() : '';
+    tiers.push({
+      label: fullLabel,
+      clean_label: cleanLabel,
+      specs: specs,
+      bps: mbps * 1e6,
+      mbps: mbps,
+      latency_ms: latency,
+      is_best: false
+    });
+  }
+  if (tiers.length > 0) {
+    const maxBps = Math.max(...tiers.map(t => t.bps));
+    tiers.forEach(t => { t.is_best = (t.bps === maxBps); });
+  }
+  return tiers;
+}
+
+function renderBenchmarkResult(d) {
+  const benchResult = $('benchmark-result');
+  const chartBox = $('diag-chart-box');
+  const chartX = $('diag-chart-x');
+
+  if (!benchResult) return;
+  if (!d || !d.message) {
+    benchResult.hidden = true;
+    benchResult.innerHTML = '';
+    if (chartBox) chartBox.hidden = false;
+    if (chartX) chartX.hidden = false;
+    return;
+  }
+
+  benchResult.hidden = false;
+  if (chartBox) chartBox.hidden = true;
+  if (chartX) chartX.hidden = true;
+
+  if (d.state === 'running') {
+    benchResult.innerHTML = `
+      <div class="benchmark-result-card">
+        <div class="single-bench-summary">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="verify-spinner"></span>
+            <strong>${escaped(d.message || 'Testing pipeline configuration…')}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (d.state === 'error') {
+    benchResult.innerHTML = `
+      <div class="benchmark-result-card">
+        <div class="single-bench-summary" style="border-left: 3px solid var(--danger, #ef4444);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg style="width: 18px; height: 18px; color: var(--danger, #ef4444); fill: currentColor;"><use href="#i-alert"/></svg>
+            <strong style="color: var(--danger, #ef4444); font-size: 13px;">Diagnostic Error</strong>
+          </div>
+          <p class="single-bench-msg" style="margin-top: 6px;">${escaped(d.message || 'Diagnostic encountered an error.')}</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const tiers = parseBenchmarkTiers(d);
+
+  if (tiers.length > 0) {
+    const maxBps = Math.max(...tiers.map(t => t.bps), 1);
+    const bestTier = tiers.find(t => t.is_best) || tiers[0];
+    const bestConfig = { ...(bestTier.config || {}), ...(d.best_config || {}) };
+    if (!bestConfig.streams && bestTier.specs) {
+      const sm = bestTier.specs.match(/(\d+)\s*streams/i);
+      const cm = bestTier.specs.match(/(\d+)\s*MiB(?:\s*chunk)?/i);
+      const bm = bestTier.specs.match(/(\d+)\s*MiB\s*RAM/i);
+      if (sm) bestConfig.streams = parseInt(sm[1], 10);
+      if (cm) bestConfig.chunk_mb = parseInt(cm[1], 10);
+      if (bm) bestConfig.buffer_mb = parseInt(bm[1], 10);
+    }
+    const bestLabel = bestTier.clean_label || (d.best_label ? d.best_label.split('(')[0].trim() : 'Optimal Preset');
+
+    benchResult.innerHTML = `
+      <div class="benchmark-result-card">
+        <!-- Optimal Winner Banner -->
+        <div class="optimal-winner-banner">
+          <div class="winner-top-row">
+            <div class="winner-title-group">
+              <span class="winner-pill">
+                <svg class="winner-pill-icon"><use href="#i-check"/></svg> Optimal Preset
+              </span>
+              <h3 class="winner-preset-title">${escaped(bestLabel)}</h3>
+            </div>
+            <div class="winner-speed-badge">
+              <strong class="winner-speed-num">${(d.bps ? d.bps / 1e6 : bestTier.mbps).toFixed(1)}</strong>
+              <span class="winner-speed-unit">MB/s</span>
+            </div>
+          </div>
+
+          <div class="winner-chips-row">
+            ${bestConfig.streams ? `<span class="winner-spec-chip"><strong>${bestConfig.streams}</strong> streams</span>` : ''}
+            ${bestConfig.chunk_mb ? `<span class="winner-spec-chip"><strong>${bestConfig.chunk_mb}</strong> MiB chunk</span>` : ''}
+            ${bestConfig.buffer_mb ? `<span class="winner-spec-chip"><strong>${bestConfig.buffer_mb}</strong> MiB buffer</span>` : ''}
+            ${bestTier.latency_ms ? `<span class="winner-spec-chip latency"><strong>${bestTier.latency_ms}</strong> ms ping</span>` : ''}
+          </div>
+
+          <div class="winner-action-bar">
+            <button id="apply-optimal-btn" class="button primary small">
+              <svg><use href="#i-check"/></svg>Apply Recommended Settings
+            </button>
+            <span class="winner-action-hint">Configures PS5 pipeline for maximum sustained download</span>
+          </div>
+        </div>
+
+        <!-- Tiers Breakdown Comparison Section -->
+        <div class="benchmark-tiers-container">
+          <div class="tiers-header-row">
+            <span class="tiers-section-title">Tested Pipeline Configurations (${tiers.length})</span>
+            <span class="tiers-section-sub">Ranked by sustained throughput</span>
+          </div>
+          <div class="tiers-list-group">
+            ${tiers.map(t => {
+              const pct = Math.max(8, Math.min(100, (t.bps / maxBps) * 100));
+              return `
+                <div class="tier-card-row ${t.is_best ? 'tier-is-best' : ''}">
+                  <div class="tier-col-info">
+                    <div class="tier-label-line">
+                      <strong class="tier-clean-title">${escaped(t.clean_label)}</strong>
+                      ${t.is_best ? '<span class="tier-best-tag">Fastest</span>' : ''}
+                    </div>
+                    ${t.specs ? `<span class="tier-specs-line">${escaped(t.specs)}</span>` : ''}
+                  </div>
+                  <div class="tier-col-meter">
+                    <div class="tier-progress-track">
+                      <div class="tier-progress-fill" style="width: ${pct.toFixed(0)}%;"></div>
+                    </div>
+                  </div>
+                  <div class="tier-col-metrics">
+                    <strong class="tier-speed-val">${t.mbps.toFixed(1)} <small>MB/s</small></strong>
+                    ${t.latency_ms ? `<span class="tier-ping-val">${t.latency_ms} ms</span>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="benchmark-footer-note">
+          <svg class="info-svg"><use href="#i-transfer"/></svg>
+          <span>Measured against live download chunks. RAM buffer discarded; PS5 console was not contacted.</span>
+        </div>
+      </div>
+    `;
+
+    const applyBtn = benchResult.querySelector('#apply-optimal-btn');
+    if (applyBtn && Object.keys(bestConfig).length > 0) {
+      applyBtn.onclick = async () => {
+        try {
+          applyBtn.disabled = true;
+          await api('settings', { ...state.settings, ...bestConfig });
+          applyBtn.innerHTML = '<svg><use href="#i-check"/></svg>Settings Applied!';
+          toast(`Applied ${bestLabel}`);
+          await poll();
+        } catch (err) {
+          applyBtn.disabled = false;
+          toast(err.message, true);
+        }
+      };
+    } else if (applyBtn) {
+      applyBtn.style.display = 'none';
+    }
+  } else {
+    benchResult.innerHTML = `
+      <div class="benchmark-result-card">
+        <div class="single-bench-summary">
+          <div class="single-bench-speed">
+            <strong class="single-speed-num">${d.bps != null ? (d.bps / 1e6).toFixed(1) : '—'}</strong>
+            <span class="single-speed-unit">MB/s sustained throughput</span>
+          </div>
+          <div class="single-bench-chips">
+            ${d.parallel ? '<span class="winner-spec-chip">Parallel range streams</span>' : '<span class="winner-spec-chip">Single stream mode</span>'}
+            ${d.first_byte_ms ? `<span class="winner-spec-chip"><strong>${d.first_byte_ms}</strong> ms initial latency</span>` : ''}
+            ${d.bytes ? `<span class="winner-spec-chip"><strong>${bytes(d.bytes)}</strong> sampled</span>` : ''}
+          </div>
+          <p class="single-bench-msg">${escaped(d.message)}</p>
+        </div>
+      </div>
+    `;
+  }
+}
+
 function render(s) {
   state = s;
   const jobs = s.jobs;
@@ -768,34 +971,7 @@ function render(s) {
       if (d.bps != null && $('diag-rate-val')) {
         $('diag-rate-val').textContent = `${(d.bps / 1e6).toFixed(1)} MB/s`;
       }
-      const benchResult = $('benchmark-result');
-      if (benchResult) {
-        if (d.message) {
-          benchResult.hidden = false;
-          benchResult.innerHTML = `<strong>${d.bps != null ? (d.bps / 1e6).toFixed(1) : '—'} <small>MB/s</small></strong><span style="white-space:pre-line">${escaped(d.message)}</span>`;
-        } else {
-          benchResult.hidden = true;
-        }
-      }
-      const applyBtn = $('apply-optimal-btn');
-      if (applyBtn) {
-        if (d.state === 'done' && d.best_config) {
-          applyBtn.hidden = false;
-          applyBtn.textContent = `Apply Recommended Settings: ${d.best_label || 'Optimal'}`;
-          applyBtn.onclick = async () => {
-            try {
-              await api('settings', { ...state.settings, ...d.best_config });
-              toast(`Applied settings: ${d.best_label}`);
-              applyBtn.hidden = true;
-              await poll();
-            } catch (err) {
-              toast(err.message, true);
-            }
-          };
-        } else {
-          applyBtn.hidden = true;
-        }
-      }
+      renderBenchmarkResult(d);
     }
     if (d.kind === 'files') {
       if ($('browse-message')) $('browse-message').textContent = d.message || 'Connected';
@@ -2124,3 +2300,6 @@ document.addEventListener('toggle', e => {
 
 // Start polling
 tick();
+
+window.renderBenchmarkResult = renderBenchmarkResult;
+window.setPage = setPage;

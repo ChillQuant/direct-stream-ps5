@@ -913,6 +913,7 @@ class Manager:
                         ]
                         duration_per = 10
                     lines, best = [], (0, variants[0][0], variants[0][1])
+                    tiers = []
                     for i, (label, over) in enumerate(variants):
                         token.check()
                         with self.lock:
@@ -920,11 +921,25 @@ class Manager:
                                 "message": f"Test {i + 1}/{len(variants)}: {label}…"}
                         r = measure_source(source, {**cfg, **over}, token, duration_per)
                         lines.append(f"{r['steady']/1e6:5.1f} MB/s · {label} (first data: {r['first_byte']*1000:.0f} ms)")
+                        clean_label = label.split("(")[0].strip()
+                        specs = label.split("(")[1].replace(")", "").strip() if "(" in label else ""
+                        tiers.append({
+                            "label": label,
+                            "clean_label": clean_label,
+                            "specs": specs,
+                            "bps": r["steady"],
+                            "mbps": round(r["steady"] / 1e6, 1),
+                            "latency_ms": round(r["first_byte"] * 1000),
+                            "config": over,
+                        })
                         if r["steady"] > best[0]:
                             best = (r["steady"], label, over)
                         token.wait(0.5)
+                    for t in tiers:
+                        t["is_best"] = (t["bps"] == best[0])
                     result = {"state": "done", "kind": kind, "bps": best[0],
                         "best_label": best[1], "best_config": best[2],
+                        "tiers": tiers,
                         "message": "Optimal config: " + best[1] + f" ({best[0]/1e6:.1f} MB/s)\n\n" + "\n".join(lines) +
                                    "\n\nEach tier tested against actual direct download chunks. Bytes discarded from RAM."}
             elif kind == "source":
@@ -934,6 +949,8 @@ class Manager:
                         else "single stream (server does not support ranges, or streams = 1)")
                 result = {"state": "done", "kind": kind, "bps": r["steady"],
                     "bytes": r["bytes"], "seconds": r["seconds"], "ranges": source.ranges, "size": source.size,
+                    "parallel": r["parallel"], "first_byte_ms": round(r["first_byte"] * 1000),
+                    "mode_label": mode,
                     "message": (f"Steady {r['steady']/1e6:.1f} MB/s (whole test incl. startup {r['avg']/1e6:.1f}) · "
                                 f"first data after {r['first_byte']*1000:.0f} ms · {mode}. "
                                 "Bytes discarded from RAM; PS5 was not contacted.")}

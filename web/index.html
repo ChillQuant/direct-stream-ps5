@@ -405,7 +405,7 @@
             </div>
 
             <!-- Mini Speed Line Chart -->
-            <div class="mini-chart-box">
+            <div class="mini-chart-box" id="diag-chart-box">
               <div class="mini-chart-y">
                 <span>150 MB/s</span>
                 <span>75 MB/s</span>
@@ -419,12 +419,11 @@
                 <div id="diag-chart-placeholder" class="chart-empty-hint">Run scan to graph sustained network throughput</div>
               </div>
             </div>
-            <div class="mini-chart-x">
+            <div class="mini-chart-x" id="diag-chart-x">
               <span>0s</span><span>15s</span><span>30s</span><span>45s</span><span>60s</span>
             </div>
 
             <div id="benchmark-result" class="benchmark-result-meta" hidden></div>
-            <button id="apply-optimal-btn" class="button primary small margin-top" hidden>Apply Recommended Settings</button>
           </article>
 
           <!-- Card 2: Mac-to-PS5 local path -->
