@@ -926,7 +926,14 @@ def remote_size(ftp, path):
             raise TransferError("PS5 FTP did not return a file size.")
         return n
     except ftplib.error_perm as e:
-        if str(e).startswith("550"):
+        msg = str(e)
+        if "ASCII" in msg:
+            try:
+                ftp.voidcmd("TYPE I")
+                return ftp.size(path)
+            except Exception:
+                pass
+        if msg.startswith("550"):
             # 550 can also mean denied: STOR will then fail without silently replacing a known file.
             return None
         raise TransferError("PS5 FTP must support SIZE for safe transfers and resume.")
@@ -1126,7 +1133,7 @@ def transfer_folder(job, settings, token, report, save):
 
             if file_sz == 0:
                 try:
-                    ftp.storlines("STOR " + part_name, io.BytesIO(b""))
+                    ftp.storbinary("STOR " + part_name, io.BytesIO(b""))
                     if remote_size(ftp, file_name) is not None and job.get("overwrite"):
                         try:
                             ftp.delete(file_name)

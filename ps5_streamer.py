@@ -824,7 +824,11 @@ class Manager:
                 self.history = self.history[-120:]
             elif event == "complete":
                 job["state"] = "completed"
-                job["detail"] = "Complete · PS5 file size verified"
+                if job.get("kind") == "folder":
+                    cnt = value.get("files_count") or job.get("files_count")
+                    job["detail"] = f"Complete · {cnt} files verified on PS5" if cnt else "Complete · Folder structure verified"
+                else:
+                    job["detail"] = "Complete · PS5 file size verified"
                 job["finished"] = time.time()
                 self.log("success", f"{job['name']}: complete. {value['verification']}")
                 self.save()

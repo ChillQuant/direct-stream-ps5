@@ -825,7 +825,7 @@ function render(s) {
   if ($('page-conn-msg')) $('page-conn-msg').textContent = s.connection.state === 'connected' ? 'PS5 ready for transfers' : (s.connection.state === 'unknown' ? (s.settings.host ? 'Click Test connection to verify' : 'Enter PS5 address above') : (s.connection.message || 'Check IP and network'));
 
   if ($('pipeline-settings')) $('pipeline-settings').textContent = `${s.settings.streams} streams · ${s.settings.buffer_mb} MiB RAM`;
-  if ($('source-mode')) $('source-mode').textContent = active?.kind === 'local' ? 'Local file · zero RAM copy' : (active?.kind === 'multipart' ? 'Multi-part stitch · direct PS5 stream' : 'Direct stream · async buffers');
+  if ($('source-mode')) $('source-mode').textContent = active?.kind === 'folder' ? 'Local directory · Recursive folder transfer' : (active?.kind === 'local' ? 'Local file · zero RAM copy' : (active?.kind === 'multipart' ? 'Multi-part stitch · direct PS5 stream' : 'Direct stream · async buffers'));
 
   const lightbar = $('status-lightbar');
   if (lightbar) {
