@@ -10,8 +10,8 @@
   <title>DIRECT STREAM FOR PLAYSTATION 5</title>
   <link rel="icon" href="/icon.svg">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=2.9.1">
-  <script src="/app.js?v=2.9.1" defer></script>
+  <link rel="stylesheet" href="/style.css?v=2.9.2">
+  <script src="/app.js?v=2.9.2" defer></script>
 </head>
 <body>
 
@@ -854,7 +854,12 @@
 
     <!-- URL Field -->
     <div id="url-fields" class="modal-field-block">
-      <label for="source-urls">Direct download URL</label>
+      <div class="field-label-row">
+        <label for="source-urls">Direct download URL</label>
+        <button type="button" id="btn-verify-links" class="verify-action-btn" title="Check reachability, file size, headers, and range support before queueing">
+          <svg><use href="#i-check"/></svg> Verify link
+        </button>
+      </div>
       <div class="input-with-icon">
         <svg class="field-icon"><use href="#i-link"/></svg>
         <textarea id="source-urls" rows="2" placeholder="https://example.com/downloads/Demon_Souls.ffpfsc or .pkg / .exfat" spellcheck="false" required></textarea>
@@ -868,6 +873,7 @@
         <span class="resolver-chip">FileDitch</span>
         <span class="resolver-chip">Google Drive</span>
       </div>
+      <div id="url-verification-status" class="verification-status-box" hidden></div>
     </div>
 
     <!-- Local Path Field -->

@@ -251,6 +251,43 @@ class TestResolver(unittest.TestCase):
         self.assertFalse(is_single_connection_host("https://archive.org/download/item/file.pkg"))
 
 
+    def test_manager_verify_links_empty_raises(self):
+        from ps5_streamer import Manager
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        m = Manager(tmp)
+        from transfer_core import TransferError
+        with self.assertRaises(TransferError):
+            m.verify_links({"urls": []})
+        with self.assertRaises(TransferError):
+            m.verify_links({})
+
+    def test_manager_verify_links_results_format(self):
+        from ps5_streamer import Manager
+        from unittest.mock import MagicMock, patch
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        m = Manager(tmp)
+        
+        mock_info = MagicMock()
+        mock_info.size = 1048576000
+        mock_info.filename = "Demon_Souls.ffpfsc"
+        mock_info.ranges = True
+        mock_info.resumable.return_value = True
+
+        with patch("ps5_streamer.probe_source", return_value=mock_info):
+            res = m.verify_links({"urls": ["https://example.com/Demon_Souls.ffpfsc"]})
+            self.assertTrue(res["ok"])
+            self.assertEqual(res["count"], 1)
+            self.assertEqual(res["verified_count"], 1)
+            item = res["results"][0]
+            self.assertTrue(item["ok"])
+            self.assertEqual(item["filename"], "Demon_Souls.ffpfsc")
+            self.assertEqual(item["size_formatted"], "1.05 GB")
+            self.assertTrue(item["ranges"])
+            self.assertTrue(item["resumable"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

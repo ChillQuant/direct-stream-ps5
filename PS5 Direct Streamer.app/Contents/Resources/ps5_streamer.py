@@ -588,6 +588,66 @@ class Manager:
             self.save()
         return {"ok": True}
 
+    def verify_links(self, data):
+        raw_urls = data.get("urls")
+        if not raw_urls:
+            single = data.get("url")
+            raw_urls = [single] if single else []
+        if isinstance(raw_urls, str):
+            raw_urls = [u.strip() for u in raw_urls.splitlines() if u.strip()]
+        if not raw_urls or not isinstance(raw_urls, list):
+            raise TransferError("Please enter at least one URL to verify.")
+        if len(raw_urls) > 50:
+            raise TransferError("Cannot verify more than 50 links at once.")
+
+        results = []
+        token = StopToken()
+        overall_ok = True
+
+        for raw_url in raw_urls:
+            src = str(raw_url).strip()
+            if not src:
+                continue
+            try:
+                resolved = pre_resolve_url(src)
+                valid_url(resolved)
+                info = probe_source("url", resolved, token, decompress=False)
+                size_b = info.size
+                if size_b is not None:
+                    if size_b >= 1e9:
+                        size_str = f"{size_b / 1e9:.2f} GB"
+                    elif size_b >= 1e6:
+                        size_str = f"{size_b / 1e6:.1f} MB"
+                    else:
+                        size_str = f"{size_b / 1e3:.0f} KB"
+                else:
+                    size_str = "Unknown size"
+
+                results.append({
+                    "url": src,
+                    "resolved_url": resolved if resolved != src else None,
+                    "ok": True,
+                    "filename": info.filename or extract_url_filename(resolved),
+                    "size": size_b,
+                    "size_formatted": size_str,
+                    "ranges": bool(info.ranges),
+                    "resumable": bool(info.resumable()),
+                })
+            except Exception as e:
+                overall_ok = False
+                results.append({
+                    "url": src,
+                    "ok": False,
+                    "error": str(e),
+                })
+
+        return {
+            "ok": overall_ok,
+            "results": results,
+            "count": len(results),
+            "verified_count": sum(1 for r in results if r.get("ok")),
+        }
+
     def _report(self, job, event, value):
         with self.lock:
             if event == "status":
@@ -987,6 +1047,8 @@ class Handler(BaseHTTPRequestHandler):
                     result = {"paths": found, "path": folder_path, "picker_unsupported": picker_unsupported and not folder_path}
                 else:
                     result = {"paths": paths, "path": paths[0] if paths else "", "picker_unsupported": picker_unsupported and not paths}
+            elif route == "/api/verify":
+                result = m.verify_links(data)
             elif route == "/api/shutdown":
                 result = {"ok": True}
                 threading.Thread(target=self.server.shutdown, daemon=True).start()

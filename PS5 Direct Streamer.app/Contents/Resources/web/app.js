@@ -219,6 +219,7 @@ function selectKind(kind) {
 function openAdd(kind='url') {
   selectKind(kind);
   if ($('add-error')) $('add-error').textContent = '';
+  if (typeof resetVerifyStatus === 'function') resetVerifyStatus();
   if ($('add-dialog')) $('add-dialog').showModal();
   setTimeout(() => {
     const target = $(kind === 'url' ? 'source-urls' : 'local-path');
@@ -1136,8 +1137,181 @@ const updateAddPreview = () => {
   }
 };
 
-$('source-urls')?.addEventListener('input', updateAddPreview);
+const resetVerifyStatus = () => {
+  const box = $('url-verification-status');
+  if (box) {
+    box.hidden = true;
+    box.innerHTML = '';
+  }
+  const btn = $('btn-verify-links');
+  if (btn) {
+    btn.disabled = false;
+    const lines = $('source-urls')?.value.trim().split('\n').filter(Boolean) || [];
+    btn.innerHTML = `<svg><use href="#i-check"/></svg> ${lines.length > 1 ? `Verify ${lines.length} links` : 'Verify link'}`;
+  }
+};
+
+const runVerifyLinks = async () => {
+  const raw = $('source-urls')?.value.trim() || '';
+  const lines = raw.split('\n').map(x => x.trim()).filter(Boolean);
+  const box = $('url-verification-status');
+  const btn = $('btn-verify-links');
+
+  if (!lines.length) {
+    if (box) {
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="verify-card verify-error">
+          <div class="verify-head">
+            <span class="verify-badge error"><svg><use href="#i-alert"/></svg> Missing URL</span>
+          </div>
+          <div class="verify-error-msg">Please enter or paste a direct download URL first.</div>
+        </div>
+      `;
+    }
+    $('source-urls')?.focus();
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="verify-spinner"></span> Verifying...`;
+  }
+  if (box) {
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="verify-pending">
+        <span class="verify-spinner"></span>
+        <span>Checking server reachability, file size, and range headers...</span>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await api('verify', { urls: lines });
+    if (!res || !res.results || !res.results.length) {
+      throw new Error('No verification response received.');
+    }
+
+    if (res.results.length === 1) {
+      const item = res.results[0];
+      if (item.ok) {
+        box.innerHTML = `
+          <div class="verify-card verify-success">
+            <div class="verify-head">
+              <span class="verify-badge success">
+                <svg><use href="#i-check"/></svg> Verified reachable
+              </span>
+              <div class="verify-meta-pills">
+                <span class="verify-pill size">${escaped(item.size_formatted)}</span>
+                <span class="verify-pill ${item.ranges ? 'range' : 'range-warn'}">
+                  ${item.ranges ? '⚡ Parallel streams supported' : '⚠️ Single stream only'}
+                </span>
+              </div>
+            </div>
+            <div class="verify-detail">
+              <span class="verify-filename" title="${escaped(item.filename)}">${escaped(item.filename)}</span>
+              ${item.resolved_url ? `<span class="verify-resolved-note" title="${escaped(item.resolved_url)}">Direct stream resolved</span>` : ''}
+            </div>
+          </div>
+        `;
+        if ($('file-preview-card')) $('file-preview-card').hidden = false;
+        if ($('preview-filename')) $('preview-filename').textContent = item.filename;
+        if ($('preview-filesize')) $('preview-filesize').textContent = item.size_formatted;
+        if ($('file-name') && !$('file-name').value.trim()) {
+          $('file-name').value = item.filename;
+        }
+        const ext = item.filename.toLowerCase().split('.').pop();
+        if (['ffpfsc', 'exfat', 'ufs'].includes(ext)) {
+          if ($('modal-dest-folder') && (!$('modal-dest-folder').value || $('modal-dest-folder').value === '/data/pkg')) {
+            $('modal-dest-folder').value = '/data/ShadowMount';
+          }
+        } else if (ext === 'pkg') {
+          if ($('modal-dest-folder') && (!$('modal-dest-folder').value || $('modal-dest-folder').value === '/data/ShadowMount')) {
+            $('modal-dest-folder').value = '/data/pkg';
+          }
+        }
+      } else {
+        box.innerHTML = `
+          <div class="verify-card verify-error">
+            <div class="verify-head">
+              <span class="verify-badge error">
+                <svg><use href="#i-alert"/></svg> Verification failed
+              </span>
+            </div>
+            <div class="verify-error-msg">${escaped(item.error || 'Server rejected connection or link expired')}</div>
+          </div>
+        `;
+      }
+    } else {
+      const allOk = res.verified_count === res.count;
+      let totalBytes = 0;
+      res.results.forEach(r => {
+        if (typeof r.size === 'number') totalBytes += r.size;
+      });
+      let totalSizeStr = '';
+      if (totalBytes > 0) {
+        if (totalBytes >= 1e9) totalSizeStr = ` (${(totalBytes / 1e9).toFixed(2)} GB total)`;
+        else totalSizeStr = ` (${(totalBytes / 1e6).toFixed(1)} MB total)`;
+      }
+
+      box.innerHTML = `
+        <div class="verify-card ${allOk ? 'verify-success' : 'verify-error'}">
+          <div class="verify-head">
+            <span class="verify-badge ${allOk ? 'success' : 'error'}">
+              <svg><use href="${allOk ? '#i-check' : '#i-alert'}"/></svg>
+              ${res.verified_count} of ${res.count} links verified reachable${totalSizeStr}
+            </span>
+          </div>
+          <div class="verify-parts-list">
+            ${res.results.map((r, i) => `
+              <div class="verify-part-row">
+                <span class="verify-part-name" title="${escaped(r.filename || r.url)}">
+                  ${r.ok ? '✓' : '✗'} Part ${i + 1}: ${escaped(r.filename || r.url.split('/').pop().split('?')[0] || r.url)}
+                </span>
+                <span class="verify-pill ${r.ok ? 'size' : 'range-warn'}">
+                  ${r.ok ? escaped(r.size_formatted) : 'Failed'}
+                </span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+  } catch (err) {
+    if (box) {
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="verify-card verify-error">
+          <div class="verify-head">
+            <span class="verify-badge error">
+              <svg><use href="#i-alert"/></svg> Verification error
+            </span>
+          </div>
+          <div class="verify-error-msg">${escaped(err.message || 'Unable to contact server')}</div>
+        </div>
+      `;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      const count = lines.length;
+      btn.innerHTML = `<svg><use href="#i-check"/></svg> ${count > 1 ? `Verify ${count} links` : 'Verify link'}`;
+    }
+  }
+};
+
+$('source-urls')?.addEventListener('input', () => {
+  updateAddPreview();
+  const btn = $('btn-verify-links');
+  if (btn) {
+    const lines = $('source-urls')?.value.trim().split('\n').filter(Boolean) || [];
+    btn.innerHTML = `<svg><use href="#i-check"/></svg> ${lines.length > 1 ? `Verify ${lines.length} links` : 'Verify link'}`;
+  }
+});
 $('local-path')?.addEventListener('input', updateAddPreview);
+$('btn-verify-links')?.addEventListener('click', runVerifyLinks);
+$('add-dialog')?.addEventListener('close', resetVerifyStatus);
 
 // Forms
 $('add-form').addEventListener('submit', async e => {
@@ -1170,6 +1344,7 @@ $('add-form').addEventListener('submit', async e => {
     $('local-path').value = '';
     $('file-name').value = '';
     $('overwrite').checked = false;
+    resetVerifyStatus();
     toast(`${r.count} transfer${r.count === 1 ? '' : 's'} added to queue`);
     page('transfers');
     await poll();
