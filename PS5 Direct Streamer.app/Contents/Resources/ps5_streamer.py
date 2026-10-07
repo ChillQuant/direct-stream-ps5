@@ -10,6 +10,7 @@ import math
 import mimetypes
 import os
 from pathlib import Path
+import platform
 import re
 import secrets
 import signal
@@ -18,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import traceback
 import socket
 import ssl
 import time
@@ -935,6 +937,7 @@ class Manager:
                 self.history = self.history[-120:]
             elif event == "complete":
                 job["state"] = "completed"
+                job.pop("error_info", None)
                 if job.get("total"):
                     job["transferred"] = job["total"]
                 elif value.get("size"):
@@ -1001,16 +1004,35 @@ class Manager:
                                 self.log("warning", job["detail"])
                             token.wait(delay)
             except Exception as e:
+                tb = traceback.format_exc()
+                summary = friendly_error(e)
                 with self.lock:
                     if token.event.is_set():
                         job["state"] = "cancelled" if job["state"] == "cancelling" else "paused"
                         job["detail"] = "Stopped · partial retained on PS5; resume checks its actual size"
                     else:
                         job["state"] = "failed"
-                        job["detail"] = friendly_error(e)
+                        job["detail"] = summary
+                        src = job.get("source", "")
+                        safe_src = re.sub(r"(token|key|auth|sig|signature|pass)=[^&]+", r"\1=REDACTED", src, flags=re.IGNORECASE) if isinstance(src, str) else src
+                        job["error_info"] = {
+                            "summary": summary,
+                            "type": type(e).__name__,
+                            "message": str(e),
+                            "traceback": tb,
+                            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "platform": f"{platform.system()} {platform.release()} ({platform.machine()})",
+                            "python": platform.python_version(),
+                            "app_version": VERSION,
+                            "unar_available": bool(find_unar_tool()),
+                            "kind": job.get("kind"),
+                            "staged": bool(job.get("staged_extraction")),
+                            "source_summary": safe_src,
+                            "destination_folder": job.get("folder") or self.settings.get("folder"),
+                        }
                         self.running = False
-                        self.log("error", f"{job['name']}: {job['detail']}")
-                        notify_macos("Direct Stream for PlayStation 5", f"{job['name']}: {job['detail']}", sound="Basso")
+                        self.log("error", f"{job['name']}: {summary}")
+                        notify_macos("Direct Stream for PlayStation 5", f"{job['name']}: {summary}", sound="Basso")
             finally:
                 token.cancel()
                 if caffeinate:

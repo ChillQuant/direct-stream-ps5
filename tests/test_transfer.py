@@ -703,6 +703,39 @@ class Integration(unittest.TestCase):
             finally:
                 m.stop()
 
+    def test_error_info_capture_on_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                m.configure(self.cfg)
+                # Add a job that points to a non-existent port to force immediate failure
+                m.add_jobs({"items": [{"source": "http://127.0.0.1:1/failing_test.pkg"}]})
+                job = m.jobs[0]
+                m.action("start")
+                deadline = time.monotonic() + 5
+                while job["state"] in ("queued", "starting", "running", "retrying") and time.monotonic() < deadline:
+                    time.sleep(0.05)
+
+                self.assertEqual(job["state"], "failed")
+                self.assertIn("error_info", job)
+                err = job["error_info"]
+                self.assertIsNotNone(err)
+                self.assertIn("traceback", err)
+                self.assertIn("summary", err)
+                self.assertIn("type", err)
+                self.assertIn("platform", err)
+                self.assertIn("python", err)
+                self.assertIn("app_version", err)
+
+                # Now report completion to verify error_info is cleaned up
+                m._report(job, "complete", {
+                    "size": 1000,
+                    "verification": "Verified"
+                })
+                self.assertNotIn("error_info", job)
+            finally:
+                m.stop()
+
 if __name__=='__main__':unittest.main()
 
 

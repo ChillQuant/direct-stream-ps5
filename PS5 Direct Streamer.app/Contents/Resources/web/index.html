@@ -613,6 +613,9 @@
             <button id="export-log" class="button outline small">
               <svg><use href="#i-export"/></svg>Export log
             </button>
+            <button id="export-diagnostics" class="button outline small" title="Download system environment, configuration, and failure telemetry">
+              <svg><use href="#i-export"/></svg>Diagnostic bundle
+            </button>
           </div>
         </header>
 
@@ -1143,6 +1146,81 @@
       <button type="submit" class="button primary">Update link</button>
     </div>
   </form>
+</dialog>
+
+
+<!-- MODAL: ERROR DIAGNOSTICS & PUSH -->
+<dialog id="error-dialog" class="studio-modal error-modal">
+  <div class="modal-header">
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <h2>Error Diagnostics</h2>
+        <span id="error-type-badge" class="meta-pill" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);">Error</span>
+      </div>
+      <p id="error-job-name" class="modal-subtitle">Review failure details and push a bug report.</p>
+    </div>
+    <button type="button" class="icon-circle-btn" data-close="error-dialog" aria-label="Close error diagnostics">×</button>
+  </div>
+
+  <div class="error-modal-body">
+    <!-- Clean Summary Alert -->
+    <div class="error-summary-box">
+      <div class="error-summary-header">
+        <svg class="error-icon" width="18" height="18" viewBox="0 0 24 24"><use href="#i-alert"/></svg>
+        <strong id="error-summary-title">Failure Cause</strong>
+      </div>
+      <p id="error-summary-text" class="error-summary-desc"></p>
+      <p id="error-recommended-action" class="error-rec-desc" style="margin-top: 6px; font-size: 12.5px; opacity: 0.85;"></p>
+    </div>
+
+    <!-- Diagnostic Details Grid -->
+    <div class="error-diagnostics-grid">
+      <div class="diag-meta-item">
+        <span class="diag-meta-label">App Version</span>
+        <span id="diag-app-ver" class="diag-meta-val">2.9.0</span>
+      </div>
+      <div class="diag-meta-item">
+        <span class="diag-meta-label">Platform</span>
+        <span id="diag-platform" class="diag-meta-val">—</span>
+      </div>
+      <div class="diag-meta-item">
+        <span class="diag-meta-label">Python</span>
+        <span id="diag-python" class="diag-meta-val">—</span>
+      </div>
+      <div class="diag-meta-item">
+        <span class="diag-meta-label">Pipeline Mode</span>
+        <span id="diag-mode" class="diag-meta-val">—</span>
+      </div>
+      <div class="diag-meta-item">
+        <span class="diag-meta-label">PS5 Destination</span>
+        <span id="diag-dest" class="diag-meta-val">—</span>
+      </div>
+      <div class="diag-meta-item">
+        <span class="diag-meta-label">Timestamp</span>
+        <span id="diag-time" class="diag-meta-val">—</span>
+      </div>
+    </div>
+
+    <!-- Technical Stack Trace (Collapsible) -->
+    <details id="error-trace-details" class="error-trace-details" open style="margin-top: 14px;">
+      <summary class="error-trace-summary" style="cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">Technical stack trace & log output</summary>
+      <div class="traceback-container">
+        <pre><code id="error-traceback-code"></code></pre>
+      </div>
+    </details>
+  </div>
+
+  <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px;">
+    <button type="button" class="button outline" data-close="error-dialog">Close</button>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <button type="button" id="btn-copy-error" class="button outline">
+        <svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-export"/></svg>Copy bug report
+      </button>
+      <button type="button" id="btn-push-github" class="button primary" style="background: #2563eb;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>Push to GitHub Issue
+      </button>
+    </div>
+  </div>
 </dialog>
 
 <div id="toast" class="toast" role="status" hidden></div>

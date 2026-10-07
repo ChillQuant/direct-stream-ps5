@@ -361,7 +361,11 @@ function row(job, index) {
   if (isActive) {
     primary = `<button class="button small outline" data-job="${job.id}" data-action="pause" ${job.state === 'pausing' || job.state === 'cancelling' ? 'disabled' : ''}>Pause</button>`;
   } else if (['paused', 'failed', 'cancelled'].includes(job.state)) {
-    primary = `<button class="button small outline" data-job="${job.id}" data-action="resume">Resume</button>`;
+    if (job.state === 'failed') {
+      primary = `<button class="button small outline" data-job="${job.id}" data-action="resume">Resume</button><button class="button small outline" data-job="${job.id}" data-action="view_error" title="View error diagnostics and push report">Error</button>`;
+    } else {
+      primary = `<button class="button small outline" data-job="${job.id}" data-action="resume">Resume</button>`;
+    }
   } else if (job.state === 'queued') {
     primary = `<button class="button small outline" data-job="${job.id}" data-action="pause">Pause</button>`;
   }
@@ -377,6 +381,9 @@ function row(job, index) {
     const isExtracting = job.decompress !== false;
     menu += `<button data-job="${job.id}" data-action="toggle_extract">${isExtracting ? 'Disable extraction (Stream raw archive)' : 'Enable extraction (Decompress to PS5)'}</button>`;
     menu += `<button data-job="${job.id}" data-action="prompt_password">${job.archive_password ? 'Edit archive password' : 'Set archive password'}</button>`;
+  }
+  if (job.state === 'failed' || job.error_info) {
+    menu += `<button data-job="${job.id}" data-action="view_error">View error report & push</button>`;
   }
   if (!isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
   if (job.state !== 'completed' && job.state !== 'cancelled') menu += `<button data-job="${job.id}" data-action="cancel">Cancel transfer</button>`;
@@ -446,6 +453,7 @@ function row(job, index) {
           <div class="game-sub-text">
             <span>${v.formatLabel}</span>
             ${job.detail ? `<span style="opacity: 0.5;">·</span><span>${escaped(job.detail)}</span>` : ''}
+            ${job.state === 'failed' ? `<button type="button" class="error-details-pill" data-job="${job.id}" data-action="view_error" title="Click to view error diagnostics and push report"><svg width="10" height="10" viewBox="0 0 24 24"><use href="#i-alert"/></svg>Diagnostics & Push</button>` : ''}
           </div>
           ${isMulti ? `
             <div class="stack-parts-panel" id="stack-panel-${job.id}" hidden>
@@ -1182,6 +1190,11 @@ document.addEventListener('visibilitychange', () => {
 
 async function jobAction(action, id) {
   const job = state.jobs.find(j => j.id === id);
+  if (action === 'view_error') {
+    if (!job) return;
+    openErrorDialog(job);
+    return;
+  }
   if (action === 'prompt_password') {
     if (!job) return;
     const current = job.archive_password || '';
@@ -2379,6 +2392,148 @@ $('export-log')?.addEventListener('click', () => {
   a.download = 'Direct-Stream-PlayStation-5-Activity.txt';
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// Diagnostic bundle export
+$('export-diagnostics')?.addEventListener('click', () => {
+  const bundle = {
+    generated_at: new Date().toISOString(),
+    version: state.version || '2.9.0',
+    connection: state.connection,
+    diagnostic: state.diagnostic,
+    settings: {
+      ...state.settings,
+      password: state.has_password ? '[CONFIGURED]' : '[NONE]'
+    },
+    failed_jobs: (state.jobs || []).filter(j => j.state === 'failed').map(j => ({
+      id: j.id,
+      name: j.name,
+      kind: j.kind,
+      state: j.state,
+      detail: j.detail,
+      transferred: j.transferred,
+      total: j.total,
+      error_info: j.error_info
+    })),
+    all_jobs_summary: (state.jobs || []).map(j => ({
+      id: j.id,
+      name: j.name,
+      state: j.state,
+      kind: j.kind,
+      transferred: j.transferred,
+      total: j.total
+    })),
+    recent_logs: state.logs || []
+  };
+  const jsonStr = JSON.stringify(bundle, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `direct-stream-diagnostics-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Diagnostic bundle downloaded');
+});
+
+// Error dialog & reporting
+let currentErrorJob = null;
+
+function openErrorDialog(job) {
+  currentErrorJob = job;
+  const err = job.error_info || {};
+  const summary = err.summary || job.detail || 'Transfer failed without specific error message.';
+  const errType = err.type || (job.state === 'failed' ? 'Transfer Failure' : 'Error');
+
+  if ($('error-job-name')) $('error-job-name').textContent = `${job.name} · Job ID: ${job.id}`;
+  if ($('error-type-badge')) $('error-type-badge').textContent = errType;
+  if ($('error-summary-title')) $('error-summary-title').textContent = errType;
+  if ($('error-summary-text')) $('error-summary-text').textContent = summary;
+
+  // Contextual guidance
+  let recommendation = 'Review your PS5 network connection and verify the destination settings.';
+  const sLow = summary.toLowerCase();
+  if (sLow.includes('password') || sLow.includes('encrypt')) {
+    recommendation = 'Click "Password Required" or use the action menu on the transfer item to configure or update the archive password.';
+  } else if (sLow.includes('401') || sLow.includes('403') || sLow.includes('denied') || sLow.includes('expired')) {
+    recommendation = 'Direct download link expired or single-use token expired. Click "Update link" to paste a fresh URL.';
+  } else if (sLow.includes('404')) {
+    recommendation = 'File not found on hosting server. The file may have been taken down.';
+  } else if (sLow.includes('space') || sLow.includes('storage')) {
+    recommendation = 'Insufficient disk space. Free up storage on your PS5 or Mac staging disk.';
+  } else if (sLow.includes('refused')) {
+    recommendation = 'Connection refused by PS5. Ensure the PS5 FTP server payload (e.g. GoldHEN / FTPS5) is running on port 1337 or 2121.';
+  } else if (sLow.includes('unar') || sLow.includes('extraction')) {
+    recommendation = 'Archive extraction error. Ensure the archive is not corrupted and is supported by unar.';
+  }
+  if ($('error-recommended-action')) $('error-recommended-action').textContent = `Suggested fix: ${recommendation}`;
+
+  if ($('diag-app-ver')) $('diag-app-ver').textContent = err.app_version || state.version || '2.9.0';
+  if ($('diag-platform')) $('diag-platform').textContent = err.platform || 'macOS';
+  if ($('diag-python')) $('diag-python').textContent = err.python || 'Python 3';
+  if ($('diag-mode')) $('diag-mode').textContent = (job.staged_extraction || (job.is_archive && job.decompress !== false)) ? 'Staged Extraction (unar)' : `${job.kind} direct stream`;
+  if ($('diag-dest')) $('diag-dest').textContent = job.folder || state.settings?.folder || '/data/ShadowMount';
+  if ($('diag-time')) $('diag-time').textContent = err.time || new Date().toLocaleTimeString();
+
+  const tbCode = err.traceback || (job.detail ? `${job.detail}\n\n(No Python stack trace available for this event)` : 'No traceback captured.');
+  if ($('error-traceback-code')) $('error-traceback-code').textContent = tbCode;
+
+  $('error-dialog')?.showModal();
+}
+
+function generateMarkdownBugReport(job) {
+  const err = job.error_info || {};
+  const summary = err.summary || job.detail || 'Transfer failed';
+  const errType = err.type || 'TransferError';
+  const logsSample = (state.logs || [])
+    .slice(-20)
+    .map(l => `[${l.time}] ${l.level.toUpperCase()} ${l.message}`)
+    .join('\n');
+
+  return [
+    `### Bug Report: Transfer Failure`,
+    ``,
+    `**Summary:** ${summary}`,
+    `**Error Type:** \`${errType}\``,
+    ``,
+    `#### Environment`,
+    `- **App Version:** ${err.app_version || state.version || '2.9.0'}`,
+    `- **Platform:** ${err.platform || 'macOS'}`,
+    `- **Python:** ${err.python || '3.x'}`,
+    `- **Archive Tool (unar):** ${err.unar_available ? 'Detected' : 'Not detected'}`,
+    `- **Job Kind:** \`${job.kind}\` (Staged Extraction: ${job.staged_extraction ? 'Yes' : 'No'})`,
+    `- **PS5 Destination:** \`${job.folder || state.settings?.folder || '/data/ShadowMount'}\``,
+    `- **Timestamp:** ${err.time || new Date().toISOString()}`,
+    ``,
+    `#### Python Stack Trace`,
+    '```python',
+    err.traceback || summary,
+    '```',
+    ``,
+    `#### Recent Activity Logs`,
+    '```text',
+    logsSample || 'No recent activity logs',
+    '```'
+  ].join('\n');
+}
+
+$('btn-copy-error')?.addEventListener('click', () => {
+  if (!currentErrorJob) return;
+  const md = generateMarkdownBugReport(currentErrorJob);
+  navigator.clipboard.writeText(md).then(() => {
+    toast('Diagnostic report copied to clipboard. Ready to paste in GitHub or chat.');
+  }).catch(() => {
+    toast('Failed to copy to clipboard', true);
+  });
+});
+
+$('btn-push-github')?.addEventListener('click', () => {
+  if (!currentErrorJob) return;
+  const err = currentErrorJob.error_info || {};
+  const title = `[Bug]: ${err.type || 'Error'} - ${(err.summary || currentErrorJob.detail || 'Transfer failure').slice(0, 80)}`;
+  const md = generateMarkdownBugReport(currentErrorJob);
+  const url = `https://github.com/ChillQuant/direct-stream-ps5/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(md)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
 });
 
 // Sound toggle
