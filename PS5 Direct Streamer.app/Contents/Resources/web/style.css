@@ -593,6 +593,16 @@ a { color: inherit; text-decoration: none; }
   color: var(--green-text);
 }
 
+.status-badge.extracting {
+  background: rgba(217, 119, 6, 0.12);
+  color: #d97706;
+}
+
+.status-badge.downloading {
+  background: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
+}
+
 .transfer-title-row {
   margin-top: -4px;
 }
@@ -604,6 +614,75 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: -0.02em;
   margin: 0;
   word-break: break-all;
+}
+
+.active-phase-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  background: rgba(22, 104, 227, 0.08);
+  border: 1px solid rgba(22, 104, 227, 0.2);
+  color: #1668e3;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.active-phase-bar .active-phase-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.active-phase-bar.extracting {
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.25);
+  color: #d97706;
+}
+
+.active-phase-bar.extracting .active-phase-dot {
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+
+.active-phase-bar.downloading {
+  background: rgba(124, 58, 237, 0.08);
+  border-color: rgba(124, 58, 237, 0.25);
+  color: #7c3aed;
+}
+
+.active-phase-bar.downloading .active-phase-dot {
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+
+.active-phase-bar.streaming {
+  background: rgba(22, 104, 227, 0.08);
+  border-color: rgba(22, 104, 227, 0.2);
+  color: #1668e3;
+}
+
+.active-phase-bar.completed {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #10b981;
+}
+
+.active-phase-bar.failed {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
 }
 
 /* Progress Meta Row */
@@ -1132,6 +1211,26 @@ a { color: inherit; text-decoration: none; }
   background: #f5f3ff;
   color: #7c3aed;
   border: 1px solid #ddd6fe;
+}
+.meta-pill.pill-pwd-ready {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.meta-pill.pill-pwd-ready:hover {
+  background: rgba(16, 185, 129, 0.22);
+}
+.meta-pill.pill-pwd-needed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.meta-pill.pill-pwd-needed:hover {
+  background: rgba(239, 68, 68, 0.25);
 }
 
 .row-progress {

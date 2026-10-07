@@ -649,6 +649,60 @@ class Integration(unittest.TestCase):
         finally:
             shutil.rmtree(split_work, ignore_errors=True)
 
+    def test_set_password_action(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                m.add_jobs({"items": [{"source": "http://127.0.0.1:9/game.rar"}]})
+                job = m.jobs[0]
+                job["state"] = "failed"
+                job["detail"] = "Archive extraction failed: Password required"
+
+                # Set password
+                m.action("set_password", job["id"], {"password": "secret_password"})
+                self.assertEqual(job["archive_password"], "secret_password")
+                self.assertTrue(job["archive_encrypted"])
+                self.assertTrue(job["staged_extraction"])
+                self.assertTrue(job["decompress"])
+                self.assertEqual(job["state"], "queued")
+                self.assertIn("Password configured", job["detail"])
+
+                # Clear password
+                m.action("set_password", job["id"], {"password": ""})
+                self.assertIsNone(job["archive_password"])
+                self.assertEqual(job["detail"], "Password cleared")
+            finally:
+                m.stop()
+
+    def test_report_completion_progress_sync(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                m.add_jobs({"items": [{"source": "http://127.0.0.1:9/game.pkg"}]})
+                job = m.jobs[0]
+                job["total"] = 400000000
+                job["transferred"] = 200000000
+
+                # Test progress event updates job transferred and total
+                m._report(job, "progress", {
+                    "upload_bps": 5000000,
+                    "download_bps": 0,
+                    "transferred": 250000000,
+                    "total": 400000000
+                })
+                self.assertEqual(job["transferred"], 250000000)
+
+                # Test complete event ensures job transferred equals total
+                m._report(job, "complete", {
+                    "size": 400000000,
+                    "verification": "PS5 file size verified"
+                })
+                self.assertEqual(job["state"], "completed")
+                self.assertEqual(job["transferred"], 400000000)
+                self.assertEqual(job["transferred"], job["total"])
+            finally:
+                m.stop()
+
 if __name__=='__main__':unittest.main()
 
 

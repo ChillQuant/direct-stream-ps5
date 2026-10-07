@@ -1691,6 +1691,7 @@ def transfer_staged_archive(job, settings, token, report, save):
         if ret != 0:
             err = (stderr or "").strip() or (stdout or "").strip()
             if "password" in err.lower() or "encrypted" in err.lower():
+                job["archive_encrypted"] = True
                 hint_str = f" (tried password '{pwd}')" if pwd else ""
                 raise TransferError(f"Archive extraction failed: Password required or incorrect{hint_str}.")
             raise TransferError(f"Archive extraction failed (code {ret}): {err[:200]}")
@@ -1708,35 +1709,34 @@ def transfer_staged_archive(job, settings, token, report, save):
             else:
                 target_ps5_folder = f"{dest_base.rstrip('/')}/{payload_name}"
 
-            folder_job = {
-                **job,
-                "kind": "folder",
-                "source": payload_path,
-                "name": payload_name,
-                "folder": target_ps5_folder,
-                "staged_extraction": False,
-                "is_archive": False,
-                "completed_files": job.get("completed_files", [])
-            }
+            job["kind"] = "folder"
+            job["source"] = payload_path
+            job["extracted_name"] = payload_name
+            job["folder"] = target_ps5_folder
+            job["staged_extraction"] = False
+            job["is_archive"] = False
             report("status", f"Transferring {payload_name} to PS5")
-            return transfer_folder(folder_job, settings, token, report, save)
+            res = transfer_folder(job, settings, token, report, save)
+            job["transferred"] = job.get("total", job.get("transferred", 0))
+            save()
+            return res
         else:
             # Single package file (.pkg / .ffpfsc)
             if dest_base == "/data/ShadowMount" and payload_name.lower().endswith(".pkg"):
                 dest_base = "/data/pkg"
-            file_job = {
-                **job,
-                "kind": "local",
-                "source": payload_path,
-                "name": payload_name,
-                "folder": dest_base,
-                "decompress": False,
-                "staged_extraction": False,
-                "is_archive": False,
-                "total": os.path.getsize(payload_path)
-            }
+            job["kind"] = "local"
+            job["source"] = payload_path
+            job["extracted_name"] = payload_name
+            job["folder"] = dest_base
+            job["decompress"] = False
+            job["staged_extraction"] = False
+            job["is_archive"] = False
+            job["total"] = os.path.getsize(payload_path)
             report("status", f"Transferring {payload_name} to PS5")
-            return transfer(file_job, settings, token, report, save)
+            res = transfer(job, settings, token, report, save)
+            job["transferred"] = job.get("total", job.get("transferred", 0))
+            save()
+            return res
 
     finally:
         # Guarantee zero storage leak on Mac

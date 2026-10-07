@@ -743,6 +743,22 @@ class Manager:
                             except OSError:
                                 pass
                         job["detail"] = "Extraction disabled: will stream raw archive as-is"
+                elif action == "set_password":
+                    if job["id"] == self.current:
+                        raise TransferError("Pause the transfer before updating password.")
+                    pwd = (extra or {}).get("password", "")
+                    job["archive_password"] = pwd if pwd else None
+                    if pwd:
+                        job["archive_encrypted"] = True
+                        job["staged_extraction"] = True
+                        job["decompress"] = True
+                        if job["state"] in ("failed", "paused"):
+                            job["state"] = "queued"
+                            job["detail"] = "Password configured · Queued for transfer"
+                        else:
+                            job["detail"] = "Password configured"
+                    else:
+                        job["detail"] = "Password cleared"
                 else:
                     raise TransferError("Unknown queue action.")
             self.save()
@@ -911,10 +927,19 @@ class Manager:
                 self.log("info", f"Source: {'parallel ranges available' if value['ranges'] else 'single stream only'}; resume {'available' if value['resumable'] else 'unavailable without stable source metadata'}.")
             elif event == "progress":
                 self.metrics = value
+                if "transferred" in value:
+                    job["transferred"] = value["transferred"]
+                if "total" in value and value["total"]:
+                    job["total"] = value["total"]
                 self.history.append({"up": value["upload_bps"], "down": value["download_bps"]})
                 self.history = self.history[-120:]
             elif event == "complete":
                 job["state"] = "completed"
+                if job.get("total"):
+                    job["transferred"] = job["total"]
+                elif value.get("size"):
+                    job["total"] = value["size"]
+                    job["transferred"] = value["size"]
                 if job.get("kind") == "folder":
                     cnt = value.get("files_count") or job.get("files_count")
                     job["detail"] = f"Complete · {cnt} files verified on PS5" if cnt else "Complete · Folder structure verified"

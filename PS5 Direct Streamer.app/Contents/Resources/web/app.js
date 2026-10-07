@@ -355,7 +355,7 @@ function parseJobVisuals(job) {
 }
 
 function row(job, index) {
-  const pct = job.total ? Math.min(100, job.transferred / job.total * 100) : (job.state === 'completed' ? 100 : 0);
+  const pct = job.state === 'completed' ? 100 : (job.total ? Math.min(100, (job.transferred || 0) / job.total * 100) : 0);
   const isActive = activeStates.includes(job.state);
   let primary = '';
   if (isActive) {
@@ -376,6 +376,7 @@ function row(job, index) {
   if (isArchive && !isActive && job.state !== 'completed') {
     const isExtracting = job.decompress !== false;
     menu += `<button data-job="${job.id}" data-action="toggle_extract">${isExtracting ? 'Disable extraction (Stream raw archive)' : 'Enable extraction (Decompress to PS5)'}</button>`;
+    menu += `<button data-job="${job.id}" data-action="prompt_password">${job.archive_password ? 'Edit archive password' : 'Set archive password'}</button>`;
   }
   if (!isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
   if (job.state !== 'completed' && job.state !== 'cancelled') menu += `<button data-job="${job.id}" data-action="cancel">Cancel transfer</button>`;
@@ -436,7 +437,11 @@ function row(job, index) {
               </button>
             ` : ''}
             ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? 'Extract' : 'Raw'}</span>` : ''}
-            ${job.archive_encrypted ? `<span class="meta-pill" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);">Encrypted · Password Required</span>` : ''}
+            ${job.archive_encrypted ? (
+              job.archive_password
+                ? `<span class="meta-pill pill-pwd-ready" data-job="${job.id}" data-action="prompt_password" title="Archive password configured (click to edit)">Password Set</span>`
+                : `<span class="meta-pill pill-pwd-needed" data-job="${job.id}" data-action="prompt_password" title="Encrypted archive requires password (click to set)">Password Required</span>`
+            ) : ''}
           </div>
           <div class="game-sub-text">
             <span>${v.formatLabel}</span>
@@ -832,7 +837,17 @@ function render(s) {
   if ($('page-conn-msg')) $('page-conn-msg').textContent = s.connection.state === 'connected' ? 'PS5 ready for transfers' : (s.connection.state === 'unknown' ? (s.settings.host ? 'Click Test connection to verify' : 'Enter PS5 address above') : (s.connection.message || 'Check IP and network'));
 
   if ($('pipeline-settings')) $('pipeline-settings').textContent = `${s.settings.streams} streams · ${s.settings.buffer_mb} MiB RAM`;
-  if ($('source-mode')) $('source-mode').textContent = active?.kind === 'folder' ? 'Local directory · Recursive folder transfer' : (active?.kind === 'local' ? 'Local file · zero RAM copy' : (active?.kind === 'multipart' ? 'Multi-part stitch · direct PS5 stream' : 'Direct stream · async buffers'));
+  let modeDesc = 'Direct stream · async buffers';
+  if (active?.staged_extraction || (active?.is_archive && active?.decompress !== false)) {
+    modeDesc = 'Staged Extraction · Decrypt & unpack to /data/ShadowMount';
+  } else if (active?.kind === 'folder') {
+    modeDesc = 'Local directory · Recursive folder transfer';
+  } else if (active?.kind === 'local') {
+    modeDesc = 'Local file · zero RAM copy';
+  } else if (active?.kind === 'multipart') {
+    modeDesc = 'Multi-part stitch · direct PS5 stream';
+  }
+  if ($('source-mode')) $('source-mode').textContent = modeDesc;
 
   const lightbar = $('status-lightbar');
   if (lightbar) {
@@ -870,20 +885,49 @@ function render(s) {
   }
 
   const stateBadge = $('live-state');
+  const phaseBar = $('active-phase-bar');
+  const phaseText = $('active-phase-text');
   if (active) {
     if ($('active-name')) $('active-name').textContent = active.name;
     const st = active.state;
+    const det = (active.detail || '').toLowerCase();
     if (stateBadge) {
-      stateBadge.textContent = st === 'running' ? 'Transferring' : st === 'completed' ? 'Verified' : st[0].toUpperCase() + st.slice(1);
-      stateBadge.className = 'status-badge ' + (st === 'running' ? 'transferring' : st);
+      let badgeLabel = st === 'running' ? 'Transferring' : st === 'completed' ? 'Verified' : st[0].toUpperCase() + st.slice(1);
+      let badgeClass = st === 'running' ? 'transferring' : st;
+      if (st === 'running' && det.includes('extracting')) {
+        badgeLabel = 'Extracting';
+        badgeClass = 'extracting';
+      } else if (st === 'running' && det.includes('downloading')) {
+        badgeLabel = 'Downloading';
+        badgeClass = 'downloading';
+      }
+      stateBadge.textContent = badgeLabel;
+      stateBadge.className = 'status-badge ' + badgeClass;
     }
-    const pct = active.total ? Math.min(100, active.transferred / active.total * 100) : 0;
+    const pct = active.state === 'completed' ? 100 : (active.total ? Math.min(100, (active.transferred || 0) / active.total * 100) : 0);
     if ($('progress-fill')) $('progress-fill').style.width = pct + '%';
     if ($('main-progress')) $('main-progress').setAttribute('aria-valuenow', pct.toFixed(1));
-    if ($('progress-percent')) $('progress-percent').textContent = active.total ? pct.toFixed(0) + '%' : '—';
-    if ($('progress-bytes')) $('progress-bytes').textContent = `${bytes(active.transferred)} of ${bytes(active.total)}`;
+    if ($('progress-percent')) $('progress-percent').textContent = active.total ? pct.toFixed(0) + '%' : (active.state === 'completed' ? '100%' : '—');
+    const transferredBytes = active.state === 'completed' && active.total ? active.total : (active.transferred || 0);
+    if ($('progress-bytes')) $('progress-bytes').textContent = `${bytes(transferredBytes)} of ${bytes(active.total)}`;
     if ($('live-speed-heading')) $('live-speed-heading').hidden = false;
+
+    if (active.detail) {
+      if (phaseBar && phaseText) {
+        phaseBar.hidden = false;
+        phaseText.textContent = active.detail;
+        let pCls = 'streaming';
+        if (det.includes('extracting')) pCls = 'extracting';
+        else if (det.includes('downloading')) pCls = 'downloading';
+        else if (det.includes('complete') || st === 'completed') pCls = 'completed';
+        else if (st === 'failed') pCls = 'failed';
+        phaseBar.className = 'active-phase-bar ' + pCls;
+      }
+    } else if (phaseBar) {
+      phaseBar.hidden = true;
+    }
   } else {
+    if (phaseBar) phaseBar.hidden = true;
     const next = jobs.find(j => j.state === 'queued');
     if (next) {
       if ($('active-name')) $('active-name').textContent = next.name;
@@ -1138,6 +1182,15 @@ document.addEventListener('visibilitychange', () => {
 
 async function jobAction(action, id) {
   const job = state.jobs.find(j => j.id === id);
+  if (action === 'prompt_password') {
+    if (!job) return;
+    const current = job.archive_password || '';
+    const val = prompt(`Enter archive password for "${job.name}":\n(Leave blank to clear password)`, current);
+    if (val === null) return;
+    const r = await perform('action', { action: 'set_password', id, password: val.trim() });
+    if (r) toast(val.trim() ? 'Archive password configured' : 'Archive password cleared');
+    return;
+  }
   if (action === 'edit') {
     editId = id;
     $('edit-source').value = job.source;
@@ -1155,7 +1208,7 @@ async function jobAction(action, id) {
 
 // Global click delegation
 document.addEventListener('click', async e => {
-  const el = e.target.closest('button,a.brand');
+  const el = e.target.closest('button,a.brand,[data-action]');
   if (!el) return;
   if (el.classList.contains('brand')) {
     e.preventDefault();
@@ -1169,7 +1222,7 @@ document.addEventListener('click', async e => {
   if (el.dataset.action) {
     el.closest('details')?.removeAttribute('open');
     await jobAction(el.dataset.action, el.dataset.job);
-    el.blur();
+    el.blur?.();
     await poll();
   }
   if (el.dataset.folder) {
@@ -1481,7 +1534,7 @@ const updateAddPreview = () => {
       if (pwdHint && $('archive-password') && !$('archive-password').value) {
         $('archive-password').value = pwdHint;
         if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
-        if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Editable if needed.';
+        if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Encrypted archives stage locally in temporary storage and cleanly self-delete once on PS5.';
       }
     } else if (modalExtractMode) {
       if ($('preview-filename')) $('preview-filename').textContent = `${archName} Archive: ${name}`;
@@ -1491,7 +1544,7 @@ const updateAddPreview = () => {
         if ($('archive-password') && !$('archive-password').value) {
           $('archive-password').value = pwdHint;
           if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
-          if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Editable if needed.';
+          if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Encrypted archives stage locally in temporary storage and cleanly self-delete once on PS5.';
         }
       }
     } else {
@@ -1628,7 +1681,7 @@ const runVerifyLinks = async () => {
           if (item.password_hint && $('archive-password')) {
             $('archive-password').value = item.password_hint;
             if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
-            if ($('password-hint-text')) $('password-hint-text').textContent = 'Password auto-detected from filename. Editable if needed.';
+            if ($('password-hint-text')) $('password-hint-text').textContent = 'Password auto-detected from filename. Encrypted archives stage locally in temporary storage and cleanly self-delete once on PS5.';
           }
           const hint = $('archive-mode-hint');
           if (hint) {

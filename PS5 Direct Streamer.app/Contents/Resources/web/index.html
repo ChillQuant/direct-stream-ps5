@@ -189,6 +189,10 @@
 
           <div class="transfer-title-row">
             <h2 id="active-name" class="transfer-title">No active transfer</h2>
+            <div id="active-phase-bar" class="active-phase-bar" hidden>
+              <span class="active-phase-dot"></span>
+              <span id="active-phase-text" class="active-phase-text"></span>
+            </div>
           </div>
 
           <!-- Progress Meta Row -->
@@ -964,7 +968,9 @@
           <svg class="field-icon"><use href="#i-key"/></svg>
           <input id="archive-password" type="text" placeholder="Password (e.g. DLPSGAME.COM)" spellcheck="false">
         </div>
-        <p id="password-hint-text" class="field-hint" style="margin-top: 4px;"></p>
+        <p id="password-hint-text" class="field-hint" style="margin-top: 4px;">
+          Encrypted archives are unpacked locally into secure temporary staging and cleanly deleted once transferred to PS5.
+        </p>
       </div>
     </div>
 
