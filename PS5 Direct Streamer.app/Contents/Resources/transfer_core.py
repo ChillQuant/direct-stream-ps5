@@ -1188,6 +1188,9 @@ def transfer_folder(job, settings, token, report, save):
         previous = meter.snapshot()
         hist = [(started, previous["uploaded"], previous["downloaded"])]
 
+        current_remote_dir = None
+        ensured_dirs = set()
+
         for idx, (rel_p, abs_p, file_sz) in enumerate(file_entries):
             token.check()
             if rel_p in completed_set:
@@ -1195,12 +1198,15 @@ def transfer_folder(job, settings, token, report, save):
 
             rel_dir = os.path.dirname(rel_p)
             file_name = os.path.basename(rel_p)
-            if rel_dir:
-                remote_dir = f"{base_target_folder.rstrip('/')}/{rel_dir}"
-            else:
-                remote_dir = base_target_folder
+            remote_dir = f"{base_target_folder.rstrip('/')}/{rel_dir}" if rel_dir else base_target_folder
 
-            ensure_folder(ftp, remote_dir)
+            if remote_dir != current_remote_dir:
+                if remote_dir in ensured_dirs:
+                    ftp.cwd(remote_dir)
+                else:
+                    ensure_folder(ftp, remote_dir)
+                    ensured_dirs.add(remote_dir)
+                current_remote_dir = remote_dir
 
             # Check if remote file exists and is already identical in size
             dest_size = remote_size(ftp, file_name)
@@ -1299,7 +1305,7 @@ def transfer_folder(job, settings, token, report, save):
             if actual != file_sz:
                 raise TransferError(f"Size mismatch on {rel_p}: expected {file_sz}, received {actual}.")
 
-            if remote_size(ftp, file_name) is not None and job.get("overwrite"):
+            if job.get("overwrite") and remote_size(ftp, file_name) is not None:
                 try:
                     ftp.delete(file_name)
                 except Exception:
@@ -1517,7 +1523,7 @@ def transfer_staged_archive(job, settings, token, report, save):
                         with open(target_p, "wb") as f_out:
                             while not token.event.is_set():
                                 token.check()
-                                chunk = reader.read(256 * 1024)
+                                chunk = reader.read(1024 * 1024)
                                 if not chunk:
                                     break
                                 f_out.write(chunk)
@@ -1605,7 +1611,7 @@ def transfer_staged_archive(job, settings, token, report, save):
                 with open(archive_path, "wb") as f_out:
                     while not token.event.is_set():
                         token.check()
-                        chunk = reader.read(256 * 1024)
+                        chunk = reader.read(1024 * 1024)
                         if not chunk:
                             break
                         f_out.write(chunk)
@@ -1658,7 +1664,7 @@ def transfer_staged_archive(job, settings, token, report, save):
             or ""
         )
 
-        cmd = [unar_bin, "-q", "-f", "-o", extract_dir]
+        cmd = [unar_bin, "-q", "-f", "-nq", "-k", "skip", "-o", extract_dir]
         if pwd:
             cmd.extend(["-p", pwd])
         cmd.append(archive_path)
