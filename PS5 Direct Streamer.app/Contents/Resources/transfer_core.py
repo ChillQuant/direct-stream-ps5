@@ -1474,45 +1474,53 @@ def transfer_staged_archive(job, settings, token, report, save):
                 "is_folder": False
             })
 
-            reader = make_reader(raw_src, offset=0, token=token)
+            download_settings = {
+                "buffer_mb": 32,
+                "streams": 4,
+                "chunk_mb": 8,
+                **settings
+            }
             meter = Meter()
+            reader = make_reader(raw_src, 0, download_settings, token, meter)
             started = last = time.monotonic()
             hist = [(started, 0, 0)]
             downloaded = 0
 
-            with open(archive_path, "wb") as f_out:
-                while not token.event.is_set():
-                    token.check()
-                    chunk = reader.read(256 * 1024)
-                    if not chunk:
-                        break
-                    f_out.write(chunk)
-                    downloaded += len(chunk)
-                    meter.add(downloaded=len(chunk))
-                    now = time.monotonic()
-                    if now - last >= 0.4:
-                        snap = meter.snapshot()
-                        _, down_rate = windowed_rates(hist, now, snap)
-                        rem = max(0, total_size - downloaded) if total_size else 0
-                        eta = rem / down_rate if (down_rate > 0 and total_size) else None
-                        report("progress", {
-                            "transferred": downloaded,
-                            "total": total_size or downloaded,
-                            "upload_bps": 0,
-                            "download_bps": down_rate,
-                            "buffered": 0,
-                            "buffer_capacity": 32 * MIB,
-                            "elapsed": now - started,
-                            "eta": eta,
-                            "bottleneck": "Download server",
-                            "offset": 0,
-                            "current_file": archive_name
-                        })
-                        job["transferred"] = downloaded
-                        job["detail"] = f"Downloading archive ({format_bytes(downloaded)} / {format_bytes(total_size)})"
-                        last = now
+            try:
+                with open(archive_path, "wb") as f_out:
+                    while not token.event.is_set():
+                        token.check()
+                        chunk = reader.read(256 * 1024)
+                        if not chunk:
+                            break
+                        f_out.write(chunk)
+                        downloaded += len(chunk)
+                        meter.add(downloaded=len(chunk))
+                        now = time.monotonic()
+                        if now - last >= 0.4:
+                            snap = meter.snapshot()
+                            _, down_rate = windowed_rates(hist, now, snap)
+                            rem = max(0, total_size - downloaded) if total_size else 0
+                            eta = rem / down_rate if (down_rate > 0 and total_size) else None
+                            report("progress", {
+                                "transferred": downloaded,
+                                "total": total_size or downloaded,
+                                "upload_bps": 0,
+                                "download_bps": down_rate,
+                                "buffered": 0,
+                                "buffer_capacity": download_settings.get("buffer_mb", 32) * MIB,
+                                "elapsed": now - started,
+                                "eta": eta,
+                                "bottleneck": "Download server",
+                                "offset": 0,
+                                "current_file": archive_name
+                            })
+                            job["transferred"] = downloaded
+                            job["detail"] = f"Downloading archive ({format_bytes(downloaded)} / {format_bytes(total_size)})"
+                            last = now
+            finally:
+                reader.close()
 
-            reader.close()
             if total_size and downloaded != total_size:
                 raise TransferError(f"Download incomplete: expected {total_size} bytes, received {downloaded} bytes.")
         else:
@@ -1522,7 +1530,7 @@ def transfer_staged_archive(job, settings, token, report, save):
             archive_name = os.path.basename(archive_path)
 
         report("status", f"Extracting {archive_name}")
-        job["detail"] = f"Extracting archive contents with password…"
+        job["detail"] = "Extracting archive contents with password..."
         save()
 
         extract_dir = os.path.join(staging_dir, "extracted")
@@ -1542,11 +1550,15 @@ def transfer_staged_archive(job, settings, token, report, save):
 
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
-            while proc.poll() is None:
+            while True:
                 if token.event.is_set():
                     proc.kill()
                     token.check()
-                time.sleep(0.5)
+                try:
+                    stdout, stderr = proc.communicate(timeout=0.5)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
         except Exception:
             try:
                 proc.kill()
@@ -1555,9 +1567,8 @@ def transfer_staged_archive(job, settings, token, report, save):
             raise
 
         ret = proc.returncode
-        stdout, stderr = proc.communicate()
         if ret != 0:
-            err = stderr.strip() or stdout.strip()
+            err = (stderr or "").strip() or (stdout or "").strip()
             if "password" in err.lower() or "encrypted" in err.lower():
                 hint_str = f" (tried password '{pwd}')" if pwd else ""
                 raise TransferError(f"Archive extraction failed: Password required or incorrect{hint_str}.")
@@ -1582,6 +1593,8 @@ def transfer_staged_archive(job, settings, token, report, save):
                 "source": payload_path,
                 "name": payload_name,
                 "folder": target_ps5_folder,
+                "staged_extraction": False,
+                "is_archive": False,
                 "completed_files": job.get("completed_files", [])
             }
             report("status", f"Transferring {payload_name} to PS5")
@@ -1597,6 +1610,8 @@ def transfer_staged_archive(job, settings, token, report, save):
                 "name": payload_name,
                 "folder": dest_base,
                 "decompress": False,
+                "staged_extraction": False,
+                "is_archive": False,
                 "total": os.path.getsize(payload_path)
             }
             report("status", f"Transferring {payload_name} to PS5")

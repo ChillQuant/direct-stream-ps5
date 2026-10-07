@@ -2,8 +2,10 @@
 import hashlib
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import io
 import json
 import logging
+import zipfile
 from pathlib import Path
 import sys
 import tempfile
@@ -35,7 +37,11 @@ class HTTPFixture(BaseHTTPRequestHandler):
         if path == '/html':
             self.send_response(200); self.send_header('Content-Type','text/html'); self.send_header('Content-Length','3'); self.end_headers(); self.wfile.write(b'bad'); return
         raw = self.headers.get('Range','');
-        full_data = PAYLOAD
+        custom = getattr(HTTPFixture, 'custom_files', {})
+        if path in custom:
+            full_data = custom[path]
+        else:
+            full_data = PAYLOAD
         if path.startswith('/multipart-'):
             p_idx = int(path.split('-')[1])
             part_sz = len(PAYLOAD) // 3
@@ -547,6 +553,46 @@ class Integration(unittest.TestCase):
         self.assertTrue((dest_game / "eboot.bin").is_file(), "eboot.bin should exist")
         self.assertTrue((dest_game / "sce_sys" / "param.json").is_file(), "param.json should exist")
         self.assertGreater(len(list(dest_game.iterdir())), 5)
+
+    def test_transfer_staged_archive_url_zip(self):
+        if not find_unar_tool():
+            self.skipTest("unar binary not found")
+
+        # Create a small valid zip archive in memory with game structure
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("BalatroTestGame/eboot.bin", b"ELF_HEADER_DUMMY_EBOOT_CONTENT" * 100)
+            zf.writestr("BalatroTestGame/sce_sys/param.json", b'{"titleId": "CUSA12345"}')
+            zf.writestr("BalatroTestGame/data/game.dat", b"GAME_ASSET_DATA" * 50)
+        zip_bytes = buf.getvalue()
+
+        HTTPFixture.custom_files = getattr(HTTPFixture, "custom_files", {})
+        HTTPFixture.custom_files["/balatro_game.zip"] = zip_bytes
+
+        job = {
+            "id": "staged_url_test",
+            "name": "balatro_game.zip",
+            "source": self.url("/balatro_game.zip"),
+            "kind": "url",
+            "folder": "/data/ShadowMount",
+            "decompress": True,
+            "staged_extraction": True,
+            "completed_files": []
+        }
+        reports = []
+        def report(k, v):
+            reports.append((k, v))
+        def save():
+            pass
+
+        tok = StopToken()
+        transfer_staged_archive(job, self.cfg, tok, report, save)
+
+        dest_game = self.root / "data" / "ShadowMount" / "BalatroTestGame"
+        self.assertTrue(dest_game.is_dir(), "Game folder should exist on FTP server")
+        self.assertTrue((dest_game / "eboot.bin").is_file(), "eboot.bin should exist on FTP server")
+        self.assertTrue((dest_game / "sce_sys" / "param.json").is_file(), "param.json should exist on FTP server")
+        self.assertTrue((dest_game / "data" / "game.dat").is_file(), "game.dat should exist on FTP server")
 
 if __name__=='__main__':unittest.main()
 
