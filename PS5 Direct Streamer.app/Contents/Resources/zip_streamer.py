@@ -10,8 +10,10 @@ import io
 import os
 import queue
 import re
+import shutil
 import socket
 import struct
+import subprocess
 import threading
 import time
 import urllib.error
@@ -23,6 +25,15 @@ from dataclasses import dataclass
 
 BLOCK = 1024 * 1024  # 1 MiB chunks
 HEADERS = {"User-Agent": "DirectStreamPS5/2.9.0"}
+
+ARCHIVE_EXTENSIONS = (
+    ".zip", ".zip64",
+    ".rar",
+    ".7z",
+    ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".gz",
+)
+
+_ARCHIVE_TOOL = None
 
 
 class HttpRangeStream(io.RawIOBase):
@@ -102,43 +113,94 @@ class HttpRangeStream(io.RawIOBase):
         return to_read
 
 
+def is_archive_candidate(filename_or_url):
+    """Check if target name or URL path looks like a supported compressed archive."""
+    path = urllib.parse.urlsplit(str(filename_or_url)).path.lower()
+    return any(path.endswith(ext) for ext in ARCHIVE_EXTENSIONS)
+
+
 def is_zip_candidate(filename_or_url):
     """Check if target name or URL path looks like a ZIP file."""
     path = urllib.parse.urlsplit(str(filename_or_url)).path.lower()
     return path.endswith(".zip") or path.endswith(".zip64")
 
 
+def get_archive_type(filename_or_url):
+    """Returns detected archive format: 'zip', 'rar', '7z', 'tar', etc."""
+    path = urllib.parse.urlsplit(str(filename_or_url)).path.lower()
+    if path.endswith(".zip") or path.endswith(".zip64"):
+        return "zip"
+    if path.endswith(".rar"):
+        return "rar"
+    if path.endswith(".7z"):
+        return "7z"
+    if any(path.endswith(ext) for ext in (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz")):
+        return "tar"
+    if path.endswith(".gz"):
+        return "gz"
+    return "archive"
+
+
+def find_archive_tool():
+    """Find system archive extraction tool (bsdtar/tar). Cached."""
+    global _ARCHIVE_TOOL
+    if _ARCHIVE_TOOL is not None:
+        return _ARCHIVE_TOOL or None
+
+    candidates = ["bsdtar", "/usr/bin/bsdtar", "tar", "/usr/bin/tar"]
+    if os.name == "nt":
+        candidates.append(os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tar.exe"))
+
+    for c in candidates:
+        if os.path.isabs(c):
+            if os.path.isfile(c) and os.access(c, os.X_OK):
+                _ARCHIVE_TOOL = c
+                return _ARCHIVE_TOOL
+        else:
+            found = shutil.which(c)
+            if found:
+                _ARCHIVE_TOOL = found
+                return _ARCHIVE_TOOL
+
+    _ARCHIVE_TOOL = ""
+    return None
+
+
+def escape_bsdtar_pattern(name):
+    """Escape glob pattern characters for bsdtar/tar member extraction."""
+    return re.sub(r"([*?\[\]])", r"\\\1", name)
+
+
 def select_best_member(infolist):
     """
-    Select the primary game/package file from a ZIP archive:
-    1. Prioritize files ending in .pkg (case-insensitive).
+    Select the primary game/package file from an archive:
+    1. Prioritize files ending in game formats (.pkg, .ffpfsc, .exfat, .ufs, .iso, .bin, .nsp, .xci).
     2. Fallback to largest file by uncompressed size.
     3. Exclude directories, macOS metadata (__MACOSX), and hidden files.
     """
     candidates = []
     for info in infolist:
-        name = info.filename
+        name = info.filename if hasattr(info, "filename") else info["filename"]
+        size = info.file_size if hasattr(info, "file_size") else info.get("uncompressed_size", 0)
         if name.endswith("/") or name.endswith("\\"):
             continue
         parts = re.split(r"[/\\]", name)
         basename = parts[-1]
         if not basename or basename.startswith(".") or "__MACOSX" in parts:
             continue
-        candidates.append(info)
+        candidates.append((info, name, size))
 
     if not candidates:
         return None
 
-    # First look for primary game formats (.ffpfsc, .exfat, .ufs, .pkg, .iso, .bin)
-    primary_exts = (".ffpfsc", ".exfat", ".ufs", ".pkg", ".iso", ".bin")
-    game_files = [c for c in candidates if any(c.filename.lower().endswith(ext) for ext in primary_exts)]
+    primary_exts = (".ffpfsc", ".exfat", ".ufs", ".pkg", ".iso", ".bin", ".nsp", ".xci")
+    game_files = [c for c in candidates if any(c[1].lower().endswith(ext) for ext in primary_exts)]
     if game_files:
-        game_files.sort(key=lambda x: x.file_size, reverse=True)
-        return game_files[0]
+        game_files.sort(key=lambda x: x[2], reverse=True)
+        return game_files[0][0]
 
-    # Fallback to largest payload
-    candidates.sort(key=lambda x: x.file_size, reverse=True)
-    return candidates[0]
+    candidates.sort(key=lambda x: x[2], reverse=True)
+    return candidates[0][0]
 
 
 def inspect_zip_archive(kind, location, headers=None, total_size=None):
@@ -380,6 +442,316 @@ class ZipStreamingReader:
             except Exception:
                 pass
         self.thread.join(timeout=1.0)
+        while not self.q.empty():
+            try:
+                self.q.get_nowait()
+            except queue.Empty:
+                break
+
+
+def inspect_system_archive(kind, location, headers=None, total_size=None):
+    """
+    Inspect local or remote system archive (RAR, 7Z, TAR, etc.) using bsdtar/tar.
+    Returns metadata dict with selected member info.
+    """
+    tool = find_archive_tool()
+    if not tool:
+        raise RuntimeError("No system archive decompressor (bsdtar/tar) found on host machine.")
+
+    headers = headers or HEADERS
+    entries = []
+    raw_output = ""
+    stderr_output = ""
+
+    if kind == "local":
+        path = os.path.abspath(os.path.expanduser(location))
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Local file not found: {path}")
+        total_size = os.path.getsize(path)
+        try:
+            proc = subprocess.Popen(
+                [tool, "--numeric-owner", "-tvf", path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace"
+            )
+            raw_output, stderr_output = proc.communicate(timeout=15)
+        except Exception as ex:
+            raise ValueError(f"Failed to inspect local archive: {ex}") from ex
+    else:
+        # Remote URL: sample first 2 MiB to read archive header
+        req = urllib.request.Request(location, headers={**headers, "Range": "bytes=0-2097151"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                sample = resp.read()
+                if total_size is None:
+                    cr = resp.headers.get("Content-Range", "")
+                    m = re.search(r"/(\d+)$", cr)
+                    if m:
+                        total_size = int(m.group(1))
+                    elif resp.headers.get("Content-Length"):
+                        total_size = int(resp.headers["Content-Length"])
+        except Exception as ex:
+            raise ValueError(f"Failed to fetch remote archive header sample: {ex}") from ex
+
+        try:
+            proc = subprocess.Popen(
+                [tool, "--numeric-owner", "-tvf", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            stdout_bytes, stderr_bytes = proc.communicate(input=sample, timeout=15)
+            raw_output = stdout_bytes.decode("utf-8", errors="replace")
+            stderr_output = stderr_bytes.decode("utf-8", errors="replace")
+        except Exception as ex:
+            raise ValueError(f"Failed to inspect remote archive stream: {ex}") from ex
+
+    pattern_numeric = re.compile(r"^([drwxst-]{10})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([A-Za-z]{3}\s+\d+\s+[\d:]+)\s+(.+)$")
+    pattern_fallback = re.compile(r"^([drwxst-]{10})\s+.*?(\d+)\s+([A-Za-z]{3}\s+\d+\s+[\d:]+)\s+(.+)$")
+
+    for line in raw_output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = pattern_numeric.match(line)
+        if m:
+            perms, links, uid, gid, size_str, mtime, name = m.groups()
+            size = int(size_str)
+        else:
+            m = pattern_fallback.match(line)
+            if m:
+                perms, size_str, mtime, name = m.groups()
+                size = int(size_str)
+            else:
+                continue
+
+        name = name.strip()
+        if perms.startswith("d") or name.endswith("/") or name.endswith("\\"):
+            continue
+        entries.append({
+            "filename": name,
+            "uncompressed_size": size,
+        })
+
+    if not entries:
+        err_hint = stderr_output.strip()[:150] or "No files found in archive listing."
+        raise ValueError(f"Archive inspection failed: {err_hint}")
+
+    selected = select_best_member(entries)
+    if not selected:
+        raise ValueError("Archive contains no usable payload files.")
+
+    arch_type = get_archive_type(location)
+    return {
+        "is_archive": True,
+        "archive_type": arch_type,
+        "total_archive_size": total_size,
+        "entries_count": len(entries),
+        "selected": {
+            "filename": selected["filename"],
+            "basename": os.path.basename(selected["filename"].replace("\\", "/")),
+            "uncompressed_size": selected["uncompressed_size"],
+            "compressed_size": total_size,
+            "compress_type": "archive",
+            "header_offset": 0,
+            "crc": 0,
+        }
+    }
+
+
+def inspect_archive(kind, location, headers=None, total_size=None):
+    """
+    Unified archive inspector for ZIP, RAR, 7Z, TAR, etc.
+    Uses native pure-Python zipfile engine for standard ZIP archives,
+    and system libarchive (bsdtar/tar) for RAR, 7Z, TAR, etc.
+    """
+    if is_zip_candidate(location):
+        try:
+            res = inspect_zip_archive(kind, location, headers=headers, total_size=total_size)
+            res["archive_type"] = "zip"
+            return res
+        except Exception:
+            # Fallback to system decompressor if python zipfile fails
+            pass
+
+    return inspect_system_archive(kind, location, headers=headers, total_size=total_size)
+
+
+class ArchiveStreamingReader:
+    """
+    Streaming decompressing reader for RAR, 7Z, TAR, and system archives.
+    Runs system decompressor (bsdtar/tar) in a subprocess, streaming extracted bytes
+    directly into RAM and FTP socket with 0 disk writes.
+    Supports both local disk archives and remote HTTP URLs via stdin pipe.
+    """
+    def __init__(self, source, offset, buffer_mb, token, meter, headers=None):
+        self.source = source
+        self.offset = offset or 0
+        self.token = token
+        self.meter = meter
+        self.headers = headers or HEADERS
+        self.closed = threading.Event()
+        self.q = queue.Queue(maxsize=max(2, buffer_mb - 2))
+        self.error = None
+        self.proc = None
+        self.http_resp = None
+        self.feeder_thread = None
+        self.reader_thread = None
+
+        archive = source.archive_info
+        self.member_name = archive["filename"]
+        self.uncompressed_size = archive.get("uncompressed_size")
+        self.tool = find_archive_tool()
+        if not self.tool:
+            raise RuntimeError("System archive tool (bsdtar/tar) not found.")
+
+        esc_pattern = escape_bsdtar_pattern(self.member_name)
+        if self.source.kind in ("local", "archive_local"):
+            cmd = [self.tool, "-xOf", self.source.location, esc_pattern]
+            self.proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=1024 * 1024,
+            )
+            self.reader_thread = threading.Thread(target=self._read_stdout, daemon=True, name="archive-stdout-reader")
+            self.reader_thread.start()
+        else:
+            cmd = [self.tool, "-xOf", "-", esc_pattern]
+            self.proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=1024 * 1024,
+            )
+            self.feeder_thread = threading.Thread(target=self._feed_stdin, daemon=True, name="archive-stdin-feeder")
+            self.reader_thread = threading.Thread(target=self._read_stdout, daemon=True, name="archive-stdout-reader")
+            self.feeder_thread.start()
+            self.reader_thread.start()
+
+    def _put(self, block):
+        while not self.closed.is_set():
+            self.token.check()
+            try:
+                self.q.put(block, timeout=0.1)
+                return
+            except queue.Full:
+                pass
+
+    def _feed_stdin(self):
+        try:
+            req = urllib.request.Request(self.source.location, headers=self.headers)
+            resp = urllib.request.urlopen(req, timeout=20)
+            self.http_resp = resp
+            read_chunk = 256 * 1024
+            while not self.closed.is_set():
+                self.token.check()
+                data = resp.read(read_chunk)
+                if not data:
+                    break
+                self.meter.add(downloaded=len(data))
+                try:
+                    self.proc.stdin.write(data)
+                except (BrokenPipeError, OSError):
+                    break
+        except Exception as ex:
+            if not self.closed.is_set():
+                self.error = ex
+        finally:
+            try:
+                if self.proc and self.proc.stdin:
+                    self.proc.stdin.close()
+            except Exception:
+                pass
+
+    def _read_stdout(self):
+        try:
+            discarded = 0
+            target_offset = self.offset
+            while not self.closed.is_set() and discarded < target_offset:
+                self.token.check()
+                take = min(BLOCK, target_offset - discarded)
+                skipped = self.proc.stdout.read(take)
+                if not skipped:
+                    break
+                discarded += len(skipped)
+                if self.source.kind in ("local", "archive_local"):
+                    self.meter.add(downloaded=len(skipped))
+
+            while not self.closed.is_set():
+                self.token.check()
+                chunk = self.proc.stdout.read(BLOCK)
+                if not chunk:
+                    break
+                if self.source.kind in ("local", "archive_local"):
+                    self.meter.add(downloaded=len(chunk), buffered=len(chunk))
+                else:
+                    self.meter.add(buffered=len(chunk))
+                self._put(chunk)
+
+            stderr_out = b""
+            if self.proc:
+                try:
+                    stderr_out = self.proc.stderr.read()
+                except Exception:
+                    pass
+                self.proc.wait()
+                if self.proc.returncode not in (0, None) and not self.closed.is_set():
+                    err_msg = stderr_out.decode("utf-8", errors="replace").strip()
+                    if err_msg and "Broken pipe" not in err_msg:
+                        self.error = OSError(f"Archive extraction failed (exit {self.proc.returncode}): {err_msg}")
+
+            self._put(None)
+        except Exception as ex:
+            self.error = ex
+            try:
+                self._put(None)
+            except Exception:
+                pass
+
+    def read(self, size=BLOCK):
+        while not self.closed.is_set():
+            self.token.check()
+            try:
+                block = self.q.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if block is None:
+                if self.error:
+                    raise self.error
+                return b""
+            self.meter.add(buffered=-len(block))
+            return block
+        raise Exception("Stream closed or cancelled.")
+
+    def close(self):
+        self.closed.set()
+        if self.proc:
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
+            try:
+                self.proc.wait(timeout=1.0)
+            except Exception:
+                pass
+        if self.http_resp:
+            try:
+                sock = self.http_resp.fp.raw._sock
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                self.http_resp.close()
+            except Exception:
+                pass
+        if self.feeder_thread and self.feeder_thread.is_alive():
+            self.feeder_thread.join(timeout=1.0)
+        if self.reader_thread and self.reader_thread.is_alive():
+            self.reader_thread.join(timeout=1.0)
         while not self.q.empty():
             try:
                 self.q.get_nowait()

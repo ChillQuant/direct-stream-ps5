@@ -1361,13 +1361,9 @@ const updateAddPreview = () => {
         }
         const hint = $('archive-mode-hint');
         if (hint) {
-          if (ext === 'zip' || ext === 'zip64') {
-            hint.textContent = modalExtractMode
-              ? 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.'
-              : 'Streams raw multi-part archive directly onto PS5 without extraction.';
-          } else {
-            hint.textContent = 'Multi-part archive will be seamlessly stitched into a unified file directly on PS5.';
-          }
+          hint.textContent = modalExtractMode
+            ? 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.'
+            : 'Streams raw multi-part archive directly onto PS5 without extraction.';
         }
       }
       if (['ffpfsc', 'exfat', 'ufs', 'iso', 'bin', 'img'].includes(ext)) {
@@ -1460,17 +1456,15 @@ const updateAddPreview = () => {
     if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? 'Direct link · PlayStation Package (.pkg)' : 'Local file · PlayStation Package (.pkg)';
     smartDest = '/data/pkg';
-  } else if (isZipArchive) {
+  } else if (isArchive) {
+    const archName = ext.toUpperCase();
     if (modalExtractMode) {
-      if ($('preview-filename')) $('preview-filename').textContent = `ZIP Archive: ${name}`;
+      if ($('preview-filename')) $('preview-filename').textContent = `${archName} Archive: ${name}`;
       formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
     } else {
       if ($('preview-filename')) $('preview-filename').textContent = `Raw Archive: ${name}`;
-      formatLabel = 'Transferring raw intact archive to PS5 (No extraction)';
+      formatLabel = `Transferring raw intact ${archName} archive to PS5 (No extraction)`;
     }
-  } else if (['rar', '7z', 'tar'].includes(ext)) {
-    if ($('preview-filename')) $('preview-filename').textContent = name;
-    formatLabel = isUrl ? 'Direct link · Archive' : 'Local file · Archive';
   } else if (['iso', 'bin', 'img'].includes(ext)) {
     if ($('preview-filename')) $('preview-filename').textContent = name;
     formatLabel = isUrl ? 'Direct link · Disc Image' : 'Local file · Disc Image';

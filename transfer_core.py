@@ -29,9 +29,12 @@ from resolver import (
 )
 from zip_streamer import (
     is_zip_candidate,
+    is_archive_candidate,
     inspect_zip_archive,
+    inspect_archive,
     get_zip_payload_offset,
     ZipStreamingReader,
+    ArchiveStreamingReader,
 )
 
 MIB = 1024 * 1024
@@ -188,7 +191,7 @@ class SourceInfo:
     archive_info: dict = None
 
     def identity(self):
-        if self.kind.startswith("zip_") and self.archive_info:
+        if (self.kind.startswith("zip_") or self.kind.startswith("archive_")) and self.archive_info:
             return {
                 "kind": self.kind,
                 "size": self.size,
@@ -208,7 +211,7 @@ class SourceInfo:
                 "modified": self.modified, "fingerprint": self.fingerprint}
 
     def resumable(self):
-        if self.kind.startswith("zip_"):
+        if self.kind.startswith("zip_") or self.kind.startswith("archive_"):
             return False
         if self.kind == "multipart":
             return bool(self.parts) and all(p.resumable() and p.size is not None for p in self.parts)
@@ -230,20 +233,32 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
             digest.update(f.read(65536))
         fp = f"{stat.st_mtime_ns}:{digest.hexdigest()}"
         filename = Path(path).name
-        if decompress and is_zip_candidate(path):
+        if decompress and is_archive_candidate(path):
             try:
-                zip_meta = inspect_zip_archive("local", path)
-                sel = zip_meta["selected"]
-                p_off = get_zip_payload_offset("local", path, sel["header_offset"])
-                return SourceInfo(
-                    kind="zip_local",
-                    location=path,
-                    size=sel["uncompressed_size"],
-                    ranges=True,
-                    fingerprint=fp,
-                    filename=sel["basename"],
-                    archive_info={**sel, "payload_offset": p_off, "total_archive_size": zip_meta["total_archive_size"]},
-                )
+                meta = inspect_archive("local", path)
+                sel = meta["selected"]
+                arch_type = meta.get("archive_type", "zip")
+                if arch_type == "zip":
+                    p_off = get_zip_payload_offset("local", path, sel["header_offset"])
+                    return SourceInfo(
+                        kind="zip_local",
+                        location=path,
+                        size=sel["uncompressed_size"],
+                        ranges=True,
+                        fingerprint=fp,
+                        filename=sel["basename"],
+                        archive_info={**sel, "payload_offset": p_off, "total_archive_size": meta["total_archive_size"], "archive_type": "zip"},
+                    )
+                else:
+                    return SourceInfo(
+                        kind="archive_local",
+                        location=path,
+                        size=sel["uncompressed_size"],
+                        ranges=True,
+                        fingerprint=fp,
+                        filename=sel["basename"],
+                        archive_info={**sel, "payload_offset": 0, "total_archive_size": meta["total_archive_size"], "archive_type": arch_type},
+                    )
             except Exception:
                 pass
         return SourceInfo("local", path, stat.st_size, True,
@@ -295,22 +310,35 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
             etag = ""
         filename = parse_filename_from_headers(h, response.geturl())
         final_url = valid_url(response.geturl())
-        if decompress and (is_zip_candidate(final_url) or is_zip_candidate(filename) or "application/zip" in h.get("Content-Type", "").lower()):
+        if decompress and (is_archive_candidate(final_url) or is_archive_candidate(filename) or any(t in h.get("Content-Type", "").lower() for t in ("application/zip", "application/x-rar", "application/vnd.rar", "application/x-7z-compressed", "application/x-tar"))):
             try:
-                zip_headers = get_request_headers_for_url(final_url, HEADERS)
-                zip_meta = inspect_zip_archive("url", final_url, headers=zip_headers, total_size=size)
-                sel = zip_meta["selected"]
-                p_off = get_zip_payload_offset("url", final_url, sel["header_offset"], headers=zip_headers)
-                return SourceInfo(
-                    kind="zip_url",
-                    location=final_url,
-                    size=sel["uncompressed_size"],
-                    ranges=ranges,
-                    etag=etag,
-                    modified=h.get("Last-Modified", ""),
-                    filename=sel["basename"],
-                    archive_info={**sel, "payload_offset": p_off, "total_archive_size": size},
-                )
+                arch_headers = get_request_headers_for_url(final_url, HEADERS)
+                meta = inspect_archive("url", final_url, headers=arch_headers, total_size=size)
+                sel = meta["selected"]
+                arch_type = meta.get("archive_type", "zip")
+                if arch_type == "zip":
+                    p_off = get_zip_payload_offset("url", final_url, sel["header_offset"], headers=arch_headers)
+                    return SourceInfo(
+                        kind="zip_url",
+                        location=final_url,
+                        size=sel["uncompressed_size"],
+                        ranges=ranges,
+                        etag=etag,
+                        modified=h.get("Last-Modified", ""),
+                        filename=sel["basename"],
+                        archive_info={**sel, "payload_offset": p_off, "total_archive_size": size, "archive_type": "zip"},
+                    )
+                else:
+                    return SourceInfo(
+                        kind="archive_url",
+                        location=final_url,
+                        size=sel["uncompressed_size"],
+                        ranges=ranges,
+                        etag=etag,
+                        modified=h.get("Last-Modified", ""),
+                        filename=sel["basename"],
+                        archive_info={**sel, "payload_offset": 0, "total_archive_size": size, "archive_type": arch_type},
+                    )
             except Exception:
                 pass
         return SourceInfo("url", final_url, size, ranges, etag,
@@ -881,6 +909,8 @@ def make_reader(source, offset, settings, token, meter, on_part_change=None):
     headers = get_request_headers_for_url(loc, settings.get("_headers") or HEADERS)
     if source.kind.startswith("zip_"):
         return ZipStreamingReader(source, settings["buffer_mb"], token, meter, headers)
+    if source.kind.startswith("archive_"):
+        return ArchiveStreamingReader(source, offset, settings["buffer_mb"], token, meter, headers)
     if source.kind == "multipart":
         return MultiPartReader(source, offset, settings, token, meter, on_part_change=on_part_change)
     if source.kind == "url" and source.ranges and source.size is not None and settings["streams"] > 1:
@@ -982,7 +1012,9 @@ def validate_source_url(url, token, decompress=True):
             "etag": src.etag,
             "modified": src.modified,
             "filename": src.filename,
-            "is_zip": src.kind.startswith("zip_"),
+            "is_zip": (src.kind.startswith("zip_") or src.kind.startswith("archive_")),
+            "is_archive": (src.kind.startswith("zip_") or src.kind.startswith("archive_")),
+            "archive_type": (src.archive_info or {}).get("archive_type", "zip" if src.kind.startswith("zip_") else "archive"),
             "archive_info": src.archive_info,
             "error": None
         }
@@ -1258,9 +1290,10 @@ def transfer(job, settings, token, report, save):
         source = probe_source(job["kind"], job["source"], token, decompress=job.get("decompress", True))
     if source.kind == "url" and source.location != job["source"]:
         job["source"] = source.location
-    if source.kind.startswith("zip_") and source.filename:
+    if (source.kind.startswith("zip_") or source.kind.startswith("archive_")) and source.filename:
         job["name"] = source.filename
         job["is_zip"] = True
+        job["is_archive"] = True
         job["archive_info"] = source.archive_info
     elif source.filename and (
         job.get("name") in ("download.bin", "file", "view", "uc", "")
@@ -1281,7 +1314,9 @@ def transfer(job, settings, token, report, save):
     job["resumable"] = source.resumable()
     save()
     report("source", {"ranges": source.ranges, "resumable": source.resumable(), "size": source.size,
-                      "is_zip": source.kind.startswith("zip_"), "archive_info": source.archive_info})
+                      "is_zip": (source.kind.startswith("zip_") or source.kind.startswith("archive_")),
+                      "is_archive": (source.kind.startswith("zip_") or source.kind.startswith("archive_")),
+                      "archive_info": source.archive_info})
     ftp = reader = data_socket = None
     clean = False
     meter = Meter()

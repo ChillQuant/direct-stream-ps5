@@ -13,6 +13,7 @@ import threading
 import time
 import unittest
 import zipfile
+import tarfile
 from pathlib import Path
 
 from pyftpdlib.authorizers import DummyAuthorizer
@@ -33,9 +34,14 @@ from transfer_core import (
 )
 from zip_streamer import (
     ZipStreamingReader,
+    ArchiveStreamingReader,
     get_zip_payload_offset,
     inspect_zip_archive,
+    inspect_archive,
     is_zip_candidate,
+    is_archive_candidate,
+    get_archive_type,
+    escape_bsdtar_pattern,
     select_best_member,
 )
 
@@ -240,6 +246,101 @@ class TestZipStreamer(unittest.TestCase):
         self.assertEqual(src.kind, "url")
         self.assertFalse(src.kind.startswith("zip_"))
         self.assertEqual(src.size, os.path.getsize(self.zip_deflated_path))
+
+    def test_is_archive_candidate(self):
+        self.assertTrue(is_archive_candidate("game.zip"))
+        self.assertTrue(is_archive_candidate("game.zip64"))
+        self.assertTrue(is_archive_candidate("package.rar"))
+        self.assertTrue(is_archive_candidate("archive.7z"))
+        self.assertTrue(is_archive_candidate("data.tar"))
+        self.assertTrue(is_archive_candidate("data.tar.gz"))
+        self.assertTrue(is_archive_candidate("https://example.com/file.rar?download=true"))
+        self.assertFalse(is_archive_candidate("game.pkg"))
+        self.assertFalse(is_archive_candidate("disk.ffpfsc"))
+        self.assertFalse(is_archive_candidate("image.iso"))
+
+    def test_get_archive_type(self):
+        self.assertEqual(get_archive_type("game.zip"), "zip")
+        self.assertEqual(get_archive_type("game.rar"), "rar")
+        self.assertEqual(get_archive_type("game.7z"), "7z")
+        self.assertEqual(get_archive_type("game.tar.gz"), "tar")
+
+    def test_escape_bsdtar_pattern(self):
+        esc = escape_bsdtar_pattern("Game [01007EF00011E000][v0].nsp")
+        self.assertEqual(esc, r"Game \[01007EF00011E000\]\[v0\].nsp")
+        self.assertEqual(escape_bsdtar_pattern("normal_game.pkg"), "normal_game.pkg")
+        self.assertEqual(escape_bsdtar_pattern("wild*card?.bin"), r"wild\*card\?.bin")
+
+    def test_tar_archive_extraction_pipeline(self):
+        # Create a real .tar archive containing a .pkg file
+        tar_path = os.path.join(self.test_dir, "test_game_archive.tar")
+        with tarfile.open(tar_path, "w") as tf:
+            ti = tarfile.TarInfo(name="UP0001-CUSA77777_00.pkg")
+            ti.size = len(RAW_PKG_CONTENT)
+            tf.addfile(ti, io.BytesIO(RAW_PKG_CONTENT))
+
+        token = StopToken()
+        src = probe_source("local", tar_path, token, decompress=True)
+        self.assertEqual(src.kind, "archive_local")
+        self.assertEqual(src.filename, "UP0001-CUSA77777_00.pkg")
+        self.assertEqual(src.size, len(RAW_PKG_CONTENT))
+
+        job = {
+            "id": "job_tar_1",
+            "kind": "local",
+            "source": tar_path,
+            "name": "auto",
+            "overwrite": True,
+            "decompress": True,
+        }
+        transfer(job, self.settings, token, lambda e, d: None, lambda: None)
+
+        dest_file = os.path.join(self.ftp_root, "downloads", "UP0001-CUSA77777_00.pkg")
+        self.assertTrue(os.path.isfile(dest_file))
+        with open(dest_file, "rb") as f:
+            content = f.read()
+        self.assertEqual(content, RAW_PKG_CONTENT)
+
+    def test_rar_probe_and_extraction(self):
+        rar_path = "/Users/kistapas/Downloads/The Legend of Zelda Breath of the Wild Switch NSP Base Game.rar"
+        if not os.path.isfile(rar_path):
+            return  # Skip if file was moved or deleted
+
+        token = StopToken()
+        # Probe with extraction enabled
+        src = probe_source("local", rar_path, token, decompress=True)
+        self.assertEqual(src.kind, "archive_local")
+        self.assertEqual(src.filename, "The Legend of Zelda Breath of the Wild [01007EF00011E000][v0].nsp")
+        self.assertEqual(src.size, 14476288345)
+        self.assertEqual(src.archive_info["archive_type"], "rar")
+
+        # Probe with extraction disabled (raw file)
+        raw_src = probe_source("local", rar_path, token, decompress=False)
+        self.assertEqual(raw_src.kind, "local")
+        self.assertTrue(raw_src.filename.endswith(".rar"))
+
+    def test_rar_streaming_transfer_ftp(self):
+        rar_path = "/Users/kistapas/Downloads/law-and-order-special-victims-unit-svu-third-season_english-412155.rar"
+        if not os.path.isfile(rar_path):
+            return
+
+        token = StopToken()
+        job = {
+            "id": "job_rar_test_1",
+            "kind": "local",
+            "source": rar_path,
+            "name": "auto",
+            "overwrite": True,
+            "decompress": True,
+        }
+        transfer(job, self.settings, token, lambda e, d: None, lambda: None)
+
+        dest_file = os.path.join(self.ftp_root, "downloads", "Law & Order SVU 0304 Rooftop.srt")
+        self.assertTrue(os.path.isfile(dest_file))
+        with open(dest_file, "rb") as f:
+            content = f.read()
+        self.assertEqual(len(content), 74281)
+        self.assertTrue(content.startswith(b"1\r\n"))
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
     valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source, MIB)
 from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info
+from zip_streamer import is_archive_candidate
 
 VERSION = "2.9.0"
 BASE = Path(__file__).resolve().parent
@@ -468,18 +469,40 @@ class Manager:
                         "identity": None
                     })
                 else:
+                    item_name = name
+                    item_total = None
+                    item_detail = "Waiting to start"
+                    is_decomp = bool(data.get("decompress", True))
+                    if item_kind == "local":
+                        try:
+                            item_total = os.path.getsize(src)
+                        except OSError:
+                            pass
+                        if is_decomp and is_archive_candidate(src):
+                            try:
+                                tok = StopToken()
+                                arch_src = probe_source("local", src, tok, decompress=True)
+                                if arch_src.kind.startswith(("zip_", "archive_")):
+                                    item_name = arch_src.filename
+                                    item_total = arch_src.size
+                                    arch_type = (arch_src.archive_info or {}).get("archive_type", "Archive")
+                                    item_detail = f"{arch_type.upper()} Archive · Extracting directly to PS5"
+                                    if item_name.lower().endswith(".pkg") and dest_base == "/data/ShadowMount":
+                                        dest_base = "/data/pkg"
+                            except Exception:
+                                pass
                     new.append({
                         "id": secrets.token_hex(6),
-                        "name": name,
+                        "name": item_name,
                         "source": src,
                         "kind": item_kind,
                         "folder": dest_base,
                         "state": "queued",
-                        "detail": "Waiting to start",
-                        "total": None,
+                        "detail": item_detail,
+                        "total": item_total,
                         "transferred": 0,
                         "overwrite": bool(data.get("overwrite", False)),
-                        "decompress": bool(data.get("decompress", True)),
+                        "decompress": is_decomp,
                         "created": time.time(),
                         "identity": None
                     })
@@ -688,8 +711,28 @@ class Manager:
                     job["stage_owned"] = False
                     job["transferred"] = 0
                     if job["decompress"]:
-                        job["detail"] = "Extraction enabled: will decompress directly on PS5"
+                        if job["kind"] == "local" and is_archive_candidate(job["source"]):
+                            try:
+                                tok = StopToken()
+                                arch_src = probe_source("local", job["source"], tok, decompress=True)
+                                if arch_src.kind.startswith(("zip_", "archive_")):
+                                    job["name"] = arch_src.filename
+                                    job["total"] = arch_src.size
+                                    arch_type = (arch_src.archive_info or {}).get("archive_type", "Archive")
+                                    job["detail"] = f"{arch_type.upper()} Archive · Extracting directly to PS5"
+                                else:
+                                    job["detail"] = "Extraction enabled: will decompress directly on PS5"
+                            except Exception:
+                                job["detail"] = "Extraction enabled: will decompress directly on PS5"
+                        else:
+                            job["detail"] = "Extraction enabled: will decompress directly on PS5"
                     else:
+                        if job["kind"] == "local":
+                            job["name"] = Path(job["source"]).name
+                            try:
+                                job["total"] = os.path.getsize(job["source"])
+                            except OSError:
+                                pass
                         job["detail"] = "Extraction disabled: will stream raw archive as-is"
                 else:
                     raise TransferError("Unknown queue action.")
@@ -726,8 +769,9 @@ class Manager:
                                     target["total"] = info["size"]
                                 if info.get("filename") and (target["name"] in ("download.bin", "file", "view", "uc", "", j.get("name")) or not Path(target["name"]).suffix):
                                     target["name"] = info.get("filename")
-                                if info.get("is_zip"):
-                                    target["detail"] = f"ZIP Archive · Streaming '{info.get('filename')}' directly to PS5"
+                                if info.get("is_archive") or info.get("is_zip"):
+                                    arch_type = (info.get("archive_type") or "Archive").upper()
+                                    target["detail"] = f"{arch_type} Archive · Streaming '{info.get('filename')}' directly to PS5"
                                 else:
                                     status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
                                     target["detail"] = f"Link verified · {status}"
