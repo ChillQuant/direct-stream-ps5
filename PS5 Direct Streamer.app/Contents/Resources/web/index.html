@@ -44,6 +44,7 @@
   <symbol id="i-ps-storage" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="7" x2="16" y2="7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="8" y1="11" x2="12" y2="11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="15.5" cy="16.5" r="1.5" fill="currentColor"/><path d="M8 17h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
   <symbol id="i-archive-crate" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3H4V6Z" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="4" y="9" width="16" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 13h4M12 11v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
   <symbol id="i-disc-iso" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="m21 2-2 2m-1.5 1.5L13 10m0 0a5 5 0 1 0-7 7 5 5 0 0 0 7-7Zm0 0 3 3m2-2 2 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </defs></svg>
 
 <!-- Drag and drop whole-window overlay -->
@@ -954,6 +955,17 @@
       <p id="archive-mode-hint" class="field-hint" style="margin-top: 4px;">
         Decompresses the inner game file (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB local disk space.
       </p>
+      <div id="archive-password-row" class="modal-field-block" style="margin-top: 10px;" hidden>
+        <div class="field-label-row">
+          <label for="archive-password">Archive Password</label>
+          <span id="password-hint-badge" class="meta-pill pill-pkg" style="display: none;">AUTO-DETECTED</span>
+        </div>
+        <div class="input-with-icon">
+          <svg class="field-icon"><use href="#i-key"/></svg>
+          <input id="archive-password" type="text" placeholder="Password (e.g. DLPSGAME.COM)" spellcheck="false">
+        </div>
+        <p id="password-hint-text" class="field-hint" style="margin-top: 4px;"></p>
+      </div>
     </div>
 
     <!-- Destination on PS5 Field with Presets -->

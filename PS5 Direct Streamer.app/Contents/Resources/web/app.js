@@ -552,6 +552,12 @@ function bindQueueEvents() {
 
 let dismissedSmartMergeBase = null;
 
+function extractPasswordHint(text) {
+  if (!text) return '';
+  const m = text.match(/\[([a-zA-Z0-9._-]+(?:\.[a-zA-Z]{2,}))\]/i) || text.match(/\[([a-zA-Z0-9._-]{4,})\]/i);
+  return m ? m[1] : '';
+}
+
 function findConsecutiveMultipartJobs(jobs) {
   if (!jobs || jobs.length < 2) return null;
   const candidates = jobs.filter(j => j.state === 'queued' || j.state === 'idle');
@@ -1467,12 +1473,27 @@ const updateAddPreview = () => {
   } else if (isArchive) {
     const archName = ext.toUpperCase();
     const vInfo = getVerifiedInfo(first);
+    const pwdHint = (vInfo && vInfo.password_hint) || extractPasswordHint(name) || extractPasswordHint(first);
     if (vInfo && vInfo.archive_encrypted) {
       if ($('preview-filename')) $('preview-filename').textContent = `Encrypted ${archName}: ${name}`;
-      formatLabel = `Password-protected archive (Password: ${vInfo.password_hint || 'Required'}) · Stream raw or extract on PC`;
+      formatLabel = `Password-protected archive (Password: ${pwdHint || 'Required'}) · Auto-extracting to PS5`;
+      if ($('archive-password-row')) $('archive-password-row').hidden = false;
+      if (pwdHint && $('archive-password') && !$('archive-password').value) {
+        $('archive-password').value = pwdHint;
+        if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
+        if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Editable if needed.';
+      }
     } else if (modalExtractMode) {
       if ($('preview-filename')) $('preview-filename').textContent = `${archName} Archive: ${name}`;
-      formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
+      formatLabel = 'Auto-extracting directly to PS5';
+      if (pwdHint && $('archive-password-row')) {
+        $('archive-password-row').hidden = false;
+        if ($('archive-password') && !$('archive-password').value) {
+          $('archive-password').value = pwdHint;
+          if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
+          if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Editable if needed.';
+        }
+      }
     } else {
       if ($('preview-filename')) $('preview-filename').textContent = `Raw Archive: ${name}`;
       formatLabel = `Transferring raw intact ${archName} archive to PS5 (No extraction)`;
@@ -1501,6 +1522,8 @@ const resetVerifyStatus = (clearMetadata = false) => {
     box.hidden = true;
     box.innerHTML = '';
   }
+  if ($('archive-password-row')) $('archive-password-row').hidden = true;
+  if ($('archive-password')) $('archive-password').value = '';
   if (clearMetadata) {
     for (const k in verifiedMetadata) delete verifiedMetadata[k];
   }
@@ -1587,23 +1610,31 @@ const runVerifyLinks = async () => {
               ${item.resolved_url ? `<span class="verify-resolved-note" title="${escaped(item.resolved_url)}">Direct stream resolved</span>` : ''}
             </div>
             ${item.archive_encrypted ? `
-              <div style="margin-top: 10px; padding: 10px 12px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; font-size: 12px; color: #fca5a5; line-height: 1.45;">
+              <div style="margin-top: 10px; padding: 10px 12px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 8px; font-size: 12px; color: #93c5fd; line-height: 1.45;">
                 <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-key"/></svg>
                   Password-Protected Archive Detected
-                  ${item.password_hint ? `<span style="background: rgba(239,68,68,0.25); padding: 1px 6px; border-radius: 4px; font-family: monospace;">Password: ${escaped(item.password_hint)}</span>` : ''}
+                  ${item.password_hint ? `<span style="background: rgba(59,130,246,0.25); padding: 1px 6px; border-radius: 4px; font-family: monospace;">Password: ${escaped(item.password_hint)}</span>` : ''}
                 </div>
-                <div>${escaped(item.archive_error || 'This archive is encrypted and cannot be decompressed on-the-fly directly to PS5.')}</div>
-                <div style="margin-top: 6px; color: #fde047;">Extract on your computer first with the password, then use <strong>Upload Folder</strong> to transfer the game.</div>
+                <div>Archive will be downloaded, decrypted with password, and the extracted game transferred directly to your PS5.</div>
               </div>
             ` : ''}
           </div>
         `;
-        if (item.archive_encrypted) {
-          setArchiveExtractMode(false);
+        if (item.archive_encrypted || item.is_archive) {
+          setArchiveExtractMode(true);
+          const pwdRow = $('archive-password-row');
+          if (pwdRow) pwdRow.hidden = false;
+          if (item.password_hint && $('archive-password')) {
+            $('archive-password').value = item.password_hint;
+            if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
+            if ($('password-hint-text')) $('password-hint-text').textContent = 'Password auto-detected from filename. Editable if needed.';
+          }
           const hint = $('archive-mode-hint');
           if (hint) {
-            hint.textContent = 'Password-protected archive: Stream as raw file, or extract on your computer and use Upload Folder.';
+            hint.textContent = item.archive_encrypted
+              ? 'Auto-extracts archive using password and transfers the game folder directly to PS5.'
+              : 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB local disk space.';
           }
         }
         if ($('file-preview-card')) $('file-preview-card').hidden = false;
@@ -1741,12 +1772,15 @@ $('add-form').addEventListener('submit', async e => {
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
       decompress: (sourceKind === 'folder' ? false : modalExtractMode),
+      archive_password: $('archive-password')?.value?.trim() || '',
       overwrite: $('overwrite').checked
     });
     $('add-dialog').close();
     $('source-urls').value = '';
     $('local-path').value = '';
     $('file-name').value = '';
+    if ($('archive-password')) $('archive-password').value = '';
+    if ($('archive-password-row')) $('archive-password-row').hidden = true;
     $('overwrite').checked = false;
     resetVerifyStatus(true);
     toast(willStitch ? `Merged multi-part stream (${sortedParts.length} parts) added to queue` : `${r.count} transfer${r.count === 1 ? '' : 's'} added to queue`);

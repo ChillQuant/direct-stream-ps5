@@ -10,6 +10,9 @@ import queue
 import re
 import socket
 import ssl
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -36,6 +39,7 @@ from zip_streamer import (
     ZipStreamingReader,
     ArchiveStreamingReader,
     EncryptedArchiveError,
+    extract_password_hint,
 )
 
 MIB = 1024 * 1024
@@ -1009,6 +1013,18 @@ def check_ftp_storage(ftp, folder):
     return None
 
 
+def format_bytes(n):
+    if n is None:
+        return "Unknown size"
+    if n >= 1e9:
+        return f"{n / 1e9:.2f} GB"
+    if n >= 1e6:
+        return f"{n / 1e6:.1f} MB"
+    if n >= 1e3:
+        return f"{n / 1e3:.0f} KB"
+    return f"{n} B"
+
+
 def validate_source_url(url, token, decompress=True):
     """Fast probe of a URL to check validity, range support, and size without downloading."""
     try:
@@ -1026,16 +1042,43 @@ def validate_source_url(url, token, decompress=True):
             "archive_type": (src.archive_info or {}).get("archive_type", "zip" if src.kind.startswith("zip_") else "archive"),
             "archive_info": src.archive_info,
             "archive_encrypted": False,
+            "staged_extraction": False,
             "error": None
         }
     except Exception as e:
         is_enc = "encrypted" in str(e).lower() or "password" in str(e).lower()
+        unar = find_unar_tool()
+        if (is_enc or "loose files" in str(e).lower() or "cannot decompress" in str(e).lower()) and unar:
+            try:
+                raw_src = probe_source("url", url, token, decompress=False)
+                fn = raw_src.filename or os.path.basename(urllib.parse.urlsplit(url).path) or "archive.bin"
+                pwd_hint = extract_password_hint(fn) or extract_password_hint(url)
+                return {
+                    "valid": True,
+                    "ranges": raw_src.ranges,
+                    "resumable": raw_src.resumable(),
+                    "size": raw_src.size,
+                    "etag": raw_src.etag,
+                    "modified": raw_src.modified,
+                    "filename": fn,
+                    "is_zip": False,
+                    "is_archive": True,
+                    "archive_type": Path(fn).suffix.lstrip(".").lower() or "archive",
+                    "archive_info": None,
+                    "archive_encrypted": is_enc,
+                    "password_hint": pwd_hint,
+                    "staged_extraction": True,
+                    "error": None
+                }
+            except Exception:
+                pass
         return {
             "valid": False,
             "ranges": False,
             "resumable": False,
             "size": None,
             "archive_encrypted": is_enc,
+            "staged_extraction": False,
             "error": str(e)
         }
 
@@ -1291,15 +1334,315 @@ def transfer_folder(job, settings, token, report, save):
         close_ftp(ftp, token, clean)
 
 
+def find_unar_tool():
+    """Find the path to the unar CLI executable (bundled in app, local bin, or PATH)."""
+    # 1. Bundled inside macOS .app Resources/bin
+    res_dir = os.environ.get("RESOURCEPATH")
+    if res_dir:
+        p = os.path.join(res_dir, "bin", "unar")
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+
+    # 2. Workspace / repository relative bin/unar or App bundle bin/unar
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base, "bin", "unar"),
+        os.path.join(base, "PS5 Direct Streamer.app", "Contents", "Resources", "bin", "unar"),
+        os.path.join(os.path.dirname(base), "Resources", "bin", "unar"),
+        "/opt/homebrew/bin/unar",
+        "/usr/local/bin/unar",
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+
+    # 3. System PATH
+    found = shutil.which("unar")
+    if found and os.access(found, os.X_OK):
+        return found
+    return None
+
+
+def find_extracted_payload(extract_dir, fallback_name="ExtractedGame"):
+    """Inspects the extraction directory and identifies whether the payload is a
+    single game package (.pkg/.ffpfsc) or a game folder hierarchy containing eboot.bin / param.sfo / param.json.
+    Returns (payload_type, payload_path, payload_name) where payload_type is 'file' or 'folder'."""
+    valid_entries = []
+    for e in os.listdir(extract_dir):
+        if e.startswith(".") or e == "__MACOSX":
+            continue
+        valid_entries.append(os.path.join(extract_dir, e))
+
+    if not valid_entries:
+        raise TransferError("Archive extraction produced no usable files.")
+
+    pkgs = []
+    game_folders = []
+    for root, dirs, files in os.walk(extract_dir):
+        if "__MACOSX" in root:
+            continue
+        for f in files:
+            if f.startswith("."):
+                continue
+            f_lower = f.lower()
+            if f_lower.endswith((".pkg", ".ffpfsc")):
+                pkgs.append(os.path.join(root, f))
+            if f_lower in ("eboot.bin", "param.sfo", "param.json", "app.xml"):
+                p = Path(root)
+                if p.name in ("sce_sys", "decrypted", "sce_module", "sce_pfs"):
+                    game_folders.append(str(p.parent))
+                else:
+                    game_folders.append(str(p))
+
+    # Single package file (e.g. game.pkg)
+    if len(pkgs) == 1 and not game_folders:
+        pkg_p = pkgs[0]
+        return "file", pkg_p, os.path.basename(pkg_p)
+
+    # Recognised PS5 / PS4 game folder hierarchy
+    if game_folders:
+        best_folder = min(set(game_folders), key=lambda x: len(Path(x).parts))
+        return "folder", best_folder, os.path.basename(best_folder)
+
+    # Single top-level directory
+    if len(valid_entries) == 1 and os.path.isdir(valid_entries[0]):
+        return "folder", valid_entries[0], os.path.basename(valid_entries[0])
+
+    # Multiple files or folders at root of extraction
+    return "folder", extract_dir, fallback_name
+
+
+def cleanup_stale_staging_directories():
+    """Removes any abandoned ps5_staged_* directories in the temporary directory older than 1 hour."""
+    tmp_base = tempfile.gettempdir()
+    now = time.time()
+    try:
+        for entry in os.listdir(tmp_base):
+            if entry.startswith("ps5_staged_"):
+                full_p = os.path.join(tmp_base, entry)
+                try:
+                    if os.path.isdir(full_p):
+                        mtime = os.path.getmtime(full_p)
+                        if now - mtime > 3600:  # 1 hour
+                            shutil.rmtree(full_p, ignore_errors=True)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def transfer_staged_archive(job, settings, token, report, save):
+    """Downloads (if URL) or stages a local compressed archive, unpacks it using the bundled unar
+    tool with automatic or user-specified password decryption, discovers the game payload
+    (folder or single package), and recursively transfers it to the PS5 over FTP.
+    Guarantees zero storage leaks by removing the staging directory in a finally block."""
+    unar_bin = find_unar_tool()
+    if not unar_bin:
+        raise TransferError("Extraction tool (unar) not found on this system. Cannot extract archive.")
+
+    staging_dir = tempfile.mkdtemp(prefix="ps5_staged_")
+    report("status", "Preparing isolated staging extraction cache")
+    try:
+        if job.get("kind") == "url":
+            raw_src = probe_source("url", job["source"], token, decompress=False)
+            if raw_src.location != job["source"]:
+                job["source"] = raw_src.location
+            total_size = raw_src.size
+            job["total"] = total_size
+            archive_name = valid_name(raw_src.filename or job.get("name") or "archive.bin")
+            archive_path = os.path.join(staging_dir, archive_name)
+
+            # Check free Mac disk space
+            try:
+                free_disk = shutil.disk_usage(staging_dir).free
+                needed_disk = (total_size or 0) * 2.5
+                if total_size and needed_disk > free_disk:
+                    raise TransferError(
+                        f"Insufficient Mac storage for extraction: requires {format_bytes(needed_disk)} free disk space, but only {format_bytes(free_disk)} available."
+                    )
+            except OSError:
+                pass
+
+            report("status", f"Downloading archive ({format_bytes(0)} / {format_bytes(total_size)})")
+            report("source", {
+                "ranges": raw_src.ranges,
+                "resumable": raw_src.resumable(),
+                "size": total_size,
+                "is_zip": False,
+                "is_archive": True,
+                "archive_info": None,
+                "is_folder": False
+            })
+
+            reader = make_reader(raw_src, offset=0, token=token)
+            meter = Meter()
+            started = last = time.monotonic()
+            hist = [(started, 0, 0)]
+            downloaded = 0
+
+            with open(archive_path, "wb") as f_out:
+                while not token.event.is_set():
+                    token.check()
+                    chunk = reader.read(256 * 1024)
+                    if not chunk:
+                        break
+                    f_out.write(chunk)
+                    downloaded += len(chunk)
+                    meter.add(downloaded=len(chunk))
+                    now = time.monotonic()
+                    if now - last >= 0.4:
+                        snap = meter.snapshot()
+                        _, down_rate = windowed_rates(hist, now, snap)
+                        rem = max(0, total_size - downloaded) if total_size else 0
+                        eta = rem / down_rate if (down_rate > 0 and total_size) else None
+                        report("progress", {
+                            "transferred": downloaded,
+                            "total": total_size or downloaded,
+                            "upload_bps": 0,
+                            "download_bps": down_rate,
+                            "buffered": 0,
+                            "buffer_capacity": 32 * MIB,
+                            "elapsed": now - started,
+                            "eta": eta,
+                            "bottleneck": "Download server",
+                            "offset": 0,
+                            "current_file": archive_name
+                        })
+                        job["transferred"] = downloaded
+                        job["detail"] = f"Downloading archive ({format_bytes(downloaded)} / {format_bytes(total_size)})"
+                        last = now
+
+            reader.close()
+            if total_size and downloaded != total_size:
+                raise TransferError(f"Download incomplete: expected {total_size} bytes, received {downloaded} bytes.")
+        else:
+            archive_path = os.path.abspath(os.path.expanduser(job["source"]))
+            if not os.path.isfile(archive_path):
+                raise TransferError(f"Local archive not found: {archive_path}")
+            archive_name = os.path.basename(archive_path)
+
+        report("status", f"Extracting {archive_name}")
+        job["detail"] = f"Extracting archive contents with password…"
+        save()
+
+        extract_dir = os.path.join(staging_dir, "extracted")
+        os.makedirs(extract_dir, exist_ok=True)
+
+        pwd = (
+            job.get("archive_password")
+            or extract_password_hint(archive_name)
+            or extract_password_hint(job.get("source", ""))
+            or ""
+        )
+
+        cmd = [unar_bin, "-q", "-f", "-o", extract_dir]
+        if pwd:
+            cmd.extend(["-p", pwd])
+        cmd.append(archive_path)
+
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            while proc.poll() is None:
+                if token.event.is_set():
+                    proc.kill()
+                    token.check()
+                time.sleep(0.5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            raise
+
+        ret = proc.returncode
+        stdout, stderr = proc.communicate()
+        if ret != 0:
+            err = stderr.strip() or stdout.strip()
+            if "password" in err.lower() or "encrypted" in err.lower():
+                hint_str = f" (tried password '{pwd}')" if pwd else ""
+                raise TransferError(f"Archive extraction failed: Password required or incorrect{hint_str}.")
+            raise TransferError(f"Archive extraction failed (code {ret}): {err[:200]}")
+
+        payload_type, payload_path, payload_name = find_extracted_payload(extract_dir, fallback_name=Path(archive_name).stem)
+
+        dest_base = valid_folder(job.get("folder") or settings.get("folder") or "/data/ShadowMount")
+
+        if payload_type == "folder":
+            # If destination was /data/pkg but extracted payload is a game folder, route to /data/ShadowMount
+            if dest_base == "/data/pkg":
+                dest_base = "/data/ShadowMount"
+            if dest_base.rstrip("/").endswith("/" + payload_name):
+                target_ps5_folder = dest_base.rstrip("/")
+            else:
+                target_ps5_folder = f"{dest_base.rstrip('/')}/{payload_name}"
+
+            folder_job = {
+                **job,
+                "kind": "folder",
+                "source": payload_path,
+                "name": payload_name,
+                "folder": target_ps5_folder,
+                "completed_files": job.get("completed_files", [])
+            }
+            report("status", f"Transferring {payload_name} to PS5")
+            return transfer_folder(folder_job, settings, token, report, save)
+        else:
+            # Single package file (.pkg / .ffpfsc)
+            if dest_base == "/data/ShadowMount" and payload_name.lower().endswith(".pkg"):
+                dest_base = "/data/pkg"
+            file_job = {
+                **job,
+                "kind": "local",
+                "source": payload_path,
+                "name": payload_name,
+                "folder": dest_base,
+                "decompress": False,
+                "total": os.path.getsize(payload_path)
+            }
+            report("status", f"Transferring {payload_name} to PS5")
+            return transfer(file_job, settings, token, report, save)
+
+    finally:
+        # Guarantee zero storage leak on Mac
+        shutil.rmtree(staging_dir, ignore_errors=True)
+
+
 def transfer(job, settings, token, report, save):
     """One transfer attempt. Partial files are uniquely owned by the persisted job ID."""
     if job.get("kind") == "folder":
         return transfer_folder(job, settings, token, report, save)
+
     report("status", "Inspecting source")
-    if job.get("kind") == "multipart":
-        source = probe_multipart_source(job.get("parts") or job["source"], token, target_filename=job.get("name"))
+
+    # If explicitly marked for staged extraction or an encrypted archive
+    if job.get("staged_extraction") and find_unar_tool():
+        return transfer_staged_archive(job, settings, token, report, save)
+
+    is_decomp = job.get("decompress", True)
+    is_arch = (
+        job.get("is_archive")
+        or is_archive_candidate(job.get("name", ""))
+        or is_archive_candidate(job.get("source", ""))
+    )
+
+    if is_decomp and is_arch:
+        try:
+            if job.get("kind") == "multipart":
+                source = probe_multipart_source(job.get("parts") or job["source"], token, target_filename=job.get("name"))
+            else:
+                source = probe_source(job["kind"], job["source"], token, decompress=True)
+            if not (source.kind.startswith("zip_") or source.kind.startswith("archive_")):
+                if find_unar_tool():
+                    return transfer_staged_archive(job, settings, token, report, save)
+        except Exception:
+            if find_unar_tool():
+                return transfer_staged_archive(job, settings, token, report, save)
+            raise
     else:
-        source = probe_source(job["kind"], job["source"], token, decompress=job.get("decompress", True))
+        if job.get("kind") == "multipart":
+            source = probe_multipart_source(job.get("parts") or job["source"], token, target_filename=job.get("name"))
+        else:
+            source = probe_source(job["kind"], job["source"], token, decompress=job.get("decompress", True))
     if source.kind == "url" and source.location != job["source"]:
         job["source"] = source.location
     if (source.kind.startswith("zip_") or source.kind.startswith("archive_")) and source.filename:

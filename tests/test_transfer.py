@@ -12,7 +12,8 @@ import time
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, probe_source,
-    transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, validate_multipart_source, connect_ftp, close_ftp)
+    transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, validate_multipart_source,
+    find_unar_tool, find_extracted_payload, cleanup_stale_staging_directories, transfer_staged_archive, connect_ftp, close_ftp)
 from ps5_streamer import Manager, Handler, validated_settings
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
@@ -471,5 +472,82 @@ class Integration(unittest.TestCase):
         self.assertTrue(info['ranges'])
         self.assertTrue(info['resumable'])
 
+    def test_find_unar_tool(self):
+        tool = find_unar_tool()
+        self.assertIsNotNone(tool, "unar executable must be discoverable")
+        self.assertTrue(Path(tool).is_file())
+
+    def test_find_extracted_payload(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as d:
+            # Empty error
+            with self.assertRaises(TransferError):
+                find_extracted_payload(d)
+
+            # Single package
+            pkg_p = Path(d) / "Game.pkg"
+            pkg_p.write_bytes(b"PKG")
+            pt, pp, pn = find_extracted_payload(d)
+            self.assertEqual(pt, "file")
+            self.assertEqual(pn, "Game.pkg")
+            pkg_p.unlink()
+
+            # Game folder with eboot.bin
+            game_dir = Path(d) / "Balatro 01.000"
+            game_dir.mkdir()
+            (game_dir / "eboot.bin").write_bytes(b"ELF")
+            pt, pp, pn = find_extracted_payload(d)
+            self.assertEqual(pt, "folder")
+            self.assertEqual(pn, "Balatro 01.000")
+
+    def test_cleanup_stale_staging_directories(self):
+        import os, time, shutil
+        tmp_base = tempfile.gettempdir()
+        stale_dir = Path(tmp_base) / "ps5_staged_test_stale"
+        fresh_dir = Path(tmp_base) / "ps5_staged_test_fresh"
+        stale_dir.mkdir(exist_ok=True)
+        fresh_dir.mkdir(exist_ok=True)
+        try:
+            # Backdate stale_dir by 2 hours
+            past = time.time() - 7200
+            os.utime(stale_dir, (past, past))
+            cleanup_stale_staging_directories()
+            self.assertFalse(stale_dir.exists(), "Stale staging dir should be cleaned up")
+            self.assertTrue(fresh_dir.exists(), "Fresh staging dir should remain")
+        finally:
+            shutil.rmtree(stale_dir, ignore_errors=True)
+            shutil.rmtree(fresh_dir, ignore_errors=True)
+
+    def test_transfer_staged_archive_encrypted(self):
+        test_archive = Path("/tmp/balatro_test.rar")
+        if not test_archive.is_file():
+            self.skipTest("Test archive /tmp/balatro_test.rar not available")
+
+        job = {
+            "id": "staged_test_1",
+            "name": "[DLPSGAME.COM]-PPSA21402.rar",
+            "source": str(test_archive),
+            "kind": "local",
+            "folder": "/data/ShadowMount",
+            "decompress": True,
+            "archive_password": "DLPSGAME.COM",
+            "completed_files": []
+        }
+        reports = []
+        def report(k, v):
+            reports.append((k, v))
+        def save():
+            pass
+
+        tok = StopToken()
+        transfer_staged_archive(job, self.cfg, tok, report, save)
+
+        dest_game = self.root / "data" / "ShadowMount" / "Balatro 01.015.000 PPSA21402"
+        self.assertTrue(dest_game.is_dir(), "Game folder should exist on FTP server")
+        self.assertTrue((dest_game / "eboot.bin").is_file(), "eboot.bin should exist")
+        self.assertTrue((dest_game / "sce_sys" / "param.json").is_file(), "param.json should exist")
+        self.assertGreater(len(list(dest_game.iterdir())), 5)
+
 if __name__=='__main__':unittest.main()
+
 

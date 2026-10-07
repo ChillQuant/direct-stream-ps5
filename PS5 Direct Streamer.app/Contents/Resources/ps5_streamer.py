@@ -28,9 +28,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp,
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
-    valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source, MIB, HEADERS)
+    valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source,
+    find_unar_tool, cleanup_stale_staging_directories, MIB, HEADERS)
 from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info, get_request_headers_for_url
-from zip_streamer import is_archive_candidate, inspect_archive, EncryptedArchiveError
+from zip_streamer import is_archive_candidate, inspect_archive, EncryptedArchiveError, extract_password_hint
 
 VERSION = "2.9.0"
 BASE = Path(__file__).resolve().parent
@@ -254,6 +255,7 @@ class Manager:
         self.connection = {"state": "unknown", "message": "Add your PS5 address to connect"}
         self.metrics = {}
         self.history = []
+        cleanup_stale_staging_directories()
         self._load()
         self.thread = threading.Thread(target=self._loop, daemon=True, name="transfer-queue")
         self.thread.start()
@@ -473,6 +475,8 @@ class Manager:
                     item_total = None
                     item_detail = "Waiting to start"
                     is_decomp = bool(data.get("decompress", True))
+                    archive_pwd = data.get("archive_password") or extract_password_hint(src) or extract_password_hint(name) or ""
+                    staged_ext = bool(data.get("staged_extraction", False))
                     if item_kind == "local":
                         try:
                             item_total = os.path.getsize(src)
@@ -490,7 +494,10 @@ class Manager:
                                     if item_name.lower().endswith(".pkg") and dest_base == "/data/ShadowMount":
                                         dest_base = "/data/pkg"
                             except Exception:
-                                pass
+                                if find_unar_tool():
+                                    staged_ext = True
+                                    arch_type = Path(src).suffix.lstrip(".").upper() or "ARCHIVE"
+                                    item_detail = f"{arch_type} Archive · Staged extraction to PS5"
                     new.append({
                         "id": secrets.token_hex(6),
                         "name": item_name,
@@ -503,6 +510,8 @@ class Manager:
                         "transferred": 0,
                         "overwrite": bool(data.get("overwrite", False)),
                         "decompress": is_decomp,
+                        "archive_password": archive_pwd,
+                        "staged_extraction": staged_ext,
                         "created": time.time(),
                         "identity": None
                     })
@@ -769,7 +778,13 @@ class Manager:
                                     target["total"] = info["size"]
                                 if info.get("filename") and (target["name"] in ("download.bin", "file", "view", "uc", "", j.get("name")) or not Path(target["name"]).suffix):
                                     target["name"] = info.get("filename")
-                                if info.get("is_archive") or info.get("is_zip"):
+                                if info.get("password_hint") and not target.get("archive_password"):
+                                    target["archive_password"] = info["password_hint"]
+                                if info.get("staged_extraction"):
+                                    target["staged_extraction"] = True
+                                    arch_type = (info.get("archive_type") or "Archive").upper()
+                                    target["detail"] = f"{arch_type} Archive · Staged extraction to PS5"
+                                elif info.get("is_archive") or info.get("is_zip"):
                                     arch_type = (info.get("archive_type") or "Archive").upper()
                                     target["detail"] = f"{arch_type} Archive · Streaming '{info.get('filename')}' directly to PS5"
                                 else:
@@ -778,7 +793,7 @@ class Manager:
                             else:
                                 if info.get("archive_encrypted"):
                                     target["archive_encrypted"] = True
-                                    target["detail"] = "Encrypted Archive · Password required (cannot extract on-the-fly)"
+                                    target["detail"] = "Encrypted Archive · Password required"
                                 else:
                                     target["detail"] = f"Link check failed: {info['error']}"
                 self.save()
@@ -853,11 +868,14 @@ class Manager:
                             is_encrypted = True
                         archive_err = str(ex)
 
+                fn_clean = info.filename or extract_url_filename(resolved)
+                pwd_hint = pwd_hint or extract_password_hint(fn_clean) or extract_password_hint(direct_url) or extract_password_hint(src)
+                can_stage = bool(find_unar_tool())
                 results.append({
                     "url": src,
                     "resolved_url": direct_url if direct_url != src else None,
                     "ok": True,
-                    "filename": info.filename or extract_url_filename(resolved),
+                    "filename": fn_clean,
                     "size": size_b,
                     "size_formatted": size_str,
                     "ranges": bool(info.ranges),
@@ -866,6 +884,7 @@ class Manager:
                     "archive_encrypted": is_encrypted,
                     "archive_error": archive_err,
                     "password_hint": pwd_hint,
+                    "staged_extraction": (is_encrypted or arch_meta is None) and is_arch and can_stage,
                     "archive_payload": arch_meta.get("selected") if arch_meta else None,
                 })
             except Exception as e:

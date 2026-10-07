@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Keep the native Mac bundle in sync with the editable source tree."""
 from pathlib import Path
+import os
 import shutil
 root = Path(__file__).resolve().parent
 resources = root / 'PS5 Direct Streamer.app' / 'Contents' / 'Resources'
@@ -9,4 +10,17 @@ for name in ('ps5_streamer.py', 'transfer_core.py', 'resolver.py', 'zip_streamer
     if (root / name).exists():
         shutil.copy2(root / name, resources / name)
 shutil.copytree(root / 'web', resources / 'web', dirs_exist_ok=True)
+if (root / 'bin').exists():
+    bin_dst = resources / 'bin'
+    bin_dst.mkdir(parents=True, exist_ok=True)
+    for src_file in (root / 'bin').iterdir():
+        if src_file.is_file():
+            dst_file = bin_dst / src_file.name
+            if dst_file.exists():
+                try:
+                    dst_file.unlink()
+                except OSError:
+                    pass
+            shutil.copy2(src_file, dst_file)
+            os.chmod(dst_file, 0o755)
 print('Mac bundle source and web assets updated.')
