@@ -35,6 +35,7 @@ from zip_streamer import (
     get_zip_payload_offset,
     ZipStreamingReader,
     ArchiveStreamingReader,
+    EncryptedArchiveError,
 )
 
 MIB = 1024 * 1024
@@ -259,8 +260,10 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
                         filename=sel["basename"],
                         archive_info={**sel, "payload_offset": 0, "total_archive_size": meta["total_archive_size"], "archive_type": arch_type},
                     )
-            except Exception:
-                pass
+            except EncryptedArchiveError as ex:
+                raise TransferError(str(ex)) from ex
+            except Exception as ex:
+                raise TransferError(f"Cannot decompress '{filename}': {ex}. Uncheck 'Decompress Archive' to transfer the raw archive file.") from ex
         return SourceInfo("local", path, stat.st_size, True,
             fingerprint=fp, filename=filename)
     location = valid_url(location)
@@ -310,7 +313,9 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
             etag = ""
         filename = parse_filename_from_headers(h, response.geturl())
         final_url = valid_url(response.geturl())
-        if decompress and (is_archive_candidate(final_url) or is_archive_candidate(filename) or any(t in h.get("Content-Type", "").lower() for t in ("application/zip", "application/x-rar", "application/vnd.rar", "application/x-7z-compressed", "application/x-tar"))):
+        is_arch = is_archive_candidate(final_url) or is_archive_candidate(filename)
+        content_type_arch = any(t in h.get("Content-Type", "").lower() for t in ("application/zip", "application/x-rar", "application/vnd.rar", "application/x-7z-compressed", "application/x-tar"))
+        if decompress and (is_arch or content_type_arch):
             try:
                 arch_headers = get_request_headers_for_url(final_url, HEADERS)
                 meta = inspect_archive("url", final_url, headers=arch_headers, total_size=size)
@@ -339,7 +344,11 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
                         filename=sel["basename"],
                         archive_info={**sel, "payload_offset": 0, "total_archive_size": size, "archive_type": arch_type},
                     )
-            except Exception:
+            except EncryptedArchiveError as ex:
+                raise TransferError(str(ex)) from ex
+            except Exception as ex:
+                if is_arch:
+                    raise TransferError(f"Cannot decompress '{filename}': {ex}. Uncheck 'Decompress Archive' to transfer the raw archive file.") from ex
                 pass
         return SourceInfo("url", final_url, size, ranges, etag,
                           h.get("Last-Modified", ""), filename=filename)
@@ -1016,14 +1025,17 @@ def validate_source_url(url, token, decompress=True):
             "is_archive": (src.kind.startswith("zip_") or src.kind.startswith("archive_")),
             "archive_type": (src.archive_info or {}).get("archive_type", "zip" if src.kind.startswith("zip_") else "archive"),
             "archive_info": src.archive_info,
+            "archive_encrypted": False,
             "error": None
         }
     except Exception as e:
+        is_enc = "encrypted" in str(e).lower() or "password" in str(e).lower()
         return {
             "valid": False,
             "ranges": False,
             "resumable": False,
             "size": None,
+            "archive_encrypted": is_enc,
             "error": str(e)
         }
 

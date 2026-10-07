@@ -166,6 +166,79 @@ def find_archive_tool():
     return None
 
 
+class EncryptedArchiveError(ValueError):
+    """Raised when an archive is password-protected or encrypted."""
+    def __init__(self, message, archive_type="archive", password_hint=None):
+        super().__init__(message)
+        self.archive_type = archive_type
+        self.password_hint = password_hint
+
+
+def extract_password_hint(text):
+    """Extract password hint from bracketed scene names like [DLPSGAME.COM] or pass=xyz."""
+    if not text:
+        return None
+    clean = urllib.parse.unquote(str(text))
+    m = re.search(r"\[([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\]", clean)
+    if m:
+        return m.group(1)
+    m2 = re.search(r"(?:password|pass)[=:\s_-]+([a-zA-Z0-9_-]+)", clean, re.IGNORECASE)
+    if m2:
+        return m2.group(1)
+    return None
+
+
+def detect_archive_encryption(sample_bytes, stderr_text="", name_or_url=""):
+    """
+    Check if archive header or decompressor stderr indicates encryption/password protection.
+    Works for RAR5, RAR4, 7Z, and libarchive/bsdtar/7zz stderr outputs.
+    """
+    err_lower = (stderr_text or "").lower()
+    enc_phrases = (
+        "encryption is not supported",
+        "cannot open encrypted archive",
+        "passphrase required",
+        "password required",
+        "wrong password",
+        "encrypted file",
+        "unsupported feature: encryption",
+        "bad password",
+        "encrypted = +",
+        "header is encrypted",
+    )
+    if any(p in err_lower for p in enc_phrases):
+        return True
+
+    if sample_bytes and len(sample_bytes) >= 16:
+        # RAR 5.0
+        if sample_bytes.startswith(b"Rar!\x1a\x07\x01\x00"):
+            idx = 12
+            def _read_vint(buf, off):
+                val = 0
+                shift = 0
+                for i in range(10):
+                    if off + i >= len(buf):
+                        break
+                    b = buf[off + i]
+                    val |= (b & 0x7F) << shift
+                    shift += 7
+                    if not (b & 0x80):
+                        return val, off + i + 1
+                return val, off
+            hdr_size, idx = _read_vint(sample_bytes, idx)
+            hdr_type, idx = _read_vint(sample_bytes, idx)
+            if hdr_type == 4:  # HEAD_ENCRYPT: entire archive header is encrypted
+                return True
+        # RAR 4.x
+        elif sample_bytes.startswith(b"Rar!\x1a\x07\x00"):
+            if len(sample_bytes) > 11 and sample_bytes[9] == 0x73 and (sample_bytes[10] & 0x80):
+                return True
+            if len(sample_bytes) > 11 and sample_bytes[9] == 0x74 and (sample_bytes[10] & 0x04):
+                return True
+
+    return False
+
+
 def escape_bsdtar_pattern(name):
     """Escape glob pattern characters for bsdtar/tar member extraction."""
     return re.sub(r"([*?\[\]])", r"\\\1", name)
@@ -232,14 +305,13 @@ def inspect_zip_archive(kind, location, headers=None, total_size=None):
 
     try:
         members = zf.infolist()
-        selected = select_best_member(members)
-        if not selected:
-            raise ValueError("ZIP archive contains no usable payload files.")
-
+        is_encrypted = False
         entries = []
         for info in members:
             if info.filename.endswith("/") or "__MACOSX" in info.filename:
                 continue
+            if info.flag_bits & 0x1:
+                is_encrypted = True
             entries.append({
                 "filename": info.filename,
                 "uncompressed_size": info.file_size,
@@ -248,6 +320,22 @@ def inspect_zip_archive(kind, location, headers=None, total_size=None):
                 "header_offset": info.header_offset,
                 "crc": info.CRC,
             })
+
+        if is_encrypted:
+            pwd_hint = extract_password_hint(location)
+            hint_str = f" (password: {pwd_hint} required)" if pwd_hint else " (password required)"
+            raise EncryptedArchiveError(
+                f"This ZIP archive is password-protected or encrypted{hint_str}. "
+                "Direct streaming to PS5 cannot decompress encrypted archives on-the-fly. "
+                f"Extract the archive on your computer first{f' with password {pwd_hint}' if pwd_hint else ''}, "
+                "then use 'Upload Folder' to transfer the game folder directly to your PS5.",
+                archive_type="zip",
+                password_hint=pwd_hint,
+            )
+
+        selected = select_best_member(members)
+        if not selected:
+            raise ValueError("ZIP archive contains no usable payload files.")
 
         return {
             "is_zip": True,
@@ -462,12 +550,18 @@ def inspect_system_archive(kind, location, headers=None, total_size=None):
     entries = []
     raw_output = ""
     stderr_output = ""
+    sample = b""
 
     if kind == "local":
         path = os.path.abspath(os.path.expanduser(location))
         if not os.path.isfile(path):
             raise FileNotFoundError(f"Local file not found: {path}")
         total_size = os.path.getsize(path)
+        try:
+            with open(path, "rb") as f:
+                sample = f.read(65536)
+        except Exception:
+            pass
         try:
             proc = subprocess.Popen(
                 [tool, "--numeric-owner", "-tvf", path],
@@ -508,6 +602,19 @@ def inspect_system_archive(kind, location, headers=None, total_size=None):
         except Exception as ex:
             raise ValueError(f"Failed to inspect remote archive stream: {ex}") from ex
 
+    arch_type = get_archive_type(location)
+    if detect_archive_encryption(sample, stderr_output, location):
+        pwd_hint = extract_password_hint(location)
+        hint_str = f" (password: {pwd_hint} required)" if pwd_hint else " (password required)"
+        raise EncryptedArchiveError(
+            f"This {arch_type.upper()} archive is password-protected or encrypted{hint_str}. "
+            "Direct streaming to PS5 cannot decompress encrypted archives on-the-fly. "
+            f"Extract the archive on your computer first{f' with password {pwd_hint}' if pwd_hint else ''}, "
+            "then use 'Upload Folder' to transfer the game folder directly to your PS5.",
+            archive_type=arch_type,
+            password_hint=pwd_hint,
+        )
+
     pattern_numeric = re.compile(r"^([drwxst-]{10})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([A-Za-z]{3}\s+\d+\s+[\d:]+)\s+(.+)$")
     pattern_fallback = re.compile(r"^([drwxst-]{10})\s+.*?(\d+)\s+([A-Za-z]{3}\s+\d+\s+[\d:]+)\s+(.+)$")
 
@@ -536,14 +643,34 @@ def inspect_system_archive(kind, location, headers=None, total_size=None):
         })
 
     if not entries:
+        if detect_archive_encryption(sample, stderr_output, location):
+            pwd_hint = extract_password_hint(location)
+            hint_str = f" (password: {pwd_hint} required)" if pwd_hint else " (password required)"
+            raise EncryptedArchiveError(
+                f"This {arch_type.upper()} archive is password-protected or encrypted{hint_str}. "
+                "Direct streaming to PS5 cannot decompress encrypted archives on-the-fly. "
+                f"Extract the archive on your computer first{f' with password {pwd_hint}' if pwd_hint else ''}, "
+                "then use 'Upload Folder' to transfer the game folder directly to your PS5.",
+                archive_type=arch_type,
+                password_hint=pwd_hint,
+            )
         err_hint = stderr_output.strip()[:150] or "No files found in archive listing."
         raise ValueError(f"Archive inspection failed: {err_hint}")
+
+    # Check if archive is a loose directory structure / folder dump (e.g. Balatro loose files, eboot.bin, etc.)
+    has_pkg_or_disc = any(any(e["filename"].lower().endswith(ext) for ext in (".ffpfsc", ".exfat", ".ufs", ".pkg", ".iso", ".nsp", ".xci")) for e in entries)
+    if not has_pkg_or_disc and len(entries) > 1:
+        if any("eboot.bin" in e["filename"].lower() or "param.sfo" in e["filename"].lower() or "sce_sys" in e["filename"].lower() for e in entries):
+            raise ValueError(
+                f"This archive contains a loose game folder structure ({len(entries)} files) rather than a single package file (.pkg/.ffpfsc). "
+                "Single-file streaming to PS5 cannot reconstruct the folder hierarchy. Extract the archive on your computer first, "
+                "then use 'Upload Folder' to transfer the entire game directory directly to your PS5."
+            )
 
     selected = select_best_member(entries)
     if not selected:
         raise ValueError("Archive contains no usable payload files.")
 
-    arch_type = get_archive_type(location)
     return {
         "is_archive": True,
         "archive_type": arch_type,

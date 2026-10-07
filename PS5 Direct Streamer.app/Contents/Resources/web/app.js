@@ -369,7 +369,7 @@ function row(job, index) {
   const v = parseJobVisuals(job);
   const isMulti = job.kind === 'multipart';
   const partsCount = (job.parts && job.parts.length) || 2;
-  const isArchive = ['zip', 'zip64'].includes(v.tag.toLowerCase()) || job.is_zip || !!job.archive_info;
+  const isArchive = ['zip', 'zip64', 'rar', '7z', 'tar', 'gz'].includes(v.tag.toLowerCase()) || job.is_zip || job.is_archive || !!job.archive_info;
 
   let menu = `<button data-job="${job.id}" data-action="up">Move up</button><button data-job="${job.id}" data-action="down">Move down</button>`;
   if (job.kind === 'url' && !isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="edit">Update link</button>`;
@@ -436,6 +436,7 @@ function row(job, index) {
               </button>
             ` : ''}
             ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? 'Extract' : 'Raw'}</span>` : ''}
+            ${job.archive_encrypted ? `<span class="meta-pill" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);">Encrypted · Password Required</span>` : ''}
           </div>
           <div class="game-sub-text">
             <span>${v.formatLabel}</span>
@@ -1288,23 +1289,30 @@ $('modal-dest-folder')?.addEventListener('input', e => {
   }
 });
 
+function setArchiveExtractMode(enabled) {
+  modalExtractMode = !!enabled;
+  if (modalExtractMode) {
+    $('btn-extract-on')?.classList.add('selected');
+    $('btn-extract-off')?.classList.remove('selected');
+    if ($('decompress-zip')) $('decompress-zip').checked = true;
+    const hint = $('archive-mode-hint');
+    if (hint) hint.textContent = 'Decompresses inner game package (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.';
+  } else {
+    $('btn-extract-off')?.classList.add('selected');
+    $('btn-extract-on')?.classList.remove('selected');
+    if ($('decompress-zip')) $('decompress-zip').checked = false;
+    const hint = $('archive-mode-hint');
+    if (hint) hint.textContent = 'Transfers raw intact archive directly to PS5 without extraction.';
+  }
+}
+
 $('btn-extract-on')?.addEventListener('click', () => {
-  modalExtractMode = true;
-  $('btn-extract-on')?.classList.add('selected');
-  $('btn-extract-off')?.classList.remove('selected');
-  if ($('decompress-zip')) $('decompress-zip').checked = true;
-  const hint = $('archive-mode-hint');
-  if (hint) hint.textContent = 'Decompresses inner game package (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.';
+  setArchiveExtractMode(true);
   updateAddPreview();
 });
 
 $('btn-extract-off')?.addEventListener('click', () => {
-  modalExtractMode = false;
-  $('btn-extract-off')?.classList.add('selected');
-  $('btn-extract-on')?.classList.remove('selected');
-  if ($('decompress-zip')) $('decompress-zip').checked = false;
-  const hint = $('archive-mode-hint');
-  if (hint) hint.textContent = 'Transfers raw intact archive directly to PS5 without extraction.';
+  setArchiveExtractMode(false);
   updateAddPreview();
 });
 
@@ -1458,7 +1466,11 @@ const updateAddPreview = () => {
     smartDest = '/data/pkg';
   } else if (isArchive) {
     const archName = ext.toUpperCase();
-    if (modalExtractMode) {
+    const vInfo = getVerifiedInfo(first);
+    if (vInfo && vInfo.archive_encrypted) {
+      if ($('preview-filename')) $('preview-filename').textContent = `Encrypted ${archName}: ${name}`;
+      formatLabel = `Password-protected archive (Password: ${vInfo.password_hint || 'Required'}) · Stream raw or extract on PC`;
+    } else if (modalExtractMode) {
       if ($('preview-filename')) $('preview-filename').textContent = `${archName} Archive: ${name}`;
       formatLabel = 'Auto-decompressing directly to PS5 (0 GB disk space used)';
     } else {
@@ -1574,8 +1586,26 @@ const runVerifyLinks = async () => {
               <span class="verify-filename" title="${escaped(item.filename)}">${escaped(item.filename)}</span>
               ${item.resolved_url ? `<span class="verify-resolved-note" title="${escaped(item.resolved_url)}">Direct stream resolved</span>` : ''}
             </div>
+            ${item.archive_encrypted ? `
+              <div style="margin-top: 10px; padding: 10px 12px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; font-size: 12px; color: #fca5a5; line-height: 1.45;">
+                <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Password-Protected Archive Detected
+                  ${item.password_hint ? `<span style="background: rgba(239,68,68,0.25); padding: 1px 6px; border-radius: 4px; font-family: monospace;">Password: ${escaped(item.password_hint)}</span>` : ''}
+                </div>
+                <div>${escaped(item.archive_error || 'This archive is encrypted and cannot be decompressed on-the-fly directly to PS5.')}</div>
+                <div style="margin-top: 6px; color: #fde047;">Extract on your computer first with the password, then use <strong>Upload Folder</strong> to transfer the game.</div>
+              </div>
+            ` : ''}
           </div>
         `;
+        if (item.archive_encrypted) {
+          setArchiveExtractMode(false);
+          const hint = $('archive-mode-hint');
+          if (hint) {
+            hint.textContent = 'Password-protected archive: Stream as raw file, or extract on your computer and use Upload Folder.';
+          }
+        }
         if ($('file-preview-card')) $('file-preview-card').hidden = false;
         if ($('preview-filename')) $('preview-filename').textContent = item.filename;
         if ($('preview-filesize')) $('preview-filesize').textContent = item.size_formatted;

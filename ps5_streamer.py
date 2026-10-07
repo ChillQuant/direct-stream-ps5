@@ -28,9 +28,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp,
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
-    valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source, MIB)
-from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info
-from zip_streamer import is_archive_candidate
+    valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source, MIB, HEADERS)
+from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info, get_request_headers_for_url
+from zip_streamer import is_archive_candidate, inspect_archive, EncryptedArchiveError
 
 VERSION = "2.9.0"
 BASE = Path(__file__).resolve().parent
@@ -776,7 +776,11 @@ class Manager:
                                     status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
                                     target["detail"] = f"Link verified · {status}"
                             else:
-                                target["detail"] = f"Link check failed: {info['error']}"
+                                if info.get("archive_encrypted"):
+                                    target["archive_encrypted"] = True
+                                    target["detail"] = "Encrypted Archive · Password required (cannot extract on-the-fly)"
+                                else:
+                                    target["detail"] = f"Link check failed: {info['error']}"
                 self.save()
             except Exception:
                 pass
@@ -830,15 +834,39 @@ class Manager:
                 else:
                     size_str = "Unknown size"
 
+                direct_url = info.location or resolved
+                is_arch = is_archive_candidate(info.filename) or is_archive_candidate(direct_url)
+                is_encrypted = False
+                archive_err = None
+                arch_meta = None
+                pwd_hint = None
+                if is_arch:
+                    try:
+                        arch_headers = get_request_headers_for_url(direct_url, HEADERS)
+                        arch_meta = inspect_archive("url", direct_url, headers=arch_headers, total_size=size_b)
+                    except EncryptedArchiveError as ea:
+                        is_encrypted = True
+                        archive_err = str(ea)
+                        pwd_hint = ea.password_hint
+                    except Exception as ex:
+                        if "encrypted" in str(ex).lower() or "password" in str(ex).lower():
+                            is_encrypted = True
+                        archive_err = str(ex)
+
                 results.append({
                     "url": src,
-                    "resolved_url": resolved if resolved != src else None,
+                    "resolved_url": direct_url if direct_url != src else None,
                     "ok": True,
                     "filename": info.filename or extract_url_filename(resolved),
                     "size": size_b,
                     "size_formatted": size_str,
                     "ranges": bool(info.ranges),
                     "resumable": bool(info.resumable()),
+                    "is_archive": is_arch,
+                    "archive_encrypted": is_encrypted,
+                    "archive_error": archive_err,
+                    "password_hint": pwd_hint,
+                    "archive_payload": arch_meta.get("selected") if arch_meta else None,
                 })
             except Exception as e:
                 overall_ok = False

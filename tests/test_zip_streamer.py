@@ -43,6 +43,9 @@ from zip_streamer import (
     get_archive_type,
     escape_bsdtar_pattern,
     select_best_member,
+    EncryptedArchiveError,
+    extract_password_hint,
+    detect_archive_encryption,
 )
 
 RAW_PKG_CONTENT = (b"PS5_PKG_HEADER_MAGIC_TEST_1234567890\n" + b"A" * 1024) * 500  # ~530 KB
@@ -341,6 +344,48 @@ class TestZipStreamer(unittest.TestCase):
             content = f.read()
         self.assertEqual(len(content), 74281)
         self.assertTrue(content.startswith(b"1\r\n"))
+
+    def test_extract_password_hint(self):
+        self.assertEqual(extract_password_hint("[DLPSGAME.COM]-PPSA21402.rar"), "DLPSGAME.COM")
+        self.assertEqual(extract_password_hint("[ROMSFUN.COM]-GrandTheftAuto.zip"), "ROMSFUN.COM")
+        self.assertEqual(extract_password_hint("https://example.com/dl?file=%5BDLPSGAME.COM%5D-Game.rar"), "DLPSGAME.COM")
+        self.assertEqual(extract_password_hint("Game_pass:12345.rar"), "12345")
+        self.assertIsNone(extract_password_hint("PPSA01234.pkg"))
+
+    def test_detect_archive_encryption(self):
+        # Stderr detection
+        self.assertTrue(detect_archive_encryption(b"", "bsdtar: Encryption is not supported"))
+        self.assertTrue(detect_archive_encryption(b"", "ERROR: Cannot open encrypted archive. Wrong password?"))
+        self.assertFalse(detect_archive_encryption(b"", ""))
+
+        # RAR5 Header type 4 (HEAD_ENCRYPT)
+        rar5_enc = b"Rar!\x1a\x07\x01\x00\x54\x95\x3e\x95\x21\x04\x00\x00\x01\x0f"
+        self.assertTrue(detect_archive_encryption(rar5_enc))
+
+        # Plain RAR5
+        rar5_plain = b"Rar!\x1a\x07\x01\x00\x54\x95\x3e\x95\x21\x01\x00\x00\x01\x0f"
+        self.assertFalse(detect_archive_encryption(rar5_plain))
+
+    def test_encrypted_archive_probe_and_validation(self):
+        rar_path = "/tmp/full_test.rar"
+        if not os.path.isfile(rar_path):
+            return
+
+        token = StopToken()
+        # Direct inspect_archive should raise EncryptedArchiveError
+        with self.assertRaises(EncryptedArchiveError) as ctx:
+            inspect_archive("local", rar_path)
+        self.assertIn("password-protected or encrypted", str(ctx.exception))
+
+        # probe_source with decompress=True MUST raise TransferError, NEVER silently fall back to raw file
+        with self.assertRaises(TransferError) as ctx_probe:
+            probe_source("local", rar_path, token, decompress=True)
+        self.assertIn("password-protected or encrypted", str(ctx_probe.exception))
+
+        # probe_source with decompress=False should cleanly return raw file
+        raw_src = probe_source("local", rar_path, token, decompress=False)
+        self.assertEqual(raw_src.kind, "local")
+        self.assertTrue(raw_src.filename.endswith(".rar"))
 
 
 if __name__ == "__main__":
