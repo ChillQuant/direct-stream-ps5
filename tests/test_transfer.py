@@ -736,6 +736,69 @@ class Integration(unittest.TestCase):
             finally:
                 m.stop()
 
+    def test_disk_space_check_informative_error(self):
+        job = {
+            "id": "disk_space_test",
+            "name": "huge_game.rar",
+            "source": self.url("/balatro_game.zip"),
+            "kind": "url",
+            "folder": "/data/ShadowMount",
+            "decompress": True,
+            "staged_extraction": True,
+            "completed_files": []
+        }
+        reports = []
+        def report(k, v):
+            reports.append((k, v))
+        def save():
+            pass
+
+        tok = StopToken()
+        # Mock disk usage to return only 1 MB free space
+        with unittest.mock.patch("shutil.disk_usage", return_value=unittest.mock.Mock(free=1024 * 1024)):
+            with self.assertRaises(TransferError) as ctx:
+                transfer_staged_archive(job, self.cfg, tok, report, save)
+            self.assertIn("Insufficient Mac storage for local extraction", str(ctx.exception))
+            self.assertIn("0 GB Mac disk usage", str(ctx.exception))
+            self.assertIn("Disable extraction", str(ctx.exception))
+
+    def test_toggle_extract_bypasses_staging(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                m.add_jobs({"items": [{"source": "http://127.0.0.1:9/game.rar"}]})
+                job = m.jobs[0]
+                job["staged_extraction"] = True
+                job["decompress"] = True
+                job["state"] = "failed"
+                job["error_info"] = {"summary": "Disk full"}
+
+                # Toggle extraction off
+                m.action("toggle_extract", job["id"])
+                self.assertFalse(job["decompress"])
+                self.assertFalse(job["staged_extraction"])
+                self.assertEqual(job["state"], "queued")
+                self.assertIsNone(job["error_info"])
+                self.assertIn("0 GB Mac disk space", job["detail"])
+
+                # Toggle extraction back on
+                m.action("toggle_extract", job["id"])
+                self.assertTrue(job["decompress"])
+                self.assertTrue(job["staged_extraction"])
+            finally:
+                m.stop()
+
+    def test_custom_staging_dir_setting(self):
+        with tempfile.TemporaryDirectory() as custom_dir:
+            from ps5_streamer import validated_settings
+            # Valid directory
+            cfg = validated_settings({"staging_dir": custom_dir})
+            self.assertEqual(cfg["staging_dir"], os.path.realpath(custom_dir))
+
+            # Non-existent directory
+            with self.assertRaises(TransferError):
+                validated_settings({"staging_dir": "/non/existent/path/for/staging"})
+
 if __name__=='__main__':unittest.main()
 
 

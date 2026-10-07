@@ -1418,23 +1418,26 @@ def find_extracted_payload(extract_dir, fallback_name="ExtractedGame"):
     return "folder", extract_dir, fallback_name
 
 
-def cleanup_stale_staging_directories():
+def cleanup_stale_staging_directories(custom_dir=None):
     """Removes any abandoned ps5_staged_* directories in the temporary directory older than 1 hour."""
-    tmp_base = tempfile.gettempdir()
+    search_dirs = [tempfile.gettempdir()]
+    if custom_dir and os.path.isdir(custom_dir) and custom_dir not in search_dirs:
+        search_dirs.append(custom_dir)
     now = time.time()
-    try:
-        for entry in os.listdir(tmp_base):
-            if entry.startswith("ps5_staged_"):
-                full_p = os.path.join(tmp_base, entry)
-                try:
-                    if os.path.isdir(full_p):
-                        mtime = os.path.getmtime(full_p)
-                        if now - mtime > 3600:  # 1 hour
-                            shutil.rmtree(full_p, ignore_errors=True)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+    for tmp_base in search_dirs:
+        try:
+            for entry in os.listdir(tmp_base):
+                if entry.startswith("ps5_staged_"):
+                    full_p = os.path.join(tmp_base, entry)
+                    try:
+                        if os.path.isdir(full_p):
+                            mtime = os.path.getmtime(full_p)
+                            if now - mtime > 3600:  # 1 hour
+                                shutil.rmtree(full_p, ignore_errors=True)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
 
 def transfer_staged_archive(job, settings, token, report, save):
@@ -1446,8 +1449,15 @@ def transfer_staged_archive(job, settings, token, report, save):
     if not unar_bin:
         raise TransferError("Extraction tool (unar) not found on this system. Cannot extract archive.")
 
-    staging_dir = tempfile.mkdtemp(prefix="ps5_staged_")
+    custom_staging = settings.get("staging_dir") or os.environ.get("PS5_STAGING_DIR")
+    if custom_staging and os.path.isdir(custom_staging):
+        staging_dir = tempfile.mkdtemp(prefix="ps5_staged_", dir=custom_staging)
+    else:
+        staging_dir = tempfile.mkdtemp(prefix="ps5_staged_")
     report("status", "Preparing isolated staging extraction cache")
+    staged_part_files = []
+    archive_path = None
+    archive_name = ""
     try:
         if job.get("kind") == "multipart" or job.get("parts"):
             parts = list(job.get("parts") or [])
@@ -1480,10 +1490,11 @@ def transfer_staged_archive(job, settings, token, report, save):
 
             try:
                 free_disk = shutil.disk_usage(staging_dir).free
-                needed_disk = (total_size or 0) * 2.5
+                needed_disk = (total_size or 0) * 1.5
                 if total_size and needed_disk > free_disk:
                     raise TransferError(
-                        f"Insufficient Mac storage for extraction: requires {format_bytes(needed_disk)} free disk space, but only {format_bytes(free_disk)} available."
+                        f"Insufficient Mac storage for local extraction: requires {format_bytes(needed_disk)} free disk space, but only {format_bytes(free_disk)} available. "
+                        f"To stream the raw archive directly to PS5 with 0 GB Mac disk usage, click '···' on this item and choose 'Disable extraction'."
                     )
             except OSError:
                 pass
@@ -1498,7 +1509,6 @@ def transfer_staged_archive(job, settings, token, report, save):
             cumulative_downloaded = 0
             started = last = time.monotonic()
             hist = [(started, 0, 0)]
-            staged_part_files = []
 
             for idx, (p, info) in enumerate(part_infos):
                 token.check()
@@ -1572,14 +1582,16 @@ def transfer_staged_archive(job, settings, token, report, save):
             job["total"] = total_size
             archive_name = valid_name(raw_src.filename or job.get("name") or "archive.bin")
             archive_path = os.path.join(staging_dir, archive_name)
+            staged_part_files.append((archive_name, archive_path))
 
             # Check free Mac disk space
             try:
                 free_disk = shutil.disk_usage(staging_dir).free
-                needed_disk = (total_size or 0) * 2.5
+                needed_disk = (total_size or 0) * 1.5
                 if total_size and needed_disk > free_disk:
                     raise TransferError(
-                        f"Insufficient Mac storage for extraction: requires {format_bytes(needed_disk)} free disk space, but only {format_bytes(free_disk)} available."
+                        f"Insufficient Mac storage for local extraction: requires {format_bytes(needed_disk)} free disk space, but only {format_bytes(free_disk)} available. "
+                        f"To stream the raw archive directly to PS5 with 0 GB Mac disk usage, click '···' on this item and choose 'Disable extraction'."
                     )
             except OSError:
                 pass
@@ -1696,6 +1708,19 @@ def transfer_staged_archive(job, settings, token, report, save):
                 raise TransferError(f"Archive extraction failed: Password required or incorrect{hint_str}.")
             raise TransferError(f"Archive extraction failed (code {ret}): {err[:200]}")
 
+        # Free downloaded archive files immediately before uploading payload to PS5
+        try:
+            if archive_path and os.path.isfile(archive_path):
+                os.remove(archive_path)
+            for _, p_path in staged_part_files:
+                if os.path.isfile(p_path) and not os.path.islink(p_path):
+                    try:
+                        os.remove(p_path)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
         payload_type, payload_path, payload_name = find_extracted_payload(extract_dir, fallback_name=Path(archive_name).stem)
 
         dest_base = valid_folder(job.get("folder") or settings.get("folder") or "/data/ShadowMount")
@@ -1751,7 +1776,7 @@ def transfer(job, settings, token, report, save):
     report("status", "Inspecting source")
 
     # If explicitly marked for staged extraction or an encrypted archive
-    if job.get("staged_extraction") and find_unar_tool():
+    if job.get("decompress", True) and job.get("staged_extraction") and find_unar_tool():
         return transfer_staged_archive(job, settings, token, report, save)
 
     is_decomp = job.get("decompress", True)

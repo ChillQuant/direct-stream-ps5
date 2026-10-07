@@ -1442,7 +1442,9 @@ const updateAddPreview = () => {
         const hint = $('archive-mode-hint');
         if (hint) {
           hint.textContent = modalExtractMode
-            ? 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.'
+            ? (['rar', '7z'].includes(ext)
+                ? 'Extracts archive locally in temporary staging (auto-deleted once transferred to PS5).'
+                : 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.')
             : 'Streams raw multi-part archive directly onto PS5 without extraction.';
         }
       }
@@ -1698,9 +1700,12 @@ const runVerifyLinks = async () => {
           }
           const hint = $('archive-mode-hint');
           if (hint) {
+            const ext = (item.filename || '').toLowerCase().split('.').pop();
             hint.textContent = item.archive_encrypted
               ? 'Auto-extracts archive using password and transfers the game folder directly to PS5.'
-              : 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB local disk space.';
+              : (['rar', '7z'].includes(ext)
+                  ? 'Extracts archive locally in temporary staging (auto-deleted once transferred to PS5).'
+                  : 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB local disk space.');
           }
         }
         if ($('file-preview-card')) $('file-preview-card').hidden = false;
@@ -1892,6 +1897,7 @@ if (settingsPageForm) {
       buffer_mb: $('page-setting-buffer_mb').value,
       limit_mbps: $('page-setting-limit_mbps')?.value || '0',
       retries: $('page-setting-retries')?.value || '3',
+      staging_dir: $('page-setting-staging_dir')?.value?.trim() || '',
       password: ''
     };
     try {
@@ -1919,6 +1925,7 @@ if (resetDefaultsBtn) {
     if ($('page-setting-limit_mbps')) $('page-setting-limit_mbps').value = '0';
     if ($('page-setting-retries')) $('page-setting-retries').value = '3';
     if ($('page-setting-folder')) $('page-setting-folder').value = '/data/PS5Direct';
+    if ($('page-setting-staging_dir')) $('page-setting-staging_dir').value = '';
     updatePipelineCalc();
     toast('Settings reset to recommended defaults (16 streams · 8 MiB chunk · 256 MiB RAM)');
   });

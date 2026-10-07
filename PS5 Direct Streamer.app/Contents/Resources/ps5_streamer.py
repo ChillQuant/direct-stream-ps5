@@ -38,7 +38,8 @@ from zip_streamer import is_archive_candidate, inspect_archive, EncryptedArchive
 VERSION = "2.9.0"
 BASE = Path(__file__).resolve().parent
 DEFAULTS = {"host": "", "port": 1337, "folder": "/data/ShadowMount", "username": "anonymous",
-            "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3}
+            "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3,
+            "staging_dir": ""}
 ACTIVE = {"starting", "running", "retrying", "pausing", "cancelling"}
 
 
@@ -153,6 +154,14 @@ def validated_settings(raw):
         raise TransferError("Speed cap must be 0–1000 MB/s; 0 means unlimited.")
     if cfg["buffer_mb"] < cfg["chunk_mb"] * cfg["streams"]:
         raise TransferError("RAM buffer must be at least streams × chunk size (for example, 8 × 8 = 64 MiB).")
+    staging_dir = safe_text(cfg.get("staging_dir", ""), "Staging directory", 1024)
+    if staging_dir:
+        s_path = Path(os.path.expanduser(staging_dir)).resolve()
+        if not s_path.is_dir():
+            raise TransferError(f"Staging directory not found or not a folder: {staging_dir}")
+        cfg["staging_dir"] = str(s_path)
+    else:
+        cfg["staging_dir"] = ""
     return cfg
 
 
@@ -478,7 +487,7 @@ class Manager:
                     item_detail = "Waiting to start"
                     is_decomp = bool(data.get("decompress", True))
                     archive_pwd = data.get("archive_password") or extract_password_hint(src) or extract_password_hint(name) or ""
-                    staged_ext = bool(data.get("staged_extraction", False))
+                    staged_ext = bool(data.get("staged_extraction", False)) if is_decomp else False
                     if item_kind == "local":
                         try:
                             item_total = os.path.getsize(src)
@@ -721,7 +730,11 @@ class Manager:
                     job["identity"] = None
                     job["stage_owned"] = False
                     job["transferred"] = 0
+                    if job["state"] == "failed":
+                        job["state"] = "queued"
+                        job["error_info"] = None
                     if job["decompress"]:
+                        job["staged_extraction"] = True
                         if job["kind"] == "local" and is_archive_candidate(job["source"]):
                             try:
                                 tok = StopToken()
@@ -738,13 +751,14 @@ class Manager:
                         else:
                             job["detail"] = "Extraction enabled: will decompress directly on PS5"
                     else:
+                        job["staged_extraction"] = False
                         if job["kind"] == "local":
                             job["name"] = Path(job["source"]).name
                             try:
                                 job["total"] = os.path.getsize(job["source"])
                             except OSError:
                                 pass
-                        job["detail"] = "Extraction disabled: will stream raw archive as-is"
+                        job["detail"] = "Extraction disabled: will stream raw archive with 0 GB Mac disk space"
                 elif action == "set_password":
                     if job["id"] == self.current:
                         raise TransferError("Pause the transfer before updating password.")

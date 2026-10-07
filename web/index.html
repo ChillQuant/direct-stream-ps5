@@ -818,6 +818,12 @@
                 <small class="field-hint">Buffer must be ≥ streams × chunk size.</small>
               </div>
 
+              <div class="form-field wide">
+                <label for="page-setting-staging_dir">Archive staging directory (optional)</label>
+                <input id="page-setting-staging_dir" placeholder="Default (/tmp). Enter external SSD path e.g. /Volumes/ExternalDrive/staging" spellcheck="false">
+                <small class="field-hint">Used for unpacking .rar/.7z archives if internal Mac storage is low. Cleaned up immediately after transfer.</small>
+              </div>
+
               <div class="form-field wide toggle-row">
                 <div class="toggle-copy">
                   <strong>Verify files after transfer</strong>
@@ -960,7 +966,7 @@
         </button>
       </div>
       <p id="archive-mode-hint" class="field-hint" style="margin-top: 4px;">
-        Decompresses the inner game file (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB local disk space.
+        Extracts inner game package to PS5 (.zip on-the-fly uses 0 GB Mac disk; .rar/.7z uses temporary staging with auto-cleanup).
       </p>
       <div id="archive-password-row" class="modal-field-block" style="margin-top: 10px;" hidden>
         <div class="field-label-row">
@@ -1018,7 +1024,7 @@
         </label>
         <label id="zip-decompress-option" class="studio-checkbox-label">
           <input id="decompress-zip" type="checkbox" checked>
-          <span>Decompress archives (.zip, .rar, .7z) on-the-fly directly to PS5 (0 GB disk space used)</span>
+          <span>Extract archives into PS5 packages (.zip on-the-fly 0 GB disk; .rar/.7z staged with auto-cleanup)</span>
         </label>
       </div>
     </details>
