@@ -1443,7 +1443,122 @@ def transfer_staged_archive(job, settings, token, report, save):
     staging_dir = tempfile.mkdtemp(prefix="ps5_staged_")
     report("status", "Preparing isolated staging extraction cache")
     try:
-        if job.get("kind") == "url":
+        if job.get("kind") == "multipart" or job.get("parts"):
+            parts = list(job.get("parts") or [])
+            if not parts:
+                raise TransferError("No parts provided for multi-part archive extraction.")
+
+            normalized_parts = []
+            for p in parts:
+                if isinstance(p, dict):
+                    p_src = p.get("source", "")
+                    p_kind = p.get("kind", "url" if str(p_src).startswith(("http://", "https://")) else "local")
+                    p_name = p.get("name") or valid_name(os.path.basename(str(p_src)) or "part.bin")
+                else:
+                    p_src = str(p)
+                    p_kind = "url" if p_src.startswith(("http://", "https://")) else "local"
+                    p_name = valid_name(os.path.basename(p_src) or "part.bin")
+                normalized_parts.append({"source": p_src, "kind": p_kind, "name": p_name})
+
+            is_seq, _, sorted_parts = detect_multipart_sequence(normalized_parts)
+            use_parts = sorted_parts if is_seq else normalized_parts
+
+            part_infos = []
+            for p in use_parts:
+                token.check()
+                info = probe_source(p["kind"], p["source"], token, decompress=False)
+                part_infos.append((p, info))
+
+            total_size = sum((info.size or 0) for _, info in part_infos)
+            job["total"] = total_size
+
+            try:
+                free_disk = shutil.disk_usage(staging_dir).free
+                needed_disk = (total_size or 0) * 2.5
+                if total_size and needed_disk > free_disk:
+                    raise TransferError(
+                        f"Insufficient Mac storage for extraction: requires {format_bytes(needed_disk)} free disk space, but only {format_bytes(free_disk)} available."
+                    )
+            except OSError:
+                pass
+
+            download_settings = {
+                "buffer_mb": 32,
+                "streams": 4,
+                "chunk_mb": 8,
+                **settings
+            }
+            meter = Meter()
+            cumulative_downloaded = 0
+            started = last = time.monotonic()
+            hist = [(started, 0, 0)]
+            staged_part_files = []
+
+            for idx, (p, info) in enumerate(part_infos):
+                token.check()
+                part_fname = valid_name(p.get("name") or info.filename or f"part_{idx+1}.bin")
+                target_p = os.path.join(staging_dir, part_fname)
+                staged_part_files.append((part_fname, target_p))
+
+                if p["kind"] == "local":
+                    local_abs = os.path.abspath(os.path.expanduser(p["source"]))
+                    if not os.path.isfile(local_abs):
+                        raise TransferError(f"Local part file not found: {local_abs}")
+                    try:
+                        os.symlink(local_abs, target_p)
+                    except OSError:
+                        shutil.copy2(local_abs, target_p)
+                    cumulative_downloaded += info.size or 0
+                else:
+                    report("status", f"Downloading part {idx+1}/{len(part_infos)} ({part_fname})")
+                    reader = make_reader(info, 0, download_settings, token, meter)
+                    part_downloaded = 0
+                    try:
+                        with open(target_p, "wb") as f_out:
+                            while not token.event.is_set():
+                                token.check()
+                                chunk = reader.read(256 * 1024)
+                                if not chunk:
+                                    break
+                                f_out.write(chunk)
+                                part_downloaded += len(chunk)
+                                meter.add(downloaded=len(chunk))
+                                now = time.monotonic()
+                                if now - last >= 0.4:
+                                    snap = meter.snapshot()
+                                    _, down_rate = windowed_rates(hist, now, snap)
+                                    cur_tot = cumulative_downloaded + part_downloaded
+                                    rem = max(0, total_size - cur_tot) if total_size else 0
+                                    eta = rem / down_rate if (down_rate > 0 and total_size) else None
+                                    report("progress", {
+                                        "transferred": cur_tot,
+                                        "total": total_size or cur_tot,
+                                        "upload_bps": 0,
+                                        "download_bps": down_rate,
+                                        "buffered": 0,
+                                        "buffer_capacity": download_settings.get("buffer_mb", 32) * MIB,
+                                        "elapsed": now - started,
+                                        "eta": eta,
+                                        "bottleneck": "Download server",
+                                        "offset": cumulative_downloaded,
+                                        "current_file": part_fname,
+                                        "file_index": idx + 1,
+                                        "file_count": len(part_infos)
+                                    })
+                                    job["transferred"] = cur_tot
+                                    job["detail"] = f"Downloading parts ({idx+1}/{len(part_infos)}): {part_fname}"
+                                    last = now
+                    finally:
+                        reader.close()
+                    cumulative_downloaded += part_downloaded
+
+            # Select primary archive file (.zip if present, or first sorted part)
+            archive_name, archive_path = next(
+                ((n, p) for n, p in staged_part_files if n.lower().endswith(".zip")),
+                staged_part_files[0]
+            )
+
+        elif job.get("kind") == "url":
             raw_src = probe_source("url", job["source"], token, decompress=False)
             if raw_src.location != job["source"]:
                 job["source"] = raw_src.location

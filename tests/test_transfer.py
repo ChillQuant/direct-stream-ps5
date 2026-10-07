@@ -5,13 +5,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 import logging
-import zipfile
+import os
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import threading
 import time
 import unittest
+import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, probe_source,
     transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, validate_multipart_source,
@@ -593,6 +595,59 @@ class Integration(unittest.TestCase):
         self.assertTrue((dest_game / "eboot.bin").is_file(), "eboot.bin should exist on FTP server")
         self.assertTrue((dest_game / "sce_sys" / "param.json").is_file(), "param.json should exist on FTP server")
         self.assertTrue((dest_game / "data" / "game.dat").is_file(), "game.dat should exist on FTP server")
+
+    def test_transfer_staged_archive_multipart(self):
+        if not find_unar_tool():
+            self.skipTest("unar binary not found")
+
+        # Create split zip archive
+        split_work = tempfile.mkdtemp(prefix="split_test_work_")
+        try:
+            game_dir = os.path.join(split_work, "SplitPS5Game")
+            os.makedirs(os.path.join(game_dir, "sce_sys"), exist_ok=True)
+            with open(os.path.join(game_dir, "eboot.bin"), "wb") as f:
+                f.write(os.urandom(140000))
+            with open(os.path.join(game_dir, "sce_sys", "param.json"), "wb") as f:
+                f.write(b'{"titleId": "CUSA99999"}')
+
+            import subprocess
+            subprocess.check_call(["zip", "-q", "-s", "64k", "-r", "game.zip", "SplitPS5Game"], cwd=split_work)
+
+            parts = []
+            for fname in sorted(os.listdir(split_work)):
+                if fname.startswith("game."):
+                    parts.append({
+                        "source": os.path.join(split_work, fname),
+                        "name": fname,
+                        "kind": "local"
+                    })
+
+            self.assertGreaterEqual(len(parts), 2, "Should create at least 2 split parts")
+
+            job = {
+                "id": "staged_multipart_job",
+                "name": "game.zip",
+                "source": f"{len(parts)} parts: game.zip",
+                "kind": "multipart",
+                "parts": parts,
+                "folder": "/data/ShadowMount",
+                "decompress": True,
+                "staged_extraction": True,
+                "completed_files": []
+            }
+            reports = []
+            def report(k, v): reports.append((k, v))
+            def save(): pass
+
+            tok = StopToken()
+            transfer_staged_archive(job, self.cfg, tok, report, save)
+
+            dest_game = self.root / "data" / "ShadowMount" / "SplitPS5Game"
+            self.assertTrue(dest_game.is_dir(), "Game folder should exist on FTP server")
+            self.assertTrue((dest_game / "eboot.bin").is_file(), "eboot.bin should exist on FTP server")
+            self.assertTrue((dest_game / "sce_sys" / "param.json").is_file(), "param.json should exist on FTP server")
+        finally:
+            shutil.rmtree(split_work, ignore_errors=True)
 
 if __name__=='__main__':unittest.main()
 
