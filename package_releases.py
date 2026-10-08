@@ -42,6 +42,8 @@ for item in [
         shutil.copy2(p, mac_dir / item)
 shutil.copytree(root / 'web', mac_dir / 'web')
 shutil.copytree(root / 'tests', mac_dir / 'tests')
+if (root / 'bin').exists():
+    shutil.copytree(root / 'bin', mac_dir / 'bin', dirs_exist_ok=True)
 
 # 2. Windows Bundle
 win_dir = dist / 'DIRECT-STREAM-FOR-PLAYSTATION-5-Windows'

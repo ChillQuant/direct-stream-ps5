@@ -4,11 +4,11 @@
 # ==============================================================================
 set -e
 
-echo "🎮 DIRECT STREAM FOR PLAYSTATION 5 — Android Setup"
+echo "DIRECT STREAM FOR PLAYSTATION 5 — Android Setup"
 echo "--------------------------------------------------------"
 
 # 1. Update Termux and install dependencies
-echo "📦 Installing prerequisites (python, git)..."
+echo "[Install] Installing prerequisites (python, git)..."
 if command -v pkg >/dev/null 2>&1; then
     pkg update -y || true
     pkg install -y python git || true
@@ -23,13 +23,13 @@ BRANCH="${BRANCH:-main}"
 
 
 if [ -d "$TARGET_DIR/.git" ]; then
-    echo "🔄 Existing installation found. Updating to latest version..."
+    echo "[Update] Existing installation found. Updating to latest version..."
     cd "$TARGET_DIR"
     git fetch origin "$BRANCH" 2>/dev/null || true
     git checkout "$BRANCH" 2>/dev/null || true
     git pull origin "$BRANCH" 2>/dev/null || true
 else
-    echo "📥 Downloading Direct Stream for PlayStation 5..."
+    echo "[Download] Downloading Direct Stream for PlayStation 5..."
     git clone -b "$BRANCH" https://github.com/ChillQuant/direct-stream-ps5.git "$TARGET_DIR"
     cd "$TARGET_DIR"
 fi
@@ -44,7 +44,7 @@ if [ -d "$PREFIX_BIN" ]; then
 exec "$TARGET_DIR/run_android.sh" "\$@"
 EOF
     chmod +x "$PREFIX_BIN/ps5"
-    echo "✨ Shortcut installed! From now on, just type 'ps5' in Termux."
+    echo "[Shortcut] Shortcut installed! From now on, just type 'ps5' in Termux."
 fi
 
 # 4. Create Termux:Widget shortcut for Home Screen
@@ -57,5 +57,5 @@ EOF
 chmod +x "$SHORTCUTS_DIR/PS5_Streamer.sh"
 
 echo "--------------------------------------------------------"
-echo "🚀 Setup complete! Launching DIRECT STREAM FOR PLAYSTATION 5..."
+echo "[Complete] Setup complete! Launching DIRECT STREAM FOR PLAYSTATION 5..."
 exec "$TARGET_DIR/run_android.sh" "$@"

@@ -5,15 +5,15 @@
 
 # 1. Acquire WakeLock so Android won't sleep Wi-Fi during 50GB+ streaming
 if command -v termux-wake-lock >/dev/null 2>&1; then
-    echo "🔒 Enabling Background WakeLock..."
-    echo "   💡 If Android prompts to disable battery optimization, tap 'ALLOW' so streaming won't stop when screen locks."
+    echo "[WakeLock] Enabling Background WakeLock..."
+    echo "   [Notice] If Android prompts to disable battery optimization, tap 'ALLOW' so streaming won't stop when screen locks."
     termux-wake-lock
 fi
 
 # 2. Ensure shared storage is accessible if not already set up
 if [ ! -d "$HOME/storage" ] && command -v termux-setup-storage >/dev/null 2>&1; then
-    echo "📂 Requesting Android File/Storage access..."
-    echo "   💡 Please tap 'ALLOW' on the system popup to enable streaming local files from Downloads."
+    echo "[Storage] Requesting Android File/Storage access..."
+    echo "   [Notice] Please tap 'ALLOW' on the system popup to enable streaming local files from Downloads."
     termux-setup-storage
 fi
 
@@ -29,7 +29,7 @@ if [ -d "$PREFIX_BIN" ] && [ ! -f "$PREFIX_BIN/ps5" ]; then
 exec "$DIR/run_android.sh" "\$@"
 EOF
     chmod +x "$PREFIX_BIN/ps5" 2>/dev/null || true
-    echo "✨ Registered global 'ps5' command. From now on, just type 'ps5' in Termux to launch."
+    echo "[Shortcut] Registered global 'ps5' command. From now on, just type 'ps5' in Termux to launch."
 fi
 
 # Auto-register Termux:Widget shortcut for 1-tap Home Screen launch
@@ -43,6 +43,6 @@ EOF
     chmod +x "$SHORTCUTS_DIR/PS5_Streamer.sh" 2>/dev/null || true
 fi
 
-echo "🚀 Starting DIRECT STREAM FOR PLAYSTATION 5..."
+echo "[DirectStream] Starting DIRECT STREAM FOR PLAYSTATION 5..."
 python3 ps5_streamer.py "$@"
 

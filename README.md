@@ -6,8 +6,8 @@ A high-performance parallel transfer engine and local browser dashboard for stre
   <img src="assets/demo.gif" alt="Direct Stream for PlayStation 5 Studio Demo" width="100%" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.5);">
 </p>
 <p align="center">
-  <em>⚡ Real-time Gigabit LAN streaming (118+ MB/s), automatic benchmark tuning, and remote PS5 console file manager.</em><br>
-  <small><a href="assets/demo.mp4">▶ Download / View 1080p Master Video (assets/demo.mp4)</a></small>
+  <em>Real-time Gigabit LAN streaming (118+ MB/s), automatic benchmark tuning, and remote PS5 console file manager.</em><br>
+  <small><a href="assets/demo.mp4">Download / View 1080p Master Video (assets/demo.mp4)</a></small>
 </p>
 
 ---
@@ -42,24 +42,24 @@ A high-performance parallel transfer engine and local browser dashboard for stre
 ### Android (via Termux)
 Direct Stream runs natively on Android phones with **raw Wi-Fi throughput** and zero root required:
 
-#### ⚡ 1-Line Quick Setup (Recommended)
+#### 1-Line Quick Setup (Recommended)
 Paste this single command into Termux to install prerequisites, download the app, and launch immediately:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/ChillQuant/direct-stream-ps5/main/install_android.sh | bash
 ```
 
-#### 🚀 Everyday Launch (Fastest)
+#### Everyday Launch (Fastest)
 Once installed, you never need to type git commands or change folders again. Simply open Termux and type:
 ```bash
 ps5
 ```
 
-#### 📱 1-Tap Home Screen Launcher (No Terminal!)
+#### 1-Tap Home Screen Launcher (No Terminal!)
 - **Chrome PWA**: When the dashboard opens in Chrome on your phone, tap the **3 dots** menu (⋮) → **"Add to Home screen"** / **"Install app"**. Tapping the icon on your home screen launches the app in full-screen standalone mode!
 - **Termux:Widget**: If you have the free [Termux:Widget](https://f-droid.org/en/packages/com.termux.widget/) add-on installed, add the **"PS5_Streamer"** widget to your home screen to launch with 1 tap.
 
-#### 🛠️ Manual Setup
+#### Manual Setup
 ```bash
 # 1. Update packages & install python + git
 pkg update -y && pkg install -y python git
@@ -77,10 +77,10 @@ cd direct-stream-ps5
 - **Remote Access (`--host 0.0.0.0`)**: Pass `--host 0.0.0.0` (or `ps5 --host 0.0.0.0`) if you want to control the Android stream server from your PC, Mac, or tablet on the same Wi-Fi.
 - **Phone Storage Access**: Run `termux-setup-storage` to stream local packages directly from `/sdcard/Download/`.
 
-#### 🔑 Android Permissions (One-Time Setup)
+#### Android Permissions (One-Time Setup)
 When launching for the first time, Android will prompt you for two system permissions:
-1. **📂 Storage / File Access**: Tap **Allow** when prompted so Direct Stream can access and stream local `.pkg` packages from your phone's `Downloads` folder.
-2. **🔋 Energy / Battery Optimization**: Tap **Allow** (or choose **Unrestricted** under *Android Settings → Apps → Termux → Battery*). This prevents Android from putting Wi-Fi to sleep or killing the background process when your screen locks during huge 50GB–100GB transfers!
+1. **Storage / File Access**: Tap **Allow** when prompted so Direct Stream can access and stream local `.pkg` packages from your phone's `Downloads` folder.
+2. **Energy / Battery Optimization**: Tap **Allow** (or choose **Unrestricted** under *Android Settings → Apps → Termux → Battery*). This prevents Android from putting Wi-Fi to sleep or killing the background process when your screen locks during huge 50GB–100GB transfers!
 
 
 

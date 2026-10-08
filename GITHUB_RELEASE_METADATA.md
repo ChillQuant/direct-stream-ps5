@@ -202,13 +202,13 @@ Direct Stream for PlayStation 5 now runs natively on Android phones with **raw W
 
 - **Native Android & Termux Support**:
   - Run directly on Android devices with zero root needed.
-  - **⚡ 1-Line Universal Installer**: Set up everything in one copy-paste command:
+  - **1-Line Universal Installer**: Set up everything in one copy-paste command:
     ```bash
     curl -sSL https://raw.githubusercontent.com/ChillQuant/direct-stream-ps5/main/install_android.sh | bash
     ```
-  - **🚀 Global `ps5` Command**: Automatically registered in Termux so you can launch by just typing `ps5` anywhere.
-  - **🔒 Background WakeLock (`termux-wake-lock`)**: Prevents Android from throttling Wi-Fi or putting Termux to sleep when the screen locks during 50GB–100GB transfers.
-  - **📂 Local Phone Storage (`termux-setup-storage`)**: Stream `.pkg` game packages directly from your phone's `/sdcard/Download/` folder.
+  - **Global `ps5` Command**: Automatically registered in Termux so you can launch by just typing `ps5` anywhere.
+  - **Background WakeLock (`termux-wake-lock`)**: Prevents Android from throttling Wi-Fi or putting Termux to sleep when the screen locks during 50GB–100GB transfers.
+  - **Local Phone Storage (`termux-setup-storage`)**: Stream `.pkg` game packages directly from your phone's `/sdcard/Download/` folder.
 - **Mobile Responsive UI**:
   - Brand-new single-column touch-optimized layout for mobile screens.
   - **Sticky Bottom Navigation Bar**: One-handed thumb access to **Queue**, **Transfer**, **Settings**, and **Speed Test**.
