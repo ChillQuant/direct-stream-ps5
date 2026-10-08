@@ -534,9 +534,18 @@ class Manager:
                     job_extract_mode = data.get("extract_mode") or (self.settings.get("extract_mode", "ps5") if is_arch else "none")
                     is_decomp = bool(data.get("decompress", True)) and job_extract_mode != "none"
                     archive_pwd = data.get("archive_password") or extract_password_hint(src) or extract_password_hint(name) or ""
+                    is_enc = bool(archive_pwd or data.get("archive_encrypted"))
                     staged_ext = (job_extract_mode == "mac") or bool(data.get("staged_extraction", False))
+                    if is_enc and not staged_ext and not find_unrar_ps5_payload():
+                        staged_ext = True
                     if is_arch and is_decomp:
-                        if job_extract_mode == "ps5":
+                        if is_enc and archive_pwd:
+                            arch_type = Path(name).suffix.lstrip(".").upper() or "ARCHIVE"
+                            if job_extract_mode == "ps5" and find_unrar_ps5_payload():
+                                item_detail = f"{arch_type} Archive · PS5 unrar extraction (with password)"
+                            else:
+                                item_detail = f"{arch_type} Archive · Staged extraction to PS5 (with password)"
+                        elif job_extract_mode == "ps5":
                             arch_type = Path(name).suffix.lstrip(".").upper() or "ARCHIVE"
                             item_detail = f"{arch_type} Archive · PS5 extraction (0 GB Mac disk)"
                         elif job_extract_mode == "mac":
@@ -579,6 +588,7 @@ class Manager:
                         "overwrite": bool(data.get("overwrite", False)),
                         "decompress": is_decomp,
                         "extract_mode": job_extract_mode,
+                        "archive_encrypted": is_enc,
                         "archive_password": archive_pwd,
                         "staged_extraction": staged_ext,
                         "unrar_extract_location": data.get("unrar_extract_location") or self.settings.get("unrar_extract_location", "/data/homebrew"),
@@ -993,21 +1003,21 @@ class Manager:
                 archive_err = None
                 arch_meta = None
                 pwd_hint = None
+                fn_clean = info.filename or extract_url_filename(resolved)
+                pwd_hint = pwd_hint or extract_password_hint(fn_clean) or extract_password_hint(direct_url) or extract_password_hint(src)
                 if is_arch:
                     try:
                         arch_headers = get_request_headers_for_url(direct_url, HEADERS)
-                        arch_meta = inspect_archive("url", direct_url, headers=arch_headers, total_size=size_b)
+                        arch_meta = inspect_archive("url", direct_url, headers=arch_headers, total_size=size_b, password=pwd_hint)
                     except EncryptedArchiveError as ea:
                         is_encrypted = True
                         archive_err = str(ea)
-                        pwd_hint = ea.password_hint
+                        pwd_hint = pwd_hint or ea.password_hint
                     except Exception as ex:
                         if "encrypted" in str(ex).lower() or "password" in str(ex).lower():
                             is_encrypted = True
                         archive_err = str(ex)
 
-                fn_clean = info.filename or extract_url_filename(resolved)
-                pwd_hint = pwd_hint or extract_password_hint(fn_clean) or extract_password_hint(direct_url) or extract_password_hint(src)
                 can_stage = bool(find_unar_tool())
                 can_ps5_unrar = bool(find_unrar_ps5_payload())
                 results.append({
@@ -1201,7 +1211,7 @@ class Manager:
                 self.ftp_lock.acquire()
                 held_ftp_lock = True
             if kind == "source" and data.get("matrix"):
-                source = probe_source("url", data.get("source", ""), token)
+                source = probe_source("url", data.get("source", ""), token, decompress=False)
                 if not source.ranges or source.size is None:
                     r = measure_source(source, {**cfg, "streams": 1}, token, 8)
                     result = {"state": "done", "kind": kind, "bps": r["steady"],
@@ -1261,7 +1271,7 @@ class Manager:
                         "message": "Optimal config: " + best[1] + f" ({best[0]/1e6:.1f} MB/s)\n\n" + "\n".join(lines) +
                                    "\n\nEach tier tested against actual direct download chunks. Bytes discarded from RAM."}
             elif kind == "source":
-                source = probe_source("url", data.get("source", ""), token)
+                source = probe_source("url", data.get("source", ""), token, decompress=False)
                 r = measure_source(source, cfg, token, 12)
                 mode = (f"{cfg['streams']} streams × {cfg['chunk_mb']} MiB ranges" if r["parallel"]
                         else "single stream (server does not support ranges, or streams = 1)")

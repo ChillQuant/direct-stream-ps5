@@ -245,7 +245,8 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
         filename = Path(path).name
         if decompress and is_archive_candidate(path):
             try:
-                meta = inspect_archive("local", path)
+                pwd_h = extract_password_hint(path) or extract_password_hint(filename)
+                meta = inspect_archive("local", path, password=pwd_h)
                 sel = meta["selected"]
                 arch_type = meta.get("archive_type", "zip")
                 if arch_type == "zip":
@@ -327,7 +328,8 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
         if decompress and (is_arch or content_type_arch):
             try:
                 arch_headers = get_request_headers_for_url(final_url, HEADERS)
-                meta = inspect_archive("url", final_url, headers=arch_headers, total_size=size)
+                pwd_h = extract_password_hint(final_url) or extract_password_hint(filename)
+                meta = inspect_archive("url", final_url, headers=arch_headers, total_size=size, password=pwd_h)
                 sel = meta["selected"]
                 arch_type = meta.get("archive_type", "zip")
                 if arch_type == "zip":
@@ -2456,7 +2458,7 @@ def transfer(job, settings, token, report, save):
 
     # 2. PS5 on-console extraction via unrar-ps5 payload (0 GB Mac disk)
     if is_decomp and extract_mode == "ps5" and is_arch:
-        if job.get("kind") != "multipart" and not job.get("archive_encrypted"):
+        if job.get("kind") != "multipart" and not job.get("archive_encrypted") and not job.get("archive_password"):
             try:
                 source = probe_source(job["kind"], job["source"], token, decompress=True)
                 if source.kind.startswith("zip_") or source.kind.startswith("archive_"):
@@ -2472,6 +2474,8 @@ def transfer(job, settings, token, report, save):
                 raise
         elif find_unrar_ps5_payload():
             return transfer_ps5_remote_archive(job, settings, token, report, save)
+        elif find_unar_tool():
+            return transfer_staged_archive(job, settings, token, report, save)
 
     if is_decomp and is_arch:
         try:
@@ -2489,6 +2493,7 @@ def transfer(job, settings, token, report, save):
                 return transfer_ps5_remote_archive(job, settings, token, report, save)
             elif find_unar_tool():
                 return transfer_staged_archive(job, settings, token, report, save)
+            raise
     else:
         if job.get("kind") == "multipart":
             source = probe_multipart_source(job.get("parts") or job["source"], token, target_filename=job.get("name"))

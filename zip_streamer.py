@@ -127,18 +127,50 @@ def is_zip_candidate(filename_or_url):
 
 def get_archive_type(filename_or_url):
     """Returns detected archive format: 'zip', 'rar', '7z', 'tar', etc."""
-    path = urllib.parse.urlsplit(str(filename_or_url)).path.lower()
-    if path.endswith(".zip") or path.endswith(".zip64"):
+    raw = urllib.parse.unquote(str(filename_or_url))
+    path = urllib.parse.urlsplit(raw).path.lower()
+    base = os.path.basename(path)
+    if base.endswith(".zip") or base.endswith(".zip64"):
         return "zip"
-    if path.endswith(".rar"):
+    if base.endswith(".rar") or re.search(r"\.part\d+\.rar$|\.r\d{2}$|\.rar\.\d+$", base):
         return "rar"
-    if path.endswith(".7z"):
+    if base.endswith(".7z") or base.endswith(".7z.001"):
         return "7z"
-    if any(path.endswith(ext) for ext in (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz")):
+    if any(base.endswith(ext) for ext in (".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz")):
         return "tar"
-    if path.endswith(".gz"):
+    if base.endswith(".gz"):
         return "gz"
+    if ".rar" in base:
+        return "rar"
+    if ".zip" in base:
+        return "zip"
+    if ".7z" in base:
+        return "7z"
     return "archive"
+
+
+def find_lsar_tool():
+    """Find lsar archive inspector tool (bundled in app, local bin, or PATH)."""
+    res_dir = os.environ.get("RESOURCEPATH")
+    if res_dir:
+        p = os.path.join(res_dir, "bin", "lsar")
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base, "bin", "lsar"),
+        os.path.join(base, "PS5 Direct Streamer.app", "Contents", "Resources", "bin", "lsar"),
+        os.path.join(os.path.dirname(base), "Resources", "bin", "lsar"),
+        "/opt/homebrew/bin/lsar",
+        "/usr/local/bin/lsar",
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    found = shutil.which("lsar")
+    if found and os.access(found, os.X_OK):
+        return found
+    return None
 
 
 def find_archive_tool():
@@ -326,9 +358,9 @@ def inspect_zip_archive(kind, location, headers=None, total_size=None):
             hint_str = f" (password: {pwd_hint} required)" if pwd_hint else " (password required)"
             raise EncryptedArchiveError(
                 f"This ZIP archive is password-protected or encrypted{hint_str}. "
-                "Direct streaming to PS5 cannot decompress encrypted archives on-the-fly. "
-                f"Extract the archive on your computer first{f' with password {pwd_hint}' if pwd_hint else ''}, "
-                "then use 'Upload Folder' to transfer the game folder directly to your PS5.",
+                "On-the-fly streaming cannot decompress encrypted archives without unpacking. "
+                f"Choose 'PS5 on-console extraction' or 'Local staging extraction'{f' with password {pwd_hint}' if pwd_hint else ''}, "
+                "or transfer the raw archive directly.",
                 archive_type="zip",
                 password_hint=pwd_hint,
             )
@@ -537,21 +569,19 @@ class ZipStreamingReader:
                 break
 
 
-def inspect_system_archive(kind, location, headers=None, total_size=None):
+def inspect_system_archive(kind, location, headers=None, total_size=None, password=None):
     """
-    Inspect local or remote system archive (RAR, 7Z, TAR, etc.) using bsdtar/tar.
+    Inspect local or remote system archive (RAR, 7Z, TAR, etc.) using lsar/bsdtar/tar.
     Returns metadata dict with selected member info.
     """
-    tool = find_archive_tool()
-    if not tool:
-        raise RuntimeError("No system archive decompressor (bsdtar/tar) found on host machine.")
-
-    headers = headers or HEADERS
+    effective_pwd = password or extract_password_hint(location)
     entries = []
     raw_output = ""
     stderr_output = ""
     sample = b""
+    arch_type = get_archive_type(location)
 
+    # 1. Try lsar if local file to accurately inspect with password decryption
     if kind == "local":
         path = os.path.abspath(os.path.expanduser(location))
         if not os.path.isfile(path):
@@ -562,6 +592,59 @@ def inspect_system_archive(kind, location, headers=None, total_size=None):
                 sample = f.read(65536)
         except Exception:
             pass
+
+        lsar = find_lsar_tool()
+        if lsar:
+            cmd = [lsar, "-j"]
+            if effective_pwd:
+                cmd.extend(["-p", effective_pwd])
+            cmd.append(path)
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                if proc.returncode == 0 and proc.stdout:
+                    data = json.loads(proc.stdout)
+                    lsar_entries = data.get("lsarContents", [])
+                    is_encrypted = any(item.get("XADIsEncrypted") for item in lsar_entries)
+                    for item in lsar_entries:
+                        name = item.get("XADFileName", "").strip()
+                        if not name or name.endswith("/") or name.endswith("\\") or "__MACOSX" in name:
+                            continue
+                        size = item.get("XADFileSize", 0)
+                        entries.append({
+                            "filename": name,
+                            "uncompressed_size": size,
+                        })
+                    if entries:
+                        selected = select_best_member(entries)
+                        if selected:
+                            return {
+                                "is_archive": True,
+                                "archive_type": arch_type,
+                                "total_archive_size": total_size,
+                                "entries_count": len(entries),
+                                "is_encrypted": is_encrypted,
+                                "password_hint": effective_pwd,
+                                "selected": {
+                                    "filename": selected["filename"],
+                                    "basename": os.path.basename(selected["filename"].replace("\\", "/")),
+                                    "uncompressed_size": selected["uncompressed_size"],
+                                    "compressed_size": total_size,
+                                    "compress_type": "archive",
+                                    "header_offset": 0,
+                                    "crc": 0,
+                                }
+                            }
+            except Exception:
+                pass
+
+    tool = find_archive_tool()
+    if not tool:
+        raise RuntimeError("No system archive decompressor (lsar/bsdtar/tar) found on host machine.")
+
+    headers = headers or HEADERS
+
+    if kind == "local":
+        path = os.path.abspath(os.path.expanduser(location))
         try:
             proc = subprocess.Popen(
                 [tool, "--numeric-owner", "-tvf", path],
@@ -602,15 +685,14 @@ def inspect_system_archive(kind, location, headers=None, total_size=None):
         except Exception as ex:
             raise ValueError(f"Failed to inspect remote archive stream: {ex}") from ex
 
-    arch_type = get_archive_type(location)
     if detect_archive_encryption(sample, stderr_output, location):
-        pwd_hint = extract_password_hint(location)
+        pwd_hint = effective_pwd
         hint_str = f" (password: {pwd_hint} required)" if pwd_hint else " (password required)"
         raise EncryptedArchiveError(
             f"This {arch_type.upper()} archive is password-protected or encrypted{hint_str}. "
-            "Direct streaming to PS5 cannot decompress encrypted archives on-the-fly. "
-            f"Extract the archive on your computer first{f' with password {pwd_hint}' if pwd_hint else ''}, "
-            "then use 'Upload Folder' to transfer the game folder directly to your PS5.",
+            "On-the-fly streaming cannot decompress encrypted archives without unpacking. "
+            f"Choose 'PS5 on-console extraction' or 'Local staging extraction'{f' with password {pwd_hint}' if pwd_hint else ''}, "
+            "or transfer the raw archive directly.",
             archive_type=arch_type,
             password_hint=pwd_hint,
         )
@@ -644,13 +726,13 @@ def inspect_system_archive(kind, location, headers=None, total_size=None):
 
     if not entries:
         if detect_archive_encryption(sample, stderr_output, location):
-            pwd_hint = extract_password_hint(location)
+            pwd_hint = effective_pwd
             hint_str = f" (password: {pwd_hint} required)" if pwd_hint else " (password required)"
             raise EncryptedArchiveError(
                 f"This {arch_type.upper()} archive is password-protected or encrypted{hint_str}. "
-                "Direct streaming to PS5 cannot decompress encrypted archives on-the-fly. "
-                f"Extract the archive on your computer first{f' with password {pwd_hint}' if pwd_hint else ''}, "
-                "then use 'Upload Folder' to transfer the game folder directly to your PS5.",
+                "On-the-fly streaming cannot decompress encrypted archives without unpacking. "
+                f"Choose 'PS5 on-console extraction' or 'Local staging extraction'{f' with password {pwd_hint}' if pwd_hint else ''}, "
+                "or transfer the raw archive directly.",
                 archive_type=arch_type,
                 password_hint=pwd_hint,
             )
@@ -688,11 +770,11 @@ def inspect_system_archive(kind, location, headers=None, total_size=None):
     }
 
 
-def inspect_archive(kind, location, headers=None, total_size=None):
+def inspect_archive(kind, location, headers=None, total_size=None, password=None):
     """
     Unified archive inspector for ZIP, RAR, 7Z, TAR, etc.
     Uses native pure-Python zipfile engine for standard ZIP archives,
-    and system libarchive (bsdtar/tar) for RAR, 7Z, TAR, etc.
+    and system libarchive / lsar for RAR, 7Z, TAR, etc.
     """
     if is_zip_candidate(location):
         try:
@@ -703,7 +785,7 @@ def inspect_archive(kind, location, headers=None, total_size=None):
             # Fallback to system decompressor if python zipfile fails
             pass
 
-    return inspect_system_archive(kind, location, headers=headers, total_size=total_size)
+    return inspect_system_archive(kind, location, headers=headers, total_size=total_size, password=password)
 
 
 class ArchiveStreamingReader:

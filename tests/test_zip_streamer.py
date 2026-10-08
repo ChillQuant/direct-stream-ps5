@@ -387,6 +387,25 @@ class TestZipStreamer(unittest.TestCase):
         self.assertEqual(raw_src.kind, "local")
         self.assertTrue(raw_src.filename.endswith(".rar"))
 
+    def test_get_archive_type_rar_and_hints(self):
+        self.assertEqual(get_archive_type("game.rar"), "rar")
+        self.assertEqual(get_archive_type("http://example.com/download/Game%20[DLPSGAME.COM].part1.rar"), "rar")
+        self.assertEqual(get_archive_type("Game.7z"), "7z")
+        self.assertEqual(get_archive_type("Game.zip"), "zip")
+        self.assertEqual(extract_password_hint("Game [DLPSGAME.COM].rar"), "DLPSGAME.COM")
+
+    def test_encrypted_archive_error_options(self):
+        err = EncryptedArchiveError(
+            "This RAR archive is password-protected or encrypted (password: DLPSGAME.COM required). "
+            "On-the-fly streaming cannot decompress encrypted archives without unpacking. "
+            "Choose 'PS5 on-console extraction' or 'Local staging extraction' with password DLPSGAME.COM, "
+            "or transfer the raw archive directly.",
+            archive_type="rar",
+            password_hint="DLPSGAME.COM"
+        )
+        self.assertIn("password-protected or encrypted", str(err))
+        self.assertEqual(err.password_hint, "DLPSGAME.COM")
+
 
 if __name__ == "__main__":
     unittest.main()
