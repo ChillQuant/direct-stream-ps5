@@ -27,7 +27,100 @@ ps5, playstation-5, ftp, ftp-streamer, parallel-download, direct-stream, zero-de
 
 ---
 
-## 2. GitHub Release Notes (v2.8.6 — Smart Direct Link Resolver)
+## 2. GitHub Release Notes (v2.9.0 — Console Decompressor & Interface 3.2)
+
+### Tag Version
+```text
+v2.9.0
+```
+
+### Release Title
+```text
+DIRECT STREAM FOR PLAYSTATION 5 v2.9.0 — Console Decompressor & Interface 3.2
+```
+
+### Release Description:
+```markdown
+## DIRECT STREAM FOR PLAYSTATION 5 (v2.9.0)
+
+Direct Stream for PlayStation 5 v2.9.0 is a major milestone release introducing **native PS5 console decompressor integration (0 GB local disk usage)**, **mandatory pre-flight URL verification**, the redesigned **Interface 3.2 experience**, and default destination routing to **`/data/homebrew`**.
+
+---
+
+### Highlights at a Glance
+
+- **Native PS5 Console Decompressor**: Stream `.rar`, `.zip`, and `.7z` archives directly into PS5 storage and unpack on the console internal SSD using the bundled `unrar-ps5` payload on port 9021 with **0 GB local disk space used**.
+- **Mandatory Pre-Flight Link Verification**: Automatically probes URLs on queue submission for DNS reachability, range support, file sizes, and archive encryption to stop broken transfers before they start.
+- **Interface 3.2 Experience Redesign**: Refined UI typography, responsive touch controls, and an interactive 3-card Archive Strategy selector (`Extract on PS5`, `Extract on this device`, `Send without extracting`).
+- **Default `/data/homebrew` Routing**: Presets, payloads, and queues now default to `/data/homebrew`, with smart automatic redirection of disk dumps (`.ffpfsc`, `.exfat`, `.ufs`) to `/data/ShadowMount` and packages to `/data/pkg`.
+- **Encrypted & Password-Protected Archives**: Automatic detection of encrypted archives, filename password hint extraction, and secure temporary staging.
+- **Interactive Error Diagnostics**: In-app error receipt inspector with sanitized system info, troubleshooting recommendations, and one-click GitHub issue reporting.
+
+---
+
+### What is New in Detail
+
+#### 1. Native PS5 Console Decompressor (0 GB Local Disk Footprint)
+- Sends compressed archives directly across your LAN to `/data/unrar` or `/data/homebrew` on the console.
+- Launches the bundled `unrar_ps5.elf` payload via TCP port 9021 to perform native on-console extraction directly into `/data/homebrew`.
+- Ideal for massive multi-gigabyte game dumps containing hundreds of subdirectories and thousands of loose files, or multi-volume `.part1.rar` sequences.
+- Completely avoids filling up your Mac, PC, or Android phone with temporary staging files.
+
+#### 2. Mandatory Pre-Flight URL Verification & Fail-Fast Protection
+- When clicking **Add to queue**, Direct Stream automatically verifies each link in the background:
+  - Validates HTTP server reachability and DNS resolution.
+  - Probes `Accept-Ranges` and `Content-Range` chunk capabilities.
+  - Extracts exact remote content length and true filenames from `Content-Disposition`.
+  - Inspects archive headers to detect compression format and encryption status.
+- **Fail-Fast Safety**: Unreachable links (404, DNS error, server rejected) are flagged immediately inside the modal with a red diagnostic card, keeping the transfer queue clean and reliable.
+
+#### 3. Archive Handling Strategy Matrix
+
+| Strategy Card | Local Disk Footprint | Console Payload | Best Suited For |
+| :--- | :--- | :--- | :--- |
+| **Extract on PS5 (Recommended)** | **0 GB (Zero local disk writes)** | `unrar-ps5` (Port 9021) | Game folder dumps with tons of loose files, split multi-part RAR/ZIP sets |
+| **Extract on this device** | **0 GB for single files** (RAM ring)<br>Temporary staging for folders | None required | Standalone files (`.pkg`, `.ffpfsc`, `.iso`) streaming through RAM; fast CPUs |
+| **Send without extracting** | **0 GB** | None required | Archival raw storage, manual on-console management |
+
+#### 4. Smart Destination Preset Routing
+- Destination directory defaults to **`/data/homebrew`**.
+- Intelligent automatic preset detection:
+  - Disc image dumps (`.ffpfsc`, `.exfat`, `.ufs`, `.iso`, `.bin`, `.img`) auto-route to **`/data/ShadowMount`**.
+  - Package installers (`.pkg`) auto-route to **`/data/pkg`**.
+  - General games and unpacked folders route to **`/data/homebrew`**.
+
+#### 5. Interactive Error Diagnostics & One-Click GitHub Reporting
+- When a network or transfer error occurs, click **Inspect Diagnostics** for an instant breakdown.
+- Displays sanitized network information, remote FTP server state, and concrete recovery steps.
+- **Report to GitHub** button pre-fills a professional bug report using our official repository issue templates.
+
+---
+
+### Downloads & Installation
+
+| Package | Target Platform | Instructions |
+| :--- | :--- | :--- |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-macOS.zip`** | macOS (Apple Silicon & Intel) | Extract and open `PS5 Direct Streamer.app` |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-Windows.zip`** | Windows 10 / 11 | Extract and run `Launch Direct Stream for PlayStation 5.bat` |
+| **`DIRECT-STREAM-FOR-PLAYSTATION-5-PurePython.zip`** | Android / Linux / Cross-Platform | Includes `install_android.sh`, `run_android.sh`, and pure Python CLI |
+
+#### Android 1-Line Setup (via Termux):
+```bash
+curl -sSL https://raw.githubusercontent.com/ChillQuant/direct-stream-ps5/main/install_android.sh | bash
+```
+
+---
+
+### Technical Invariants & Quality Standards
+
+- **100% Native Pure Python**: Pure Python 3.9+ standard library (`http.client`, `ftplib`, `asyncio`, `threading`). Zero third-party pip dependencies required.
+- **Strict Zero-Emoji Design**: All code, terminal outputs, UI labels, and documentation conform to professional clean text standards.
+- **Automated Test Suite**: 100 integration and unit tests covering range chunking, FTP socket handling, atomic partial renames, and archive decompression.
+```
+
+---
+
+## 3. GitHub Release Notes (v2.8.6 — Smart Direct Link Resolver)
 
 ### Tag Version
 ```text
