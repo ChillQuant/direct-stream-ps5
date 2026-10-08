@@ -7,38 +7,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="app.css" />
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
     <style>
       *, *::before, *::after {
-        margin: 0;
-        padding: 0;
         box-sizing: border-box;
-      }
-      :root {
-        --bg-canvas: #07090e;
-        --sidebar-bg: #10141d;
-        --sidebar-border: rgba(255, 255, 255, 0.08);
-        --workspace-bg: #f8fafc;
-        --surface: #ffffff;
-        --surface-subtle: #f1f5f9;
-        --line: #cbd5e1;
-        --line-subtle: #e2e8f0;
-        --ink: #090d16;
-        --ink-secondary: #1e293b;
-        --muted: #475569;
-        --ps-blue: #1256c4;
-        --ps-blue-glow: rgba(18, 86, 196, 0.35);
-        --purple-source: #7c3aed;
-        --green-buffer: #047857;
-        --shadow-window: 0 32px 80px rgba(0, 0, 0, 0.65), 0 8px 24px rgba(0, 0, 0, 0.4);
-        --shadow-card: 0 2px 6px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.02);
       }
       html, body {
         width: 1920px;
         height: 1080px;
+        margin: 0;
+        padding: 0;
         overflow: hidden;
-        background: var(--bg-canvas);
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #0b0e14;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         color: var(--ink);
         -webkit-font-smoothing: antialiased;
       }
@@ -46,1945 +28,1360 @@
         position: relative;
         width: 1920px;
         height: 1080px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: radial-gradient(circle at 50% 30%, #172238 0%, #0a0e17 65%, #05070a 100%);
-      }
-
-      /* Ambient Backdrop Glow */
-      .ambient-glow {
-        position: absolute;
-        width: 1300px;
-        height: 750px;
-        background: radial-gradient(ellipse, rgba(22, 104, 227, 0.18) 0%, rgba(139, 92, 246, 0.08) 45%, transparent 70%);
-        top: 15%;
-        left: 50%;
-        transform: translate(-50%, -10%);
-        pointer-events: none;
-        filter: blur(80px);
-      }
-
-      /* Desktop App Window Frame */
-      .app-window {
-        position: relative;
-        width: 1580px;
-        height: 940px;
-        border-radius: 18px;
-        background: var(--workspace-bg);
-        box-shadow: var(--shadow-window);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        display: flex;
-        flex-direction: column;
         overflow: hidden;
+        background: #0b0e14;
       }
 
-      /* macOS Style Title Bar */
-      .mac-titlebar {
-        height: 46px;
-        background: #0d1017;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 20px;
-        position: relative;
-        z-index: 10;
-      }
-      .window-dots {
-        display: flex;
-        gap: 8px;
-        width: 120px;
-      }
-      .dot-btn {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-      }
-      .dot-close { background: #ff5f56; }
-      .dot-min { background: #ffbd2e; }
-      .dot-zoom { background: #27c93f; }
-      .window-title {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 13px;
-        font-weight: 500;
-        color: #94a3b8;
-        letter-spacing: 0.02em;
-      }
-      .window-title-badge {
-        font-size: 11px;
-        font-weight: 600;
-        color: #38bdf8;
-        background: rgba(56, 189, 248, 0.12);
-        padding: 2px 8px;
-        border-radius: 999px;
-        border: 1px solid rgba(56, 189, 248, 0.25);
-      }
-
-      /* Instructional Step Pill (Top Center) */
-      .instruction-pill-wrap {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: rgba(22, 104, 227, 0.16);
-        border: 1px solid rgba(56, 189, 248, 0.35);
-        padding: 4px 14px;
-        border-radius: 999px;
-        color: #e0f2fe;
-        font-size: 11.5px;
-        font-weight: 600;
-        letter-spacing: 0.03em;
-      }
-      .instruction-pulse-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: #38bdf8;
-        box-shadow: 0 0 8px #38bdf8;
-      }
-
-      /* PS5 Blue Accent Lightbar */
-      .ps5-lightbar {
-        position: absolute;
-        top: 46px;
-        left: 280px;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #1668e3 0%, #38bdf8 50%, #1668e3 100%);
-        box-shadow: 0 0 16px rgba(56, 189, 248, 0.8), 0 0 8px #1668e3;
-        z-index: 9;
-      }
-
-      /* Main Window Split Layout */
-      .app-body {
-        display: flex;
-        flex: 1;
-        overflow: hidden;
-        position: relative;
-      }
-
-      /* SIDEBAR: Matte Obsidian */
-      .sidebar {
-        width: 280px;
-        background: var(--sidebar-bg);
-        border-right: 1px solid var(--sidebar-border);
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        padding: 24px 18px;
-        color: #fff;
-        z-index: 5;
-      }
-      .brand-box {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 28px;
-        padding: 0 6px;
-      }
-      .brand-logo {
-        width: 36px;
-        height: 36px;
-        background: linear-gradient(135deg, #1668e3, #0284c7);
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 4px 12px rgba(22, 104, 227, 0.4);
-      }
-      .brand-logo svg {
-        width: 20px;
-        height: 20px;
-        fill: none;
-        stroke: #fff;
-        stroke-width: 2.2;
-      }
-      .brand-text h1 {
-        font-size: 13.5px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        color: #f1f5f9;
-        text-transform: uppercase;
-        line-height: 1.2;
-      }
-      .brand-text p {
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        color: #94a3b8;
-        text-transform: uppercase;
-      }
-
-      .nav-group {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .nav-btn {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 14px;
-        border-radius: 8px;
-        background: transparent;
-        border: none;
-        color: #94a3b8;
-        font-size: 13.5px;
-        font-weight: 500;
-        cursor: pointer;
-        text-align: left;
-        width: 100%;
-      }
-      .nav-btn svg {
-        width: 18px;
-        height: 18px;
-        stroke: currentColor;
-        stroke-width: 2;
-        fill: none;
-      }
-      .nav-btn.active {
-        background: rgba(22, 104, 227, 0.16);
-        color: #f8fafc;
-        font-weight: 600;
-        border-left: 3px solid #38bdf8;
-      }
-      .nav-badge {
-        margin-left: auto;
-        background: #1e293b;
-        color: #94a3b8;
-        font-size: 10.5px;
-        font-weight: 600;
-        padding: 2px 7px;
-        border-radius: 999px;
-      }
-
-      /* Console Connection Card in Sidebar */
-      .console-card {
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        padding: 14px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .ps5-svg-wrap {
-        width: 32px;
-        height: 38px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-      }
-      .console-info h4 {
-        font-size: 12.5px;
-        font-weight: 600;
-        color: #f1f5f9;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .status-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: #10b981;
-        box-shadow: 0 0 6px #10b981;
-      }
-      .console-info p {
-        font-size: 11px;
-        color: #94a3b8;
-        font-family: 'JetBrains Mono', monospace;
-        margin-top: 2px;
-      }
-
-      /* WORKSPACE CONTENT AREA */
-      .workspace {
-        flex: 1;
-        background: var(--workspace-bg);
-        overflow: hidden;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .page-container {
+      /* Fixed 1920x1080 App Shell */
+      .app-shell {
         position: absolute;
         inset: 0;
-        padding: 30px 36px;
+        width: 1920px;
+        height: 1080px;
+        display: flex;
         overflow: hidden;
+        background: var(--bg);
+      }
+
+      /* Authentic Sidebar Positioning */
+      .sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 240px;
+        height: 1080px;
+        z-index: 100;
+      }
+
+      /* Authentic Workspace Layout */
+      .workspace {
+        position: absolute;
+        left: 240px;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        margin-left: 0 !important;
+        width: 1680px;
+        height: 1080px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        background: #f7f8fa;
+      }
+
+      .workspace-topbar {
+        position: relative;
+        z-index: 600;
+        height: 66px;
+        min-height: 66px;
+        padding: 0 40px;
+        background: #ffffff;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .breadcrumb-divider {
+        padding: 0 5px;
+        color: #64748b !important;
+      }
+
+      .main-content {
+        flex: 1;
+        padding: 24px 40px 40px;
+        overflow: hidden;
+        position: relative;
+        max-width: 1600px;
+      }
+
+      .page-view {
+        position: absolute;
+        inset: 24px 40px 40px;
         display: none;
         flex-direction: column;
         gap: 16px;
         opacity: 0;
-        pointer-events: none;
       }
-      .page-container.active-page {
-        display: flex;
+      .page-view.active-page {
+        display: flex !important;
         opacity: 1;
-        pointer-events: auto;
+      }
+      #page-transfers:not(.active-page),
+      #page-files:not(.active-page),
+      #page-diagnostics:not(.active-page) {
+        display: none !important;
       }
 
-      .page-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
+      /* Modal Layer */
+      #modal-layer {
+        position: absolute;
+        top: 66px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 500;
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 10px;
       }
-      .page-head h2 {
-        font-size: 22px;
-        font-weight: 700;
-        color: var(--ink);
-        letter-spacing: -0.02em;
+      #modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
       }
-      .page-head p {
-        font-size: 13px;
-        color: var(--muted);
-        margin-top: 2px;
-      }
-
-      .btn-primary {
-        background: var(--ps-blue);
-        color: #ffffff;
-        font-size: 13px;
-        font-weight: 600;
-        padding: 9px 18px;
-        border-radius: 8px;
-        border: none;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        box-shadow: 0 2px 8px rgba(18, 86, 196, 0.3);
-      }
-      .btn-outline {
+      #add-modal {
+        position: relative;
+        z-index: 2;
+        width: 620px;
         background: #ffffff;
-        color: var(--ink);
-        border: 1px solid var(--line);
-        font-size: 13px;
-        font-weight: 600;
-        padding: 8px 16px;
-        border-radius: 8px;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      /* Setup Card in View New Transfer */
-      .setup-card {
-        background: #ffffff;
-        border: 1px solid var(--line);
         border-radius: 14px;
-        padding: 20px 24px;
-        box-shadow: var(--shadow-card);
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-      .modal-input-label-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .modal-label {
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #475569;
-      }
-      .btn-verify-chip {
-        background: #eff6ff;
-        color: #1d4ed8;
-        border: 1px solid #bfdbfe;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .url-input-display {
-        background: #f8fafc;
-        border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        padding: 10px 14px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 12.5px;
-        color: #0f172a;
-        line-height: 1.4;
-      }
-
-      /* Live Verification Status Card */
-      .verify-card-box {
-        background: #f0fdf4;
-        border: 1px solid #bbf7d0;
-        border-radius: 10px;
-        padding: 12px 16px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+        padding: 14px 20px;
         display: flex;
         flex-direction: column;
         gap: 6px;
-        opacity: 0;
-        transform: translateY(-6px);
       }
-      .verify-card-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+      .modal-header {
+        margin-bottom: 2px !important;
       }
-      .verify-badge-ok {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        color: #15803d;
-        font-size: 12.5px;
-        font-weight: 700;
+      .modal-field-block {
+        margin-top: 2px !important;
       }
-      .verify-pills-row {
-        display: flex;
-        gap: 8px;
+      .modal-feature-block {
+        margin-top: 2px !important;
+        padding: 8px 10px !important;
+        gap: 4px !important;
       }
-      .meta-pill {
-        font-size: 10.5px;
-        font-weight: 600;
-        padding: 2px 8px;
-        border-radius: 999px;
-      }
-      .pill-size { background: #e0f2fe; color: #0369a1; }
-      .pill-range { background: #dcfce7; color: #15803d; }
-      .verify-card-detail {
-        display: flex;
-        justify-content: space-between;
-        font-size: 12px;
-        color: #334155;
-      }
-      .verify-filename-val {
-        font-weight: 600;
-        font-family: 'JetBrains Mono', monospace;
-      }
-
-      /* 3-Card Strategy Selector */
-      .strategy-section-title {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #475569;
-      }
-      .strategy-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
+      .strategy-selector-grid {
+        margin-top: 2px !important;
+        gap: 8px !important;
       }
       .strategy-card {
-        background: #ffffff;
-        border: 1.5px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 16px 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        cursor: pointer;
-        position: relative;
+        padding: 6px 8px !important;
       }
-      .strategy-card.selected {
-        border-color: #10b981;
-        background: #f0fdf4;
-        box-shadow: 0 0 0 1px #10b981, 0 4px 14px rgba(16, 185, 129, 0.15);
+      .strategy-card-title {
+        color: #0f172a !important;
+        font-weight: 700 !important;
       }
-      .strategy-pill-tag {
-        font-size: 10px;
-        font-weight: 700;
-        color: #15803d;
-        background: #dcfce7;
-        padding: 2px 7px;
-        border-radius: 999px;
-        display: inline-block;
-        width: fit-content;
+      .strategy-desc {
+        color: #1e293b !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        margin: 0 !important;
       }
-      .strategy-card h4 {
-        font-size: 13.5px;
-        font-weight: 700;
-        color: #0f172a;
+      .meta-pill.pill-ps5-extract {
+        background: #dbeafe !important;
+        color: #1e40af !important;
+        font-weight: 700 !important;
       }
-      .strategy-card p {
-        font-size: 11.5px;
-        color: #64748b;
-        line-height: 1.35;
+      .meta-pill.pill-verified {
+        background: #dcfce7 !important;
+        color: #166534 !important;
+        font-weight: 700 !important;
       }
-      .strategy-check-item {
-        font-size: 11px;
-        color: #334155;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 4px;
+      .meta-pill.pill-archive, .meta-pill.pill-disk {
+        background: #e2e8f0 !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
+      }
+      .modal-footer {
+        position: static !important;
+        margin-top: 10px !important;
+        padding-top: 10px !important;
+        bottom: auto !important;
+        border-top: 1px solid #e2e8f0 !important;
+        background: transparent !important;
       }
 
-      /* ======================================================== */
-      /* TRANSFERS HERO TELEMETRY CARD                            */
-      /* ======================================================== */
-      .hero-card {
-        background: #ffffff;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 22px 24px;
-        box-shadow: var(--shadow-card);
+      /* Telemetry Graph Styling inside Hero Card */
+      .telemetry-graph-wrapper {
         display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-      .hero-top-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .state-tag-group {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .state-badge {
-        font-size: 11.5px;
-        font-weight: 700;
-        color: #0369a1;
-        background: #e0f2fe;
-        padding: 3px 10px;
-        border-radius: 999px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .state-badge::before {
-        content: '';
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: #0284c7;
-      }
-      .bottleneck-pill {
-        font-size: 11.5px;
-        font-weight: 600;
-        color: #15803d;
-        background: #dcfce7;
-        padding: 3px 10px;
-        border-radius: 999px;
-      }
-      .hero-title-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-      }
-      .pkg-filename {
-        font-size: 19px;
-        font-weight: 700;
-        color: var(--ink);
-        font-family: 'JetBrains Mono', monospace;
-      }
-      .speedometer-num {
-        font-size: 38px;
-        font-weight: 700;
-        color: var(--ps-blue);
-        font-family: 'JetBrains Mono', monospace;
-        letter-spacing: -0.04em;
-        line-height: 1;
-      }
-
-      .progress-meta-row {
-        display: flex;
-        justify-content: space-between;
-        font-size: 13.5px;
-        font-weight: 500;
-        color: var(--muted);
-      }
-      .progress-track {
-        height: 10px;
-        background: #e2e8f0;
-        border-radius: 999px;
-        overflow: hidden;
-      }
-      .progress-fill {
-        height: 100%;
-        width: 14%;
-        background: linear-gradient(90deg, #1256c4 0%, #38bdf8 100%);
-        border-radius: 999px;
-        box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
-      }
-
-      /* 3 Metric Pillars */
-      .pillars-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
-      }
-      .pillar {
-        background: #f8fafc;
-        border: 1px solid var(--line-subtle);
-        border-radius: 10px;
-        padding: 12px 16px;
-      }
-      .pillar-header {
-        font-size: 11.5px;
-        font-weight: 600;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .dot-blue { width: 6px; height: 6px; border-radius: 50%; background: var(--ps-blue); }
-      .dot-purple { width: 6px; height: 6px; border-radius: 50%; background: var(--purple-source); }
-      .dot-green { width: 6px; height: 6px; border-radius: 50%; background: var(--green-buffer); }
-      .pillar-value {
-        font-size: 18px;
-        font-weight: 700;
-        color: var(--ink);
-        font-family: 'JetBrains Mono', monospace;
-        margin-top: 4px;
-      }
-
-      /* Telemetry SVG Waveform */
-      .telemetry-chart-box {
-        height: 60px;
-        background: #f8fafc;
-        border: 1px solid var(--line-subtle);
-        border-radius: 10px;
-        overflow: hidden;
-        position: relative;
-      }
-      .chart-svg {
-        width: 100%;
-        height: 100%;
-      }
-
-      /* Queue Table */
-      .queue-card {
-        background: #ffffff;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 18px 20px;
-        box-shadow: var(--shadow-card);
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-      .queue-header-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .queue-title {
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--ink);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .queue-badge-count {
-        background: #f1f5f9;
-        color: #475569;
-        font-size: 11px;
-        font-weight: 600;
-        padding: 2px 8px;
-        border-radius: 999px;
-      }
-      .queue-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      .queue-table th {
-        text-align: left;
-        color: #64748b;
-        font-weight: 600;
-        padding: 6px 12px;
-        border-bottom: 1px solid #e2e8f0;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .queue-table td {
-        padding: 8px 12px;
-        border-bottom: 1px solid #f1f5f9;
-        color: #334155;
-      }
-      .row-active {
-        background: rgba(18, 86, 196, 0.04);
-      }
-      .status-pill {
-        font-size: 11px;
-        font-weight: 600;
-        padding: 3px 8px;
-        border-radius: 999px;
-        display: inline-block;
-      }
-      .pill-active { background: #dcfce7; color: #15803d; }
-      .pill-queued { background: #f1f5f9; color: #475569; }
-
-      /* ======================================================== */
-      /* VIEW 3: SPEED DIAGNOSTICS & HEALTH CHECKUP               */
-      /* ======================================================== */
-      .diag-health-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        align-items: stretch;
         gap: 12px;
-      }
-      .health-check-card {
-        background: #ffffff;
+        height: 100px;
+        margin-top: 10px;
+        background: #f8fafc;
         border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 14px 16px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        box-shadow: var(--shadow-card);
-      }
-      .health-icon-box {
-        width: 32px;
-        height: 32px;
         border-radius: 8px;
-        background: #dcfce7;
-        color: #15803d;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 14px;
-      }
-      .health-meta h4 {
-        font-size: 12.5px;
-        font-weight: 700;
-        color: #0f172a;
-      }
-      .health-meta p {
-        font-size: 11px;
-        color: #15803d;
-        font-weight: 600;
-        font-family: 'JetBrains Mono', monospace;
-      }
-
-      .diag-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
-      }
-      .diag-card {
-        background: #ffffff;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: var(--shadow-card);
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-      .diag-card h3 {
-        font-size: 15px;
-        font-weight: 700;
-        color: var(--ink);
-      }
-      .diag-card p {
-        font-size: 12.5px;
-        color: var(--muted);
-      }
-      .diag-rate-hero {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 16px;
-        background: #f8fafc;
-        border: 1px solid var(--line-subtle);
-        border-radius: 10px;
-      }
-      .diag-rate-val {
-        font-size: 24px;
-        font-weight: 700;
-        color: var(--ps-blue);
-        font-family: 'JetBrains Mono', monospace;
-      }
-      .rec-banner {
-        background: #091325;
-        border: 1px solid rgba(56, 189, 248, 0.4);
-        border-radius: 12px;
-        padding: 16px 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #ffffff;
-        box-shadow: 0 4px 16px rgba(18, 86, 196, 0.25);
-      }
-      .rec-content h4 {
-        font-size: 14px;
-        font-weight: 700;
-        color: #ffffff;
-      }
-      .rec-content p {
-        font-size: 12px;
-        color: #cbd5e1;
-        margin-top: 2px;
-      }
-      .rec-btn {
-        background: #065f46;
-        color: #ffffff;
-        border: none;
-        padding: 9px 18px;
-        font-size: 12.5px;
-        font-weight: 700;
-        border-radius: 8px;
-        cursor: pointer;
-        box-shadow: 0 2px 8px rgba(6, 95, 70, 0.4);
-      }
-
-      /* ======================================================== */
-      /* VIEW 4: CONSOLE FILES EXPLORER                           */
-      /* ======================================================== */
-      .files-card {
-        background: #ffffff;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: var(--shadow-card);
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-      .files-path-bar {
-        background: #f8fafc;
-        border: 1px solid var(--line-subtle);
         padding: 10px 14px;
-        border-radius: 8px;
-        font-size: 12.5px;
+      }
+      .graph-y-axis {
         display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .path-badge {
+        flex-direction: column;
+        justify-content: space-between;
+        font-size: 10px;
         font-family: 'JetBrains Mono', monospace;
-        font-weight: 600;
-        padding: 2px 7px;
-        border-radius: 6px;
-        background: #e2e8f0;
         color: #1e293b;
+        min-width: 50px;
       }
-      .path-badge.active {
-        background: rgba(18, 86, 196, 0.12);
-        color: var(--ps-blue);
+      .graph-canvas-box {
+        flex: 1;
+        position: relative;
       }
-      .files-meta-count {
-        margin-left: auto;
-        color: #475569;
+      .graph-canvas-box svg {
+        width: 100%;
+        height: 100%;
+      }
+      .graph-legend-col {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 8px;
+        font-size: 11px;
         font-weight: 600;
-        font-size: 12px;
+        color: #0f172a;
+        min-width: 105px;
       }
 
-      /* ======================================================== */
-      /* VIEW 5: TRANSFER ENGINE SETTINGS                         */
-      /* ======================================================== */
-      .settings-card {
-        background: #ffffff;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: var(--shadow-card);
-        display: flex;
+      /* Instruction Pill at Top Bar */
+      .demo-step-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #dbeafe;
+        border: 1px solid #93c5fd;
+        color: #1e3a8a;
+        padding: 4px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .demo-step-badge span {
+        color: #1e3a8a !important;
+      }
+      .demo-step-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #1d4ed8;
+      }
+
+      /* Universal High-Contrast Rules for WCAG AA (>= 4.5:1) */
+      .sidebar-foot { color: #cbd5e1 !important; }
+      .sidebar-foot span { color: #cbd5e1 !important; }
+      .welcome-kicker { color: #334155 !important; }
+      .welcome-copy p { color: #1e293b !important; }
+      .welcome-footnote { color: #1e293b !important; }
+      .connection-endpoint span { color: #1e293b !important; }
+      .workspace-label { color: #334155 !important; }
+      .workspace-label strong { color: #0f172a !important; }
+      .utility-button { color: #1e293b !important; }
+      .utility-button span { color: #1e293b !important; }
+      .overview-item small { color: #334155 !important; }
+      .overview-item strong { color: #0f172a !important; }
+      .page-subtitle { color: #334155 !important; }
+      .modal-subtitle { color: #334155 !important; }
+      .field-label-row label { color: #1e293b !important; }
+      .dest-recommended-hint { color: #1e293b !important; }
+      .modal-step-label { color: #334155 !important; }
+      .feature-title-icon { color: #1e293b !important; }
+      .feature-block-title { color: #0f172a !important; }
+      .feature-block-sub { color: #1e293b !important; }
+      .strategy-card-title { color: #0f172a !important; }
+      .strategy-desc { color: #1e293b !important; }
+      .meta-pill { color: #1e293b !important; }
+      .meta-pill.pill-ps5-extract { color: #065f46 !important; background: #d1fae5 !important; }
+      .page-view {
+        position: absolute;
+        inset: 24px 40px 40px;
+        display: none;
         flex-direction: column;
         gap: 16px;
       }
-      .preset-bar-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .preset-btns-group {
-        display: flex;
-        gap: 8px;
-      }
-      .engine-preset-btn {
-        background: #f1f5f9;
-        color: #334155;
-        border: 1px solid #cbd5e1;
-        padding: 7px 14px;
-        font-size: 12px;
-        font-weight: 600;
-        border-radius: 8px;
-        cursor: pointer;
-      }
-      .engine-preset-btn.active-preset {
-        background: var(--ps-blue);
-        color: #ffffff;
-        border-color: var(--ps-blue);
-        box-shadow: 0 2px 6px rgba(18, 86, 196, 0.3);
-      }
-      .settings-fields-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
-      }
-      .field-block {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .field-block label {
-        font-size: 12px;
-        font-weight: 700;
-        color: #334155;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .field-select {
-        background: #f8fafc;
-        border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        padding: 10px 12px;
-        font-size: 12.5px;
-        font-weight: 600;
-        color: #0f172a;
-      }
-      .field-hint {
-        font-size: 11px;
-        color: #64748b;
+      .page-view.active-page {
+        display: flex !important;
       }
 
-      /* Storage Bar Card */
-      .storage-bar-card {
-        background: #ffffff;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 18px 20px;
-        box-shadow: var(--shadow-card);
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+      /* Authentic Navy Live Transfer Card (from experience.css) */
+      .live-transfer-card {
+        background: linear-gradient(118deg, #1c2b47 0%, #19243a 66%, #243954 100%) !important;
+        border: 1px solid #263c5c !important;
+        box-shadow: 0 8px 22px rgba(28, 51, 86, 0.12) !important;
+        color: #e6edf9 !important;
       }
-      .storage-meta-row {
-        display: flex;
-        justify-content: space-between;
-        font-size: 13px;
+      .live-transfer-card .transfer-title, #active-transfer-name {
+        color: #ffffff !important;
       }
-      .storage-track {
-        height: 10px;
-        background: #e2e8f0;
-        border-radius: 999px;
-        overflow: hidden;
+      .live-transfer-card .live-label {
+        color: #cbd5e1 !important;
       }
-      .storage-fill {
-        height: 100%;
-        width: 58%;
-        background: linear-gradient(90deg, #1256c4, #38bdf8);
-        border-radius: 999px;
+      .live-transfer-card .transfer-progress-meta .meta-left,
+      #progress-bytes-label {
+        color: #e2e8f0 !important;
+      }
+      .live-transfer-card .blue-percent {
+        color: #93c5fd !important;
+      }
+      .live-transfer-card .live-speed-heading,
+      .live-transfer-card .live-speed-heading span {
+        color: #ffffff !important;
+      }
+      .live-transfer-card .eta-label {
+        color: #cbd5e1 !important;
+      }
+      .live-transfer-card .telemetry-pillars {
+        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+      }
+      .live-transfer-card .telemetry-pillars strong,
+      .live-transfer-card .telemetry-pillars .pillar-num,
+      #speed-console-val {
+        color: #ffffff !important;
+      }
+      .live-transfer-card .telemetry-pillars .pillar-label,
+      .live-transfer-card .pillar-label {
+        color: #cbd5e1 !important;
+      }
+      .live-transfer-card .telemetry-graph-wrapper {
+        background: rgba(255, 255, 255, 0.04) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      }
+      .live-transfer-card .graph-y-axis {
+        color: #cbd5e1 !important;
+      }
+      .live-transfer-card .graph-y-axis span {
+        color: #cbd5e1 !important;
+      }
+      .live-transfer-card .graph-legend-col {
+        color: #e2e8f0 !important;
+      }
+
+      .section-desc { color: #334155 !important; }
+      .card-caption { color: #334155 !important; }
+      .kpi-label { color: #334155 !important; }
+      .benchmark-mode-pill { color: #1e3a8a !important; background: #dbeafe !important; }
+      .storage-text-row strong { color: #0f172a !important; }
+      .storage-text-row span { color: #334155 !important; }
+      .browse-status-msg { color: #1e293b !important; }
+      .studio-table thead th {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+      }
+      .segmented-pill-switcher button {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+      }
+      .segmented-pill-switcher button.selected {
+        color: #ffffff !important;
+        background: #1e293b !important;
+      }
+      .dest-preset-btn {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+      }
+      .dest-preset-btn.selected {
+        color: #1e3a8a !important;
+        background: #dbeafe !important;
+        border-color: #93c5fd !important;
+      }
+      .items-count-badge {
+        color: #1e293b !important;
+        background: #e2e8f0 !important;
+        font-weight: 600 !important;
+      }
+
+      @font-face {
+        font-family: 'SFMono-Regular';
+        src: local('SFMono-Regular');
       }
 
       /* Virtual Mouse Cursor */
-      .virtual-cursor {
+      #cursor {
         position: absolute;
         top: 0;
         left: 0;
+        z-index: 9999;
         pointer-events: none;
-        z-index: 100;
-        opacity: 0;
+        will-change: transform;
       }
-      .cursor-click-ring {
+      #cursor svg {
+        filter: drop-shadow(0 2px 5px rgba(0,0,0,0.3));
+      }
+      #click-ring {
         position: absolute;
-        top: -10px;
-        left: -10px;
-        width: 30px;
-        height: 30px;
+        top: -6px;
+        left: -6px;
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
-        border: 2px solid #38bdf8;
+        border: 2px solid #1668e3;
         opacity: 0;
-        transform: scale(0.3);
+        pointer-events: none;
       }
 
-      /* ======================================================== */
-      /* SCENE 7: BRAND OUTRO & REPO LOCKUP                       */
-      /* ======================================================== */
-      .brand-outro {
+      /* Brand Outro Overlay */
+      #brand-outro {
         position: absolute;
         inset: 0;
-        display: flex;
+        z-index: 1000;
+        display: none;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        background: radial-gradient(circle at 50% 40%, #151e2e 0%, #090c12 70%, #05070a 100%);
+        color: #ffffff;
         text-align: center;
-        gap: 18px;
-        z-index: 20;
-        opacity: 0;
-        pointer-events: none;
       }
-      .outro-ps5-icon {
-        width: 54px;
-        height: 72px;
-        filter: drop-shadow(0 0 24px rgba(56, 189, 248, 0.6));
+      .outro-mark {
+        width: 76px;
+        height: 76px;
+        border-radius: 20px;
+        background: #ffffff;
+        color: #0f172a;
+        display: grid;
+        place-items: center;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+        margin-bottom: 24px;
+      }
+      .outro-mark svg {
+        width: 44px;
+        height: 44px;
+        stroke: #0f172a;
+        stroke-width: 2.2;
       }
       .outro-title {
-        font-size: 34px;
-        font-weight: 800;
-        letter-spacing: 0.08em;
+        font-size: 38px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        margin-bottom: 8px;
         color: #ffffff;
-        text-transform: uppercase;
-        background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
       }
       .outro-sub {
         font-size: 16px;
-        font-weight: 500;
         color: #94a3b8;
-        max-width: 760px;
-        line-height: 1.5;
+        max-width: 620px;
+        line-height: 1.6;
+        margin-bottom: 28px;
       }
-      .outro-badges {
+      .outro-badge-row {
         display: flex;
         gap: 12px;
-        margin-top: 6px;
       }
       .outro-pill {
-        font-size: 12.5px;
+        padding: 8px 18px;
+        border-radius: 999px;
+        font-size: 13px;
         font-weight: 600;
-        color: #38bdf8;
-        background: rgba(56, 189, 248, 0.1);
-        border: 1px solid rgba(56, 189, 248, 0.28);
-        padding: 7px 18px;
-        border-radius: 999px;
-      }
-      .outro-url {
-        font-size: 17px;
-        font-weight: 700;
-        font-family: 'JetBrains Mono', monospace;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.16);
         color: #e2e8f0;
-        margin-top: 8px;
-        letter-spacing: 0.02em;
       }
-      .outro-release-badge {
-        font-size: 11.5px;
-        font-weight: 700;
-        color: #34d399;
-        background: rgba(16, 185, 129, 0.15);
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        padding: 4px 12px;
-        border-radius: 999px;
+      .outro-pill.pill-blue {
+        background: rgba(22, 104, 227, 0.25);
+        border-color: rgba(56, 189, 248, 0.45);
+        color: #38bdf8;
+      }
+
+      /* Disable transitions on animated elements for HyperFrames linter cleanliness */
+      button, .nav-item, .progress-bar-fill, .strategy-card, .status-badge {
+        transition: none !important;
       }
     </style>
   </head>
   <body>
-    <div
-      id="root"
-      data-composition-id="main"
-      data-start="0"
-      data-duration="30.0"
-      data-width="1920"
-      data-height="1080"
-    >
-      <div class="ambient-glow"></div>
+    <!-- Real App SVG Symbols -->
+    <svg class="symbols" aria-hidden="true"><defs>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+      <symbol id="i-transfer" viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M7 18h10"/><circle cx="12" cy="13" r="1.5"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3Z"/></symbol>
+      <symbol id="i-log" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 8h6M9 12h6M9 16h4"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 7 2-2a5 5 0 0 1 7 7l-2 2M14 17l-2 2a5 5 0 0 1-7-7l2-2M8 16l8-8"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5Z M14 3v6h5M9 13h6M9 17h4"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M4 4v5h.6M20 20v-5h-.6M4.6 9A8 8 0 0 1 19 6.3M19.4 15A8 8 0 0 1 5 17.7"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6,4 20,12 6,20" fill="currentColor"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+      <symbol id="i-ps-storage" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="7" x2="16" y2="7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="8" y1="11" x2="12" y2="11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="15.5" cy="16.5" r="1.5" fill="currentColor"/><path d="M8 17h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+      <symbol id="i-archive-crate" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3H4V6Z" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="4" y="9" width="16" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 13h4M12 11v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+    </defs></svg>
 
-      <!-- Main Desktop App Window -->
-      <div id="app-window" class="app-window clip" data-start="0" data-duration="26.8" data-track-index="0">
-        <!-- macOS Titlebar -->
-        <div class="mac-titlebar">
-          <div class="window-dots">
-            <span class="dot-btn dot-close"></span>
-            <span class="dot-btn dot-min"></span>
-            <span class="dot-btn dot-zoom"></span>
-          </div>
-
-          <!-- Instructional Step Pill -->
-          <div class="instruction-pill-wrap">
-            <span class="instruction-pulse-dot"></span>
-            <span id="instruction-text">Step 1 · Pre-Flight Link Verification</span>
-          </div>
-
-          <div class="window-title">
-            <span>Direct Stream Studio</span>
-            <span class="window-title-badge">Interface 3.2</span>
-          </div>
-        </div>
-
-        <!-- PS5 Top Accent Lightbar -->
-        <div id="ps5-lightbar" class="ps5-lightbar"></div>
-
-        <div class="app-body">
-          <!-- Sidebar -->
-          <aside class="sidebar">
-            <div class="sidebar-top">
-              <div class="brand-box">
-                <div class="brand-logo">
-                  <svg viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></svg>
-                </div>
-                <div class="brand-text">
-                  <h1>Direct Stream</h1>
-                  <p>PlayStation 5 LAN</p>
-                </div>
+    <div id="root" data-composition-id="main" data-width="1920" data-height="1080">
+      <div class="app-shell" id="app-shell">
+        <!-- MATTE DARK OBSIDIAN SIDEBAR -->
+        <aside class="sidebar">
+          <div class="sidebar-top">
+            <a class="brand" href="#" aria-label="DIRECT STREAM FOR PLAYSTATION 5">
+              <span class="brand-mark" aria-hidden="true"><svg><use href="#i-transfer"/></svg></span>
+              <div class="brand-text">
+                <span class="studio-title">Direct Stream</span>
+                <span class="studio-sub">PLAYSTATION 5</span>
               </div>
+            </a>
 
-              <nav class="nav-group">
-                <button id="nav-transfers" class="nav-btn active">
-                  <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>
-                  <span>Transfers</span>
-                  <span class="nav-badge">3</span>
-                </button>
-                <button id="nav-diagnostics" class="nav-btn">
-                  <svg viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M7 18h10"/><circle cx="12" cy="13" r="1.5"/></svg>
-                  <span>Diagnostics</span>
-                </button>
-                <button id="nav-files" class="nav-btn">
-                  <svg viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3Z"/></svg>
-                  <span>Console files</span>
-                </button>
-                <button id="nav-settings" class="nav-btn">
-                  <svg viewBox="0 0 24 24"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg>
-                  <span>Settings</span>
-                </button>
-              </nav>
-            </div>
+            <span class="nav-eyebrow">WORKSPACE</span>
+            <nav class="sidebar-nav" aria-label="Main navigation">
+              <button class="nav-item selected" id="nav-item-transfers">
+                <svg class="nav-icon"><use href="#i-grid"/></svg>
+                <span class="nav-label">Transfers</span>
+                <span id="queue-badge" class="nav-count">3</span>
+              </button>
+              <button class="nav-item" id="nav-item-files">
+                <svg class="nav-icon"><use href="#i-folder"/></svg>
+                <span class="nav-label">Console files</span>
+              </button>
+              <button class="nav-item" id="nav-item-diagnostics">
+                <svg class="nav-icon"><use href="#i-gauge"/></svg>
+                <span class="nav-label">Diagnostics</span>
+              </button>
+              <button class="nav-item" id="nav-item-activity">
+                <svg class="nav-icon"><use href="#i-log"/></svg>
+                <span class="nav-label">Activity</span>
+              </button>
+              <button class="nav-item" id="nav-item-settings">
+                <svg class="nav-icon"><use href="#i-gear"/></svg>
+                <span class="nav-label">Settings</span>
+              </button>
+            </nav>
+          </div>
 
-            <!-- Bottom Console Status Card -->
-            <div class="console-card">
-              <div class="ps5-svg-wrap">
-                <svg viewBox="0 0 24 32" style="width: 20px; height: 26px;">
-                  <path d="M7 2c1.2 0 2.4 1 2.8 3.5l1.6 19c.2 2.2 1.4 3.5 3.6 3.5s3.4-1.3 3.6-3.5l1.6-19c.4-2.5 1.6-3.5 2.8-3.5" fill="none" stroke="#e8ecf4" stroke-width="2" stroke-linecap="round"/>
+          <div class="sidebar-bottom">
+            <!-- Authentic PS5 Console Target Status Card -->
+            <button type="button" class="device-card" id="sidebar-device-card">
+              <div class="ps5-console-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 32" class="ps5-console-svg">
+                  <path d="M7 2c1.2 0 2.4 1 2.8 3.5l1.6 19c.2 2.2 1.4 3.5 3.6 3.5s3.4-1.3 3.6-3.5l1.6-19c.4-2.5 1.6-3.5 2.8-3.5" fill="none" stroke="#e8ecf4" stroke-width="1.8" stroke-linecap="round"/>
                   <rect x="9.5" y="5" width="5" height="23" rx="1.5" fill="#090b0e"/>
-                  <line x1="12" y1="6" x2="12" y2="24" stroke="#1668e3" stroke-width="1.8" stroke-linecap="round"/>
+                  <line x1="12" y1="6" x2="12" y2="24" stroke="#1668e3" stroke-width="1.2" stroke-linecap="round"/>
                 </svg>
               </div>
-              <div class="console-info">
-                <h4><span class="status-dot"></span> PS5 Connected</h4>
-                <p>192.168.1.188:9090</p>
+              <div class="device-meta">
+                <div class="device-name" id="device-name">PS5 Connected</div>
+                <div class="device-sub">
+                  <span id="connection-dot" class="dot" style="background: #10b981;"></span>
+                  <span id="sidebar-host">192.168.1.188:9090</span>
+                </div>
+              </div>
+            </button>
+
+            <div class="sidebar-foot" style="color: #cbd5e1;">
+              <span style="color: #cbd5e1; font-weight: 500;">Direct Stream · 2.9</span>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span style="color: #cbd5e1; font-weight: 500;">Zero-Disk Engine</span>
               </div>
             </div>
-          </aside>
+          </div>
+        </aside>
 
-          <!-- Workspace Pages -->
-          <main class="workspace">
-            <!-- ============================================== -->
-            <!-- VIEW 1: NEW TRANSFER & PRE-FLIGHT VERIFICATION -->
-            <!-- ============================================== -->
-            <section id="view-new-transfer" class="page-container active-page" data-layout-allow-overlap="true">
-              <div class="page-head">
-                <div>
-                  <h2>New Direct Stream Transfer</h2>
-                  <p>Configure download source, pre-flight verification, and zero-disk archive pipeline</p>
-                </div>
-                <div class="head-actions">
-                  <span style="font-size: 11.5px; font-weight: 700; color: #1256c4; background: #e0f2fe; padding: 4px 12px; border-radius: 999px;">Step 1 & 2 of 6</span>
-                </div>
+        <!-- LIGHT STUDIO WORKSPACE -->
+        <div class="workspace">
+          <!-- Top Blue Status Lightbar -->
+          <div class="ps5-lightbar" id="status-lightbar"></div>
+
+          <!-- Topbar -->
+          <div class="workspace-topbar">
+            <span class="workspace-label">
+              <span class="workspace-indicator"></span>
+              Personal workspace <span class="breadcrumb-divider">/</span> <strong id="workspace-page-title">Transfers</strong>
+            </span>
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <span id="step-badge" class="demo-step-badge">
+                <span class="demo-step-dot"></span>
+                <span id="step-badge-text">Step 1 · Direct Console Link</span>
+              </span>
+              <div class="workspace-tools">
+                <button type="button" class="utility-button"><svg><use href="#i-grid"/></svg><span>Compact view</span></button>
+                <button type="button" class="utility-button"><svg><use href="#i-alert"/></svg><span>Quick guide</span></button>
               </div>
+            </div>
+          </div>
 
-              <!-- URL Input & Verification Card -->
-              <div class="setup-card">
-                <div class="modal-input-label-row">
-                  <span class="modal-label">Direct Download URL</span>
-                  <button type="button" id="btn-verify-chip" class="btn-verify-chip">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                    Verify link
+          <!-- Main Content Area -->
+          <main class="main-content" id="main-content">
+            <!-- ============================================== -->
+            <!-- VIEW 1: TRANSFERS PAGE                         -->
+            <!-- ============================================== -->
+            <section id="page-transfers" class="page-view active-page" data-layout-allow-overlap="true">
+              <header class="page-header">
+                <div>
+                  <h1>Transfers</h1>
+                  <p class="page-subtitle">Move files to your console. Keep everything in view.</p>
+                </div>
+                <div class="header-actions">
+                  <button class="button primary new-transfer-btn" id="btn-top-new-transfer">
+                    <svg><use href="#i-plus"/></svg>New transfer
                   </button>
                 </div>
-                <div class="url-input-display">https://cdn.open-archive.org/payloads/Homebrew_Retro_Collection_v2.0.zip</div>
+              </header>
 
-                <!-- Live Verification Result -->
-                <div id="verify-card-box" class="verify-card-box">
-                  <div class="verify-card-head">
-                    <span class="verify-badge-ok">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                      Verified reachable
-                    </span>
-                    <div class="verify-pills-row">
-                      <span class="meta-pill pill-size">42.8 GB</span>
-                      <span class="meta-pill pill-range">Parallel streams supported</span>
-                    </div>
+              <!-- Overview Strip -->
+              <section class="overview-strip" aria-label="Transfer overview" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                <div class="overview-item">
+                  <span class="overview-icon"><svg><use href="#i-ps-storage"/></svg></span>
+                  <span><small>Console</small><strong>192.168.1.188:9090</strong></span>
+                  <svg class="overview-arrow"><use href="#i-chevron-right"/></svg>
+                </div>
+                <div class="overview-item">
+                  <span class="overview-icon"><svg><use href="#i-folder"/></svg></span>
+                  <span><small>Destination</small><strong>/data/homebrew</strong></span>
+                </div>
+                <div class="overview-item">
+                  <span class="overview-icon"><svg><use href="#i-check"/></svg></span>
+                  <span><small>Completed</small><strong>14 transfers</strong></span>
+                </div>
+              </section>
+
+              <!-- State A: Welcome Panel Launchpad -->
+              <div id="transfer-launchpad-wrap" style="display: flex; flex-direction: column; gap: 14px;">
+                <section class="welcome-panel">
+                  <div class="welcome-copy">
+                    <span class="welcome-kicker">GETTING STARTED</span>
+                    <h2>One connection.<br>Everything within reach.</h2>
+                    <p>Connect your console to start sending files over your local network.</p>
+                    <button type="button" class="button welcome-button">Console Linked <svg><use href="#i-chevron-right"/></svg></button>
                   </div>
-                  <div class="verify-card-detail">
-                    <span class="verify-filename-val">Homebrew_Retro_Collection_v2.0.zip</span>
-                    <span style="color: #15803d; font-weight: 600;">Direct stream resolved (HTTP 206 OK)</span>
+                  <div class="connection-illustration" aria-hidden="true">
+                    <div class="connection-endpoint"><svg><use href="#i-folder"/></svg><span>Your files</span></div>
+                    <div class="connection-line"><span></span><svg><use href="#i-transfer"/></svg><span></span></div>
+                    <div class="connection-endpoint endpoint-console"><svg><use href="#i-ps-storage"/></svg><span>PlayStation 5</span></div>
                   </div>
+                  <div class="welcome-footnote"><svg><use href="#i-link"/></svg> One network. A direct connection.</div>
+                </section>
+
+                <div class="source-actions" aria-label="Add a transfer">
+                  <button type="button" class="source-action"><span class="source-icon"><svg><use href="#i-file"/></svg></span><span><strong>Local file</strong><small>Choose a file from this device</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+                  <button type="button" class="source-action"><span class="source-icon"><svg><use href="#i-folder"/></svg></span><span><strong>Folder</strong><small>Transfer a complete directory</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+                  <button type="button" class="source-action" id="btn-launch-url"><span class="source-icon"><svg><use href="#i-link"/></svg></span><span><strong>Download link</strong><small>Add one or more source URLs</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
                 </div>
               </div>
 
-              <!-- 3-Card Strategy Selector -->
-              <div class="setup-card" style="flex: 1;">
-                <div class="strategy-section-title">
-                  <span>Archive Extraction Strategy</span>
-                  <span style="font-size: 11.5px; color: #15803d; font-weight: 600;">Zero Mac/PC Disk Space Required</span>
-                </div>
-
-                <div class="strategy-grid" style="margin-top: 8px;">
-                  <!-- Card 1: PS5 -->
-                  <div class="strategy-card selected" id="card-strat-ps5">
-                    <span class="strategy-pill-tag">RECOMMENDED · 0 GB DISK</span>
-                    <h4>Extract on PS5</h4>
-                    <p>Unpack on your console without using local computer disk space.</p>
-                    <div class="strategy-check-item">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                      Zero bytes on local drive
-                    </div>
-                    <div class="strategy-check-item">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                      Direct socket streaming
-                    </div>
+              <!-- State B: Active Live Transfer Hero Card -->
+              <article class="card live-transfer-card" id="live-panel" style="display: none; opacity: 0;" data-layout-allow-overlap="true">
+                <div class="transfer-card-header">
+                  <div class="transfer-tag-group">
+                    <span class="live-label">Transfer monitor</span>
+                    <span class="status-badge" style="background:#dcfce7; color:#15803d; font-weight:700;">Streaming (Active)</span>
+                    <span class="bottleneck-tag">Optimal path</span>
                   </div>
-
-                  <!-- Card 2: PC -->
-                  <div class="strategy-card" id="card-strat-pc">
-                    <span class="strategy-pill-tag" style="background: #f1f5f9; color: #475569;">LOCAL ENGINE</span>
-                    <h4>Extract on this device</h4>
-                    <p>Unpack on this computer using local RAM staging pipeline.</p>
-                    <div class="strategy-check-item" style="color: #64748b;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                      RAM buffer streaming
-                    </div>
-                  </div>
-
-                  <!-- Card 3: Raw -->
-                  <div class="strategy-card" id="card-strat-raw">
-                    <span class="strategy-pill-tag" style="background: #f1f5f9; color: #475569;">STORAGE ONLY</span>
-                    <h4>Send without extracting</h4>
-                    <p>Transfer raw zip archive directly to console internal storage.</p>
-                    <div class="strategy-check-item" style="color: #64748b;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                      Preserve original archive
-                    </div>
-                  </div>
-                </div>
-
-                <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: 13px; color: #475569;">
-                    Destination: <strong style="color: #0f172a; font-family: 'JetBrains Mono';">/data/homebrew</strong>
-                  </span>
-                  <button type="button" id="btn-submit-transfer" class="btn-primary" style="padding: 10px 24px; font-size: 13.5px;">
-                    Start Direct Stream (0 GB Disk)
+                  <button class="icon-circle-btn" title="Pause or Resume transfer">
+                    <svg><use href="#i-pause"/></svg>
                   </button>
                 </div>
-              </div>
-            </section>
 
-            <!-- ============================================== -->
-            <!-- VIEW 2: TRANSFERS DASHBOARD                    -->
-            <!-- ============================================== -->
-            <section id="view-transfers" class="page-container" data-layout-allow-overlap="true">
-              <div class="page-head">
-                <div>
-                  <h2>Transfers</h2>
-                  <p>Direct Gigabit LAN streaming · zero-copy memory ring buffer</p>
-                </div>
-                <div class="head-actions">
-                  <span style="font-size: 11.5px; font-weight: 700; color: #15803d; background: #dcfce7; padding: 4px 12px; border-radius: 999px;">Step 3 of 6</span>
-                </div>
-              </div>
-
-              <!-- Live Telemetry Card -->
-              <div class="hero-card">
-                <div class="hero-top-row">
-                  <div class="state-tag-group">
-                    <span class="state-badge">Streaming</span>
-                    <span class="bottleneck-pill">Gigabit LAN Saturated</span>
+                <div class="transfer-title-row">
+                  <h2 class="transfer-title" id="active-transfer-name">Homebrew_Retro_Collection_v2.0.zip</h2>
+                  <div class="active-phase-bar">
+                    <span class="active-phase-dot" style="background: #10b981;"></span>
+                    <span class="active-phase-text">Extracting to PS5 storage</span>
                   </div>
-                  <span id="trans-eta" style="font-size: 13px; font-weight: 600; color: #475569;">ETA: 1m 58s</span>
                 </div>
 
-                <div class="hero-title-row">
-                  <h3 class="pkg-filename" id="hero-title">Homebrew_Retro_Collection_v2.0.zip</h3>
-                  <div class="speedometer-num"><span id="speed-counter">114.8</span> MB/s</div>
+                <div class="transfer-progress-meta">
+                  <div class="meta-left">
+                    <span id="progress-bytes-label">3.42 GB / 4.82 GB</span>
+                    <span class="meta-dot">·</span>
+                    <strong class="blue-percent" id="progress-percent-label">71%</strong>
+                  </div>
+                  <div class="meta-right">
+                    <span class="eta-label">ETA 18s remaining</span>
+                    <strong class="live-speed-heading"><span id="speed-num">118.4</span> MB/s</strong>
+                  </div>
                 </div>
 
-                <div class="progress-meta-row">
-                  <span><strong id="bytes-counter">29.1 GB</strong> / 42.8 GB</span>
-                  <strong id="percent-counter" style="color: var(--ps-blue);">68.0%</strong>
+                <div class="progress-bar-track" role="progressbar">
+                  <div class="progress-bar-fill" id="active-progress-fill" style="width: 0%;"></div>
                 </div>
 
-                <div class="progress-track">
-                  <div id="hero-progress-fill" class="progress-fill"></div>
-                </div>
-
-                <!-- 3 Metric Pillars -->
-                <div class="pillars-grid">
-                  <div class="pillar">
-                    <div class="pillar-header">
-                      <span class="dot-blue"></span> To Console
+                <div class="telemetry-pillars">
+                  <div class="pillar-stat">
+                    <div class="pillar-top">
+                      <span class="indicator-dot blue"></span>
+                      <strong class="pillar-num"><span id="speed-console-val">118.4</span> MB/s</strong>
                     </div>
-                    <div class="pillar-value" id="pillar-console">114.8 MB/s</div>
+                    <span class="pillar-label">To console</span>
                   </div>
-                  <div class="pillar">
-                    <div class="pillar-header">
-                      <span class="dot-purple"></span> From Source
+                  <div class="pillar-stat">
+                    <div class="pillar-top">
+                      <span class="indicator-dot purple"></span>
+                      <strong class="pillar-num">124.6 MB/s</strong>
                     </div>
-                    <div class="pillar-value" id="pillar-source">119.2 MB/s</div>
+                    <span class="pillar-label">From source</span>
                   </div>
-                  <div class="pillar">
-                    <div class="pillar-header">
-                      <span class="dot-green"></span> RAM Buffer
+                  <div class="pillar-stat">
+                    <div class="pillar-top">
+                      <span class="indicator-dot green"></span>
+                      <strong class="pillar-num">342 / 512 MiB</strong>
                     </div>
-                    <div class="pillar-value" id="pillar-ram">48 / 64 MiB (0 GB Disk)</div>
+                    <span class="pillar-label">Memory buffer (RAM)</span>
                   </div>
                 </div>
 
-                <!-- Real-time SVG Waveform -->
-                <div class="telemetry-chart-box">
-                  <svg class="chart-svg" viewBox="0 0 600 70" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="chartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stop-color="#1668e3" stop-opacity="0.25"/>
-                        <stop offset="100%" stop-color="#1668e3" stop-opacity="0.0"/>
-                      </linearGradient>
-                    </defs>
-                    <path id="chart-area" d="M0,70 L0,35 Q60,30 120,24 T240,16 T360,18 T480,12 T600,10 L600,70 Z" fill="url(#chartGrad)"/>
-                    <path id="chart-line-source" d="M0,38 Q60,32 120,26 T240,18 T360,20 T480,14 T600,11" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4 3"/>
-                    <path id="chart-line-console" d="M0,35 Q60,30 120,24 T240,16 T360,18 T480,12 T600,10" fill="none" stroke="#1256c4" stroke-width="2.5" stroke-linecap="round"/>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- Queue Card -->
-              <div class="queue-card">
-                <div class="queue-header-row">
-                  <div class="queue-title">
-                    <span>Queue</span>
-                    <span class="queue-badge-count">3 items</span>
+                <div class="telemetry-graph-wrapper">
+                  <div class="graph-y-axis">
+                    <span>150 MB/s</span>
+                    <span>75 MB/s</span>
+                    <span>0</span>
                   </div>
-                  <span style="font-size: 12px; color: #475569;">Destination: /data/homebrew</span>
-                </div>
-
-                <table class="queue-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 45%;">Name</th>
-                      <th>Size</th>
-                      <th>Status</th>
-                      <th style="text-align: right;">Speed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="row-active">
-                      <td><strong>Homebrew_Retro_Collection_v2.0.zip</strong></td>
-                      <td>42.8 GB</td>
-                      <td><span class="status-pill pill-active">Streaming</span></td>
-                      <td style="text-align: right; font-family: 'JetBrains Mono'; font-weight: 600; color: var(--ps-blue);">114.8 MB/s</td>
-                    </tr>
-                    <tr>
-                      <td>Linux_Kernel_Bootloader_Payload.pkg</td>
-                      <td>18.2 GB</td>
-                      <td><span class="status-pill pill-queued">Queued</span></td>
-                      <td style="text-align: right; color: var(--muted); font-family: 'JetBrains Mono';">—</td>
-                    </tr>
-                    <tr>
-                      <td>Community_Media_Suite_v3.2.pkg</td>
-                      <td>6.4 GB</td>
-                      <td><span class="status-pill pill-queued">Queued</span></td>
-                      <td style="text-align: right; color: var(--muted); font-family: 'JetBrains Mono';">—</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <!-- ============================================== -->
-            <!-- VIEW 3: SPEED DIAGNOSTICS & BENCHMARK          -->
-            <!-- ============================================== -->
-            <section id="view-diagnostics" class="page-container" data-layout-allow-overlap="true">
-              <div class="page-head">
-                <div>
-                  <h2>System Diagnostics & Health</h2>
-                  <p>Automated 4-point connectivity check and socket latency benchmark</p>
-                </div>
-                <div class="head-actions">
-                  <span style="font-size: 11.5px; font-weight: 700; color: #1256c4; background: #e0f2fe; padding: 4px 12px; border-radius: 999px;">Step 4 of 6</span>
-                </div>
-              </div>
-
-              <!-- 4 Automated Health Checks -->
-              <div class="diag-health-grid">
-                <div class="health-check-card">
-                  <div class="health-icon-box">✓</div>
-                  <div class="health-meta">
-                    <h4>Local Gateway</h4>
-                    <p>192.168.1.1 (0.4ms)</p>
-                  </div>
-                </div>
-                <div class="health-check-card">
-                  <div class="health-icon-box">✓</div>
-                  <div class="health-meta">
-                    <h4>PS5 Reachable</h4>
-                    <p>Port 9090 Ready</p>
-                  </div>
-                </div>
-                <div class="health-check-card">
-                  <div class="health-icon-box">✓</div>
-                  <div class="health-meta">
-                    <h4>Homebrew Path</h4>
-                    <p>/data/homebrew Writable</p>
-                  </div>
-                </div>
-                <div class="health-check-card">
-                  <div class="health-icon-box">✓</div>
-                  <div class="health-meta">
-                    <h4>Storage Headroom</h4>
-                    <p>384 GB Available</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="diag-grid">
-                <!-- Internet Source Benchmark -->
-                <div class="diag-card">
-                  <h3>Direct Stream Throughput Benchmark</h3>
-                  <p>Analyze HTTP multi-range socket performance and TCP window</p>
-
-                  <div class="diag-rate-hero">
-                    <div>
-                      <div class="diag-rate-val" id="diag-rate-counter">116.4 MB/s</div>
-                      <span style="font-size: 12px; color: var(--muted); font-weight: 500;">Sustained Download Rate</span>
-                    </div>
-                    <button id="btn-run-benchmark" class="btn-primary" style="padding: 7px 16px; font-size: 12px;">
-                      Run Quick Scan
-                    </button>
-                  </div>
-
-                  <div class="diag-mini-chart" style="height: 48px;">
-                    <svg viewBox="0 0 360 48" style="width: 100%; height: 100%;">
-                      <path d="M0,45 Q40,42 80,30 T160,20 T240,16 T320,12 L360,10" fill="none" stroke="#1256c4" stroke-width="2.2" stroke-linecap="round"/>
-                      <circle cx="80" cy="30" r="3.5" fill="#1256c4"/>
-                      <circle cx="160" cy="20" r="3.5" fill="#1256c4"/>
-                      <circle cx="240" cy="16" r="3.5" fill="#1256c4"/>
-                      <circle cx="320" cy="12" r="3.5" fill="#1256c4"/>
+                  <div class="graph-canvas-box">
+                    <svg viewBox="0 0 640 84" preserveAspectRatio="none">
+                      <path class="chart-grid-line" d="M0 14 H640" stroke="#e2e8f0" stroke-width="1"/>
+                      <path class="chart-grid-line" d="M0 48 H640" stroke="#e2e8f0" stroke-width="1"/>
+                      <path class="chart-grid-line" d="M0 76 H640" stroke="#e2e8f0" stroke-width="1"/>
+                      <defs>
+                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stop-color="#1668e3" stop-opacity="0.25"/>
+                          <stop offset="100%" stop-color="#1668e3" stop-opacity="0.0"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M0 78 Q 80 50, 160 32 T 320 22 T 480 20 T 640 18 L 640 84 L 0 84 Z" fill="url(#chartGrad)"/>
+                      <path id="telemetry-curve" d="M0 78 Q 80 50, 160 32 T 320 22 T 480 20 T 640 18" fill="none" stroke="#1668e3" stroke-width="2.5" stroke-linecap="round"/>
+                      <path d="M0 80 Q 80 44, 160 26 T 320 18 T 480 15 T 640 14" fill="none" stroke="#8b5cf6" stroke-width="1.8" stroke-dasharray="4 4"/>
                     </svg>
                   </div>
-                </div>
-
-                <!-- LAN Socket Path -->
-                <div class="diag-card">
-                  <h3>PS5 Gigabit LAN Socket Path</h3>
-                  <p>Direct Ethernet pipeline to internal storage partition</p>
-
-                  <div class="diag-rate-hero">
-                    <div>
-                      <div class="diag-rate-val">114.8 MB/s</div>
-                      <span style="font-size: 12px; color: var(--muted); font-weight: 500;">Console Ingest Speed</span>
-                    </div>
-                    <span style="background: #dcfce7; color: #15803d; font-weight: 700; font-size: 11px; padding: 4px 10px; border-radius: 999px;">
-                      Gigabit Verified
-                    </span>
-                  </div>
-
-                  <div class="diag-mini-chart" style="height: 48px;">
-                    <svg viewBox="0 0 360 48" style="width: 100%; height: 100%;">
-                      <path d="M0,45 Q50,38 100,28 T200,18 T300,14 L360,12" fill="none" stroke="#047857" stroke-width="2.2" stroke-linecap="round"/>
-                      <circle cx="100" cy="28" r="3.5" fill="#047857"/>
-                      <circle cx="200" cy="18" r="3.5" fill="#047857"/>
-                      <circle cx="300" cy="14" r="3.5" fill="#047857"/>
-                    </svg>
+                  <div class="graph-legend-col">
+                    <div class="legend-item"><span class="indicator-dot blue"></span> To console</div>
+                    <div class="legend-item"><span class="indicator-dot purple"></span> From source</div>
                   </div>
                 </div>
-              </div>
+              </article>
 
-              <!-- Recommendation Card -->
-              <div id="rec-banner" class="rec-banner">
-                <div class="rec-content">
-                  <h4>Optimal Transfer Configuration Detected</h4>
-                  <p>16 parallel streams · 8 MiB slice chunks · 64 MiB RAM ring buffer maximizes your speed without socket timeouts.</p>
+              <!-- Transfer Queue Card -->
+              <article class="card queue-card" id="queue-panel" style="display: none; opacity: 0;" data-layout-allow-overlap="true">
+                <div class="queue-card-header">
+                  <div class="queue-title-group">
+                    <h2>Transfer queue</h2>
+                    <span class="items-count-badge">3 items</span>
+                    <p class="section-desc">Direct queue streaming · one upload stream at a time</p>
+                  </div>
+                  <div class="queue-action-buttons">
+                    <button class="button primary small"><svg><use href="#i-pause"/></svg>Pause queue</button>
+                    <button class="button outline small"><svg><use href="#i-file"/></svg>Add files</button>
+                    <button class="button outline small"><svg><use href="#i-link"/></svg>Add link</button>
+                  </div>
                 </div>
-                <button id="btn-apply-optimal" class="rec-btn">
-                  Apply Recommended Settings
-                </button>
-              </div>
+
+                <div class="table-responsive" data-layout-allow-overflow="true">
+                  <table class="studio-table queue-table">
+                    <thead>
+                      <tr>
+                        <th class="col-num">#</th>
+                        <th>Name</th>
+                        <th>Size</th>
+                        <th>Progress</th>
+                        <th>Status</th>
+                        <th class="right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="active-row" style="background: #f0f7ff;">
+                        <td><strong>1</strong></td>
+                        <td><strong>Homebrew_Retro_Collection_v2.0.zip</strong></td>
+                        <td>4.82 GB</td>
+                        <td><strong style="color: #1668e3;">71%</strong></td>
+                        <td><span class="status-badge" style="background:#dcfce7; color:#15803d; font-weight:700;">Streaming</span></td>
+                        <td class="right" style="color: #1668e3; font-weight: 600;">Active</td>
+                      </tr>
+                      <tr>
+                        <td>2</td>
+                        <td>PS5_Media_Center_v1.4.pkg</td>
+                        <td>1.15 GB</td>
+                        <td>—</td>
+                        <td><span class="status-badge" style="background:#f1f5f9; color:#475569;">Pending</span></td>
+                        <td class="right" style="color: #64748b;">Queued</td>
+                      </tr>
+                      <tr>
+                        <td>3</td>
+                        <td>Retro_Engine_Payload_v3.elf</td>
+                        <td>42 MB</td>
+                        <td>—</td>
+                        <td><span class="status-badge" style="background:#f1f5f9; color:#475569;">Pending</span></td>
+                        <td class="right" style="color: #64748b;">Queued</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
             </section>
 
             <!-- ============================================== -->
-            <!-- VIEW 4: CONSOLE FILES EXPLORER                 -->
+            <!-- VIEW 2: CONSOLE FILES PAGE                     -->
             <!-- ============================================== -->
-            <section id="view-files" class="page-container" data-layout-allow-overlap="true">
-              <div class="page-head">
-                <div>
-                  <h2>Console Files</h2>
-                  <p>Browse, inspect and verify packages on PS5 internal storage</p>
+            <section id="page-files" class="page-view" hidden data-layout-allow-overlap="true">
+              <header class="page-header" data-layout-allow-overlap="true">
+                <div data-layout-allow-overlap="true">
+                  <h1 data-layout-allow-overlap="true">Console files</h1>
+                  <p class="page-subtitle" data-layout-allow-overlap="true">Browse your PS5 storage. This view is read-only while transfers are paused.</p>
                 </div>
-                <div class="head-actions">
-                  <span style="font-size: 11.5px; font-weight: 700; color: #1256c4; background: #e0f2fe; padding: 4px 12px; border-radius: 999px;">Step 5 of 6</span>
-                  <button id="btn-refresh-files" class="btn-outline">
-                    <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24"><path d="M4 4v5h.6M20 20v-5h-.6M4.6 9A8 8 0 0 1 19 6.3M19.4 15A8 8 0 0 1 5 17.7"/></svg>
-                    Refresh
+                <div class="storage-meter-block" data-layout-allow-overlap="true">
+                  <div class="storage-text-row">
+                    <strong id="storage-free-text">412 GB free</strong>
+                    <span>of <span>825 GB</span></span>
+                  </div>
+                  <div class="storage-bar-track">
+                    <div class="storage-bar-fill" style="width: 50%;"></div>
+                  </div>
+                </div>
+              </header>
+
+              <article class="card files-browser-card" data-layout-allow-overlap="true">
+                <div class="files-toolbar" data-layout-allow-overlap="true">
+                  <div class="files-nav-buttons" data-layout-allow-overlap="true">
+                    <button type="button" class="icon-btn small"><svg><use href="#i-chevron-left"/></svg></button>
+                    <button type="button" class="icon-btn small"><svg><use href="#i-chevron-right"/></svg></button>
+                    <button type="button" class="icon-btn small" data-layout-allow-overlap="true" style="font-weight:700;font-size:12px;">/</button>
+                  </div>
+
+                  <form class="files-breadcrumb-form" onsubmit="return false;" data-layout-allow-overlap="true">
+                    <div class="breadcrumb-pill">
+                      <svg class="drive-icon"><use href="#i-folder"/></svg>
+                      <input id="browse-path" value="/data/homebrew" readonly spellcheck="false">
+                    </div>
+                  </form>
+
+                  <div class="files-search-box">
+                    <svg><use href="#i-search"/></svg>
+                    <input type="search" placeholder="Search console files..." readonly>
+                  </div>
+
+                  <span class="browse-status-msg" style="font-size:11.5px;color:var(--muted);white-space:nowrap;">Active Socket</span>
+
+                  <button type="button" class="icon-btn small" id="files-refresh-btn" title="Refresh files list">
+                    <svg><use href="#i-refresh"/></svg>
                   </button>
                 </div>
-              </div>
 
-              <div class="files-card">
-                <div class="files-path-bar">
-                  <span style="font-weight: 500; color: #475569;">PS5 Path:</span>
-                  <span class="path-badge">data</span>
-                  <span style="color: #94a3b8;">/</span>
-                  <span class="path-badge active">homebrew</span>
-                  <span class="files-meta-count">4 packages · 71.2 GB allocated</span>
+                <div class="table-responsive" data-layout-allow-overlap="true">
+                  <table class="studio-table files-table" data-layout-allow-overlap="true">
+                    <thead data-layout-allow-overlap="true">
+                      <tr data-layout-allow-overlap="true">
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th data-layout-allow-overlap="true">Size</th>
+                        <th>Modified</th>
+                        <th class="right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody data-layout-allow-overlap="true">
+                      <tr data-layout-allow-overlap="true">
+                        <td data-layout-allow-overlap="true"><strong data-layout-allow-overlap="true">Homebrew_Retro_Collection_v2.0/</strong></td>
+                        <td>Directory</td>
+                        <td data-layout-allow-overlap="true">4.82 GB</td>
+                        <td>Just now</td>
+                        <td class="right"><span class="status-badge" style="background:#dcfce7; color:#15803d; font-weight:700;">Extracted</span></td>
+                      </tr>
+                      <tr data-layout-allow-overlap="true">
+                        <td data-layout-allow-overlap="true"><strong data-layout-allow-overlap="true">PS5_Media_Center_v1.4.pkg</strong></td>
+                        <td>Package</td>
+                        <td data-layout-allow-overlap="true">1.15 GB</td>
+                        <td>Yesterday</td>
+                        <td class="right"><span class="status-badge" style="background:#eff6ff; color:#1d4ed8;">Ready</span></td>
+                      </tr>
+                      <tr>
+                        <td><strong>Retro_Engine_Payload_v3.elf</strong></td>
+                        <td>Payload</td>
+                        <td>42 MB</td>
+                        <td>2 days ago</td>
+                        <td class="right"><span class="status-badge" style="background:#eff6ff; color:#1d4ed8;">Ready</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-
-                <table class="queue-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 42%;">Name</th>
-                      <th>Size</th>
-                      <th>Modified</th>
-                      <th>Integrity Status</th>
-                      <th style="text-align: right;">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="row-active">
-                      <td><strong>Homebrew_Retro_Collection_v2.0.zip</strong></td>
-                      <td>42.8 GB</td>
-                      <td>Today, 14:38</td>
-                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
-                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Linux_Kernel_Bootloader_Payload.pkg</strong></td>
-                      <td>18.2 GB</td>
-                      <td>Yesterday</td>
-                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
-                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Community_Media_Suite_v3.2.pkg</strong></td>
-                      <td>6.4 GB</td>
-                      <td>2 days ago</td>
-                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
-                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
-                    </tr>
-                    <tr>
-                      <td><strong>FreeBSD_Debug_Tools_v1.4.pkg</strong></td>
-                      <td>3.8 GB</td>
-                      <td>3 days ago</td>
-                      <td><span class="status-pill" style="background:#dcfce7; color:#15803d; font-weight: 700;">✓ Verified 100%</span></td>
-                      <td style="text-align: right; color: var(--ps-blue); font-weight: 600;">Ready</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              </article>
             </section>
 
             <!-- ============================================== -->
-            <!-- VIEW 5: TRANSFER ENGINE SETTINGS               -->
+            <!-- VIEW 3: DIAGNOSTICS PAGE                       -->
             <!-- ============================================== -->
-            <section id="view-settings" class="page-container" data-layout-allow-overlap="true">
-              <div class="page-head">
-                <div>
-                  <h2>Transfer Engine Settings</h2>
-                  <p>Configure parallel thread workers, ring buffer capacity, and destination</p>
+            <section id="page-diagnostics" class="page-view" hidden data-layout-allow-overlap="true">
+              <header class="page-header" data-layout-allow-overlap="true">
+                <div data-layout-allow-overlap="true">
+                  <h1 data-layout-allow-overlap="true">Diagnostics</h1>
+                  <p class="page-subtitle" data-layout-allow-overlap="true">Find your fastest connection. Measure and optimize your download performance.</p>
                 </div>
-                <div class="head-actions">
-                  <span style="font-size: 11.5px; font-weight: 700; color: #1256c4; background: #e0f2fe; padding: 4px 12px; border-radius: 999px;">Step 6 of 6</span>
-                </div>
+              </header>
+
+              <div class="diagnostics-dual-grid" data-layout-allow-overlap="true">
+                <article class="card diag-card" data-layout-allow-overlap="true">
+                  <h2>Internet source benchmark</h2>
+                  <p class="card-caption" data-layout-allow-overlap="true">Test your download link with different stream and buffer presets.</p>
+                  
+                  <div class="input-with-icon">
+                    <svg class="field-icon"><use href="#i-link"/></svg>
+                    <input type="url" value="https://archive.pkg-repo.org/test/100MB.bin" readonly>
+                  </div>
+
+                  <div class="benchmark-controls-row">
+                    <div class="mode-toggle-group" role="radiogroup">
+                      <button type="button" class="mode-toggle-btn selected" data-layout-allow-overlap="true">
+                        <span class="mode-radio-dot" aria-hidden="true"></span>
+                        <span data-layout-allow-overlap="true">Quick scan (~25s)</span>
+                      </button>
+                      <button type="button" class="mode-toggle-btn">
+                        <span class="mode-radio-dot" aria-hidden="true"></span>
+                        <span>Full test (~60s)</span>
+                      </button>
+                    </div>
+                    <button class="button primary small" id="btn-diag-scan" data-layout-allow-overlap="true">Run Quick Scan</button>
+                  </div>
+
+                  <div class="kpi-display-block" data-layout-allow-overlap="true">
+                    <strong class="kpi-rate" id="diag-rate-val" data-layout-allow-overlap="true">118.4 MB/s</strong>
+                    <div class="kpi-meta-row">
+                      <span class="kpi-label">Sustained download rate</span>
+                      <span class="benchmark-mode-pill">Multi-stream Gigabit Saturated</span>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="card diag-card" data-layout-allow-overlap="true">
+                  <h2>Device-to-PS5 local path</h2>
+                  <p class="card-caption" data-layout-allow-overlap="true">Test the speed from the device running this app to the console.</p>
+
+                  <div class="kpi-display-block" style="margin-top: 14px;" data-layout-allow-overlap="true">
+                    <strong class="kpi-rate" data-layout-allow-overlap="true">124.6 MB/s</strong>
+                    <span class="kpi-label">Sustained upload rate to internal NVMe</span>
+                  </div>
+                </article>
               </div>
 
-              <!-- Connection Profile Card -->
-              <div class="settings-card" style="padding: 18px 24px;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                  <div>
-                    <h3 style="font-size: 14.5px; font-weight: 700;">Console Connection Profile</h3>
-                    <p style="font-size: 12px; color: #475569; margin-top: 2px;">Target IP: 192.168.1.188:9090 · Destination: /data/homebrew</p>
+              <article class="card recommendation-card">
+                <div class="rec-main-row">
+                  <div class="rec-left">
+                    <div class="rec-check-icon"><svg><use href="#i-check"/></svg></div>
+                    <div class="rec-copy">
+                      <h3>Gigabit Ethernet Baseline Recommended</h3>
+                      <p>Connect this device and PS5 over Gigabit Ethernet or 5GHz Wi-Fi for maximum sustained transfer speed.</p>
+                    </div>
                   </div>
-                  <span style="background: #dcfce7; color: #15803d; font-weight: 700; font-size: 11.5px; padding: 4px 12px; border-radius: 999px;">
-                    ● Active Gigabit Socket Link (0.4ms)
-                  </span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <div class="preset-bar-row">
-                  <div>
-                    <h3 style="font-size: 15px; font-weight: 700;">Performance Presets</h3>
-                    <p style="font-size: 12.5px; color: var(--muted);">One-click hardware and bandwidth profiles</p>
-                  </div>
-                  <div class="preset-btns-group">
-                    <button class="engine-preset-btn" id="preset-cons">Conservative</button>
-                    <button class="engine-preset-btn" id="preset-bal">Balanced</button>
-                    <button class="engine-preset-btn active-preset" id="preset-turbo">Turbo (16 St)</button>
-                    <button class="engine-preset-btn" id="preset-max">Max Saturation (32 St)</button>
+                  <div class="rec-preset-block">
+                    <span class="rec-preset-label">Optimal preset</span>
+                    <div class="preset-metrics">
+                      <div>
+                        <strong>16 streams</strong>
+                        <small>Parallel workers</small>
+                      </div>
+                      <div>
+                        <strong>256 MiB</strong>
+                        <small>Memory buffer (RAM)</small>
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                <div class="settings-fields-grid">
-                  <div class="field-block">
-                    <label>Parallel Streams</label>
-                    <div class="field-select" id="select-streams">16 streams (Fast Turbo / Recommended)</div>
-                    <span class="field-hint">Simultaneous HTTP range socket connections</span>
-                  </div>
-                  <div class="field-block">
-                    <label>Chunk Slice Size</label>
-                    <div class="field-select" id="select-chunk">8 MiB (Balanced / Low Overhead)</div>
-                    <span class="field-hint">Segment window per concurrent fetch</span>
-                  </div>
-                  <div class="field-block">
-                    <label>RAM Ring Buffer</label>
-                    <div class="field-select" id="select-buffer">64 MiB (Turbo Zero-Disk Tier)</div>
-                    <span class="field-hint">Pure RAM cache for seamless console streaming</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Storage Info Card -->
-              <div class="storage-bar-card" data-layout-allow-overlap="true">
-                <div class="storage-meta-row">
-                  <span style="font-weight: 600; color: var(--ink);">PS5 Internal Storage (/data/homebrew)</span>
-                  <span style="font-family: 'JetBrains Mono'; font-weight: 600; color: var(--ps-blue);">441 GB / 825 GB (384 GB Free)</span>
-                </div>
-                <div class="storage-track">
-                  <div class="storage-fill"></div>
-                </div>
-              </div>
+              </article>
             </section>
           </main>
         </div>
       </div>
 
-      <!-- Virtual Mouse Cursor -->
-      <div id="cursor" class="virtual-cursor clip" data-start="0" data-duration="26.8" data-track-index="1">
-        <svg viewBox="0 0 24 24" style="width: 24px; height: 24px;">
-          <polygon points="0,0 0,20 5.5,15.5 9,23.5 13,22 9.5,14 16,14" fill="#0f172a" stroke="#ffffff" stroke-width="1.6"/>
-        </svg>
-        <div id="click-ring" class="cursor-click-ring"></div>
+      <!-- ============================================== -->
+      <!-- AUTHENTIC STUDIO MODAL: NEW TRANSFER           -->
+      <!-- ============================================== -->
+      <div id="modal-layer" data-layout-allow-overlap="true">
+        <div id="modal-backdrop" data-layout-allow-overlap="true"></div>
+        <div id="add-modal" class="studio-modal" data-layout-allow-overlap="true" data-layout-allow-overflow="true">
+          <div class="modal-header">
+            <div>
+              <h2>New transfer</h2>
+              <p class="modal-subtitle">Add a file, folder or download link to your transfer queue.</p>
+            </div>
+            <button type="button" class="icon-circle-btn" id="modal-close-btn" aria-label="Close">×</button>
+          </div>
+
+          <div class="modal-step-label">Source</div>
+          <div class="segmented-pill-switcher" role="group">
+            <button type="button" class="selected" id="pill-link">Link</button>
+            <button type="button" id="pill-file">File</button>
+            <button type="button" id="pill-folder">Folder</button>
+          </div>
+
+          <div class="modal-field-block">
+            <div class="field-label-row">
+              <label for="modal-url-input">Direct download URL</label>
+              <button type="button" id="btn-verify-links" class="verify-action-btn">
+                <svg><use href="#i-check"/></svg> Verify link
+              </button>
+            </div>
+            <div class="input-with-icon">
+              <svg class="field-icon"><use href="#i-link"/></svg>
+              <textarea id="modal-url-input" rows="2" placeholder="Paste a download link..." spellcheck="false"></textarea>
+            </div>
+
+            <!-- Verification Status Box -->
+            <div id="url-verification-box" class="verification-status-box" style="display: none; opacity: 0;">
+              <div class="verify-card verify-success">
+                <div class="verify-head">
+                  <span class="verify-badge success">
+                    <svg><use href="#i-check"/></svg> Verified reachable
+                  </span>
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #475569;">archive.pkg-repo.org</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; padding-top: 6px; border-top: 1px solid #dcfce7;">
+                  <div>
+                    <span style="font-size: 10px; color: #64748b; display: block;">Filename</span>
+                    <strong style="font-size: 11.5px; color: #0f172a;">Homebrew_Retro_Collection_v2.0.zip</strong>
+                  </div>
+                  <div>
+                    <span style="font-size: 10px; color: #64748b; display: block;">File size</span>
+                    <strong style="font-size: 11.5px; color: #0f172a;">4.82 GB</strong>
+                  </div>
+                  <div>
+                    <span style="font-size: 10px; color: #64748b; display: block;">Range resume</span>
+                    <strong style="font-size: 11.5px; color: #15803d;">Multi-stream OK</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Destination on PS5 Field -->
+          <div class="modal-field-block">
+            <div class="field-label-row">
+              <label>Destination</label>
+              <span class="dest-recommended-hint">Homebrew (/data/homebrew)</span>
+            </div>
+            <div class="dest-presets-row" role="group">
+              <button type="button" class="dest-preset-btn selected">Homebrew</button>
+              <button type="button" class="dest-preset-btn">ShadowMount</button>
+              <button type="button" class="dest-preset-btn">Packages (/data/pkg)</button>
+              <button type="button" class="dest-preset-btn">Custom</button>
+            </div>
+            <div class="input-with-icon">
+              <svg class="field-icon"><use href="#i-folder"/></svg>
+              <input value="/data/homebrew" readonly spellcheck="false">
+            </div>
+          </div>
+
+          <!-- Archive Extraction Strategy Selector -->
+          <div id="archive-mode-block" class="modal-feature-block" data-layout-allow-overflow="true" data-layout-allow-overlap="true">
+            <div class="feature-block-header">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span class="feature-block-title">
+                  <svg class="feature-title-icon"><use href="#i-archive-crate"/></svg>
+                  Archive handling
+                </span>
+                <span class="meta-pill pill-archive">ZIP ARCHIVE</span>
+              </div>
+              <span class="feature-block-sub">Choose where to unpack your archive, or send it as-is.</span>
+            </div>
+
+            <div class="strategy-selector-grid" role="radiogroup">
+              <div class="strategy-card card-ps5 selected" id="strat-ps5" data-layout-allow-overflow="true" data-layout-allow-overlap="true">
+                <div class="strategy-card-top">
+                  <div class="strategy-tag-row">
+                    <span class="meta-pill pill-ps5-extract">RECOMMENDED</span>
+                    <span class="meta-pill pill-verified">NO LOCAL DISK</span>
+                  </div>
+                  <span class="strategy-radio-dot"></span>
+                </div>
+                <div class="strategy-card-title">Extract on PS5</div>
+                <p class="strategy-desc">Streams & extracts directly on console. 0 GB Mac disk space used.</p>
+              </div>
+
+              <div class="strategy-card" id="strat-local" data-layout-allow-overflow="true" data-layout-allow-overlap="true">
+                <div class="strategy-card-top">
+                  <div class="strategy-tag-row">
+                    <span class="meta-pill pill-archive">LOCAL</span>
+                  </div>
+                  <span class="strategy-radio-dot"></span>
+                </div>
+                <div class="strategy-card-title">Extract on this device</div>
+                <p class="strategy-desc">Unpack locally before upload.</p>
+              </div>
+
+              <div class="strategy-card" id="strat-raw" data-layout-allow-occlusion="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true">
+                <div class="strategy-card-top">
+                  <div class="strategy-tag-row">
+                    <span class="meta-pill pill-disk">RAW</span>
+                  </div>
+                  <span class="strategy-radio-dot"></span>
+                </div>
+                <div class="strategy-card-title">Send without extracting</div>
+                <p class="strategy-desc">Send raw compressed file as-is.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer" style="margin-top: 6px; display: flex; justify-content: flex-end; gap: 10px;" data-layout-allow-overflow="true" data-layout-allow-overlap="true">
+            <button type="button" class="button outline" data-layout-allow-overflow="true">Cancel</button>
+            <button type="button" class="button primary" id="btn-add-queue" data-layout-allow-overflow="true">Add to queue</button>
+          </div>
+        </div>
       </div>
 
-      <!-- Closing Brand Outro -->
-      <div id="brand-outro" class="brand-outro clip" data-start="26.8" data-duration="3.2" data-track-index="2" data-layout-allow-overlap="true">
-        <svg viewBox="0 0 24 32" class="outro-ps5-icon">
-          <path d="M7 2c1.2 0 2.4 1 2.8 3.5l1.6 19c.2 2.2 1.4 3.5 3.6 3.5s3.4-1.3 3.6-3.5l1.6-19c.4-2.5 1.6-3.5 2.8-3.5" fill="none" stroke="#e8ecf4" stroke-width="2.2" stroke-linecap="round"/>
-          <rect x="9.5" y="5" width="5" height="23" rx="1.5" fill="#090b0e"/>
-          <line x1="12" y1="5" x2="12" y2="25" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round"/>
+      <!-- Virtual Mouse Cursor -->
+      <div id="cursor">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M4 3l14 8-6.5 2-2 6.5L4 3z" fill="#0f172a" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
         </svg>
-        <h2 class="outro-title">DIRECT STREAM FOR PLAYSTATION 5</h2>
-        <p class="outro-sub">Direct Gigabit LAN streaming, on-the-fly archive extraction, zero local disk wear, and precision telemetry.</p>
-        <div class="outro-badges">
-          <span class="outro-pill">114+ MB/s Gigabit Speed</span>
-          <span class="outro-pill">Zero PC Disk Required</span>
-          <span class="outro-pill">Interface 3.2 Showcase</span>
+        <div id="click-ring"></div>
+      </div>
+
+      <!-- Brand Outro -->
+      <div id="brand-outro">
+        <div class="outro-mark">
+          <svg viewBox="0 0 24 24" fill="none"><use href="#i-transfer"/></svg>
         </div>
-        <div class="outro-url">github.com/ChillQuant/direct-stream-ps5</div>
-        <span class="outro-release-badge">v2.9.0 Production Release</span>
+        <h1 class="outro-title">Direct Stream for PlayStation 5</h1>
+        <p class="outro-sub">
+          High-performance, zero-local-disk network streaming directly to PS5 internal storage.<br>
+          Open-source precision engineering for homebrew communities.
+        </p>
+        <div class="outro-badge-row">
+          <span class="outro-pill pill-blue">GitHub · ChillQuant/direct-stream-ps5</span>
+          <span class="outro-pill">Zero Host Disk Space</span>
+          <span class="outro-pill">16 Parallel Streams</span>
+          <span class="outro-pill">Release 2.9</span>
+        </div>
       </div>
     </div>
 
-    <!-- GSAP Master Animation Script (30 Seconds) -->
+    <!-- Master GSAP 30-Second Timeline -->
     <script>
-      const tl = gsap.timeline({ paused: true });
+      const tl = gsap.timeline({ defaults: { ease: "power2.out" } });
+
+      // Cursor initial state
+      gsap.set("#cursor", { x: 500, y: 350, opacity: 0 });
+      gsap.set("#click-ring", { scale: 0.3 });
+      gsap.set("#page-files", { display: "none" });
+      gsap.set("#page-diagnostics", { display: "none" });
 
       // =======================================================
-      // SCENE 1: APP ENTRANCE & PRE-FLIGHT VERIFY (0.0s - 4.2s)
+      // SCENE 1: APP OVERVIEW & CONSOLE STATUS (0.0s - 4.2s)
       // =======================================================
-      // Window enters smoothly
-      tl.fromTo(
-        "#app-window",
-        { opacity: 0, scale: 0.95, y: 30 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "power2.out" },
-        0
-      );
+      tl.to("#cursor", { opacity: 1, duration: 0.5 }, 0.4);
 
-      // Lightbar pulse
-      tl.fromTo(
-        "#ps5-lightbar",
-        { opacity: 0.3, filter: "drop-shadow(0 0 2px #1668e3)" },
-        { opacity: 1, filter: "drop-shadow(0 0 12px #38bdf8)", duration: 1.0, ease: "power2.inOut" },
-        0.4
-      );
+      // Cursor glides towards the top "New transfer" button
+      tl.to("#cursor", { x: 1540, y: 122, duration: 1.8, ease: "power2.inOut" }, 1.2);
 
-      // Cursor enters and moves to "Verify link" button
-      tl.fromTo(
-        "#cursor",
-        { x: 1350, y: 720, opacity: 0 },
-        { x: 1540, y: 155, opacity: 1, duration: 1.0, ease: "power2.out" },
-        0.6
-      );
+      // Hover on "New transfer"
+      tl.to("#btn-top-new-transfer", { scale: 1.04, duration: 0.2 }, 3.0);
+
+      // Click "New transfer"
+      tl.to("#cursor", { scale: 0.85, duration: 0.12 }, 3.5);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.2 }, 3.5);
+      tl.to("#btn-top-new-transfer", { scale: 0.96, duration: 0.12 }, 3.5);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15 }, 3.65);
+      tl.to("#btn-top-new-transfer", { scale: 1.0, duration: 0.15 }, 3.65);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 3.75);
+
+      // =======================================================
+      // SCENE 2: NEW TRANSFER MODAL & VERIFY LINK (4.2s - 10.5s)
+      // =======================================================
+      // Open modal
+      tl.set("#main-content", { display: "none" }, 3.8);
+      tl.set("#page-transfers", { display: "none" }, 3.8);
+      tl.set("#modal-layer", { display: "flex", opacity: 0 }, 3.8);
+      tl.to("#modal-layer", { opacity: 1, duration: 0.35 }, 3.8);
+
+      // Update Step Badge
+      tl.call(() => {
+        document.getElementById("step-badge-text").innerText = "Step 2 · Direct Download URL & Instant Verification";
+      }, null, 4.0);
+
+      // Cursor moves to URL textarea
+      tl.to("#cursor", { x: 960, y: 260, duration: 0.9, ease: "power2.inOut" }, 4.2);
+
+      // Click URL textarea
+      tl.to("#cursor", { scale: 0.85, duration: 0.1 }, 5.1);
+      tl.to("#cursor", { scale: 1.0, duration: 0.1 }, 5.2);
+
+      // Type URL into textarea
+      const targetUrl = "https://archive.pkg-repo.org/homebrew/Homebrew_Retro_Collection_v2.0.zip";
+      tl.to("#modal-url-input", {
+        duration: 1.5,
+        ease: "none",
+        onUpdate: function () {
+          const progress = this.progress();
+          const charCount = Math.floor(progress * targetUrl.length);
+          document.getElementById("modal-url-input").value = targetUrl.substring(0, charCount);
+        }
+      }, 5.4);
+
+      // Cursor moves to "Verify link" button
+      tl.to("#cursor", { x: 1220, y: 220, duration: 0.8, ease: "power2.inOut" }, 7.0);
 
       // Click "Verify link"
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 1.8);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 1.8);
-      tl.to("#btn-verify-chip", { scale: 0.95, background: "#dbeafe", duration: 0.12 }, 1.8);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 1.93);
-      tl.to("#btn-verify-chip", { scale: 1.0, background: "#eff6ff", duration: 0.15 }, 1.93);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 2.03);
+      tl.to("#cursor", { scale: 0.85, duration: 0.12 }, 7.8);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.2 }, 7.8);
+      tl.to("#btn-verify-links", { scale: 0.95, duration: 0.12 }, 7.8);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15 }, 7.95);
+      tl.to("#btn-verify-links", { scale: 1.0, duration: 0.15 }, 7.95);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 8.05);
 
-      // Verification Card animates in with green glow
-      tl.to(
-        "#verify-card-box",
-        { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" },
-        2.05
-      );
+      // Button state changes to Verified
+      tl.call(() => {
+        const btn = document.getElementById("btn-verify-links");
+        btn.innerHTML = '<svg style="width:14px;height:14px;"><use href="#i-check"/></svg> Verified';
+        btn.style.background = "#dcfce7";
+        btn.style.color = "#15803d";
+        btn.style.borderColor = "#86efac";
+      }, null, 8.1);
 
-      // =======================================================
-      // SCENE 2: 3-CARD STRATEGY SELECTION (4.2s - 7.5s)
-      // =======================================================
-      // Update Instruction Pill
-      tl.call(
-        function () {
-          document.getElementById("instruction-text").innerText = "Step 2 · Zero-Disk Extraction Selection";
-        },
-        null,
-        3.8
-      );
-
-      // Cursor moves down to "Extract on PS5" strategy card
-      tl.to("#cursor", { x: 520, y: 440, duration: 0.8, ease: "power2.inOut" }, 4.0);
-
-      // Hover / Click Strategy Card 1
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 4.9);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 4.9);
-      tl.to("#card-strat-ps5", { scale: 0.98, duration: 0.12 }, 4.9);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 5.03);
-      tl.to("#card-strat-ps5", { scale: 1.0, duration: 0.15 }, 5.03);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 5.13);
-
-      // Cursor moves to "Start Direct Stream" primary submit button
-      tl.to("#cursor", { x: 1460, y: 645, duration: 0.8, ease: "power2.inOut" }, 5.5);
-
-      // Click "Start Direct Stream"
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 6.4);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 6.4);
-      tl.to("#btn-submit-transfer", { scale: 0.96, background: "#0e4399", duration: 0.12 }, 6.4);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 6.53);
-      tl.to("#btn-submit-transfer", { scale: 1.0, background: "#1256c4", duration: 0.15 }, 6.53);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 6.63);
+      // Verification status box expands
+      tl.set("#url-verification-box", { display: "block" }, 8.2);
+      tl.to("#url-verification-box", { opacity: 1, duration: 0.4 }, 8.2);
 
       // =======================================================
-      // SCENE 3: LIVE GIGABIT STREAM TELEMETRY (7.5s - 14.8s)
+      // SCENE 3: ZERO-DISK PS5 ARCHIVE EXTRACTION (10.5s - 14.5s)
       // =======================================================
-      // Page cross-fade from New Transfer to Transfers Dashboard
-      tl.to("#view-new-transfer", { opacity: 0, duration: 0.25, ease: "power1.in" }, 6.7);
-      tl.set("#view-new-transfer", { display: "none" }, 6.95);
-      tl.set("#view-transfers", { display: "flex" }, 6.95);
-      tl.to("#view-transfers", { opacity: 1, duration: 0.35, ease: "power1.out" }, 6.95);
+      tl.call(() => {
+        document.getElementById("step-badge-text").innerText = "Step 3 · Zero-Disk PS5 Archive Extraction Engine";
+      }, null, 10.5);
 
-      // Update Instruction Pill
-      tl.call(
-        function () {
-          document.getElementById("instruction-text").innerText = "Step 3 · Gigabit LAN Direct Stream (114 MB/s)";
-        },
-        null,
-        7.0
-      );
+      // Cursor moves down to highlight the PS5 Extraction Strategy card
+      tl.to("#cursor", { x: 800, y: 620, duration: 1.0, ease: "power2.inOut" }, 10.6);
 
-      // Progress bar fill surges from 14% to 68%
-      tl.fromTo(
-        "#hero-progress-fill",
-        { width: "14%" },
-        { width: "68%", duration: 6.8, ease: "power1.inOut" },
-        7.2
-      );
+      // Subtle pulse on PS5 strategy card
+      tl.to("#strat-ps5", { scale: 1.02, duration: 0.25 }, 11.7);
+      tl.to("#strat-ps5", { scale: 1.0, duration: 0.25 }, 11.95);
 
-      // Speed counter ticker
-      const speedObj = { val: 24.0, bytes: 6.0, pct: 14.0, ram: 16 };
-      tl.to(
-        speedObj,
-        {
-          val: 114.8,
-          bytes: 29.1,
-          pct: 68.0,
-          ram: 48,
-          duration: 6.5,
-          ease: "power2.out",
-          onUpdate: function () {
-            document.getElementById("speed-counter").innerText = speedObj.val.toFixed(1);
-            document.getElementById("pillar-console").innerText = speedObj.val.toFixed(1) + " MB/s";
-            document.getElementById("bytes-counter").innerText = speedObj.bytes.toFixed(1) + " GB";
-            document.getElementById("percent-counter").innerText = speedObj.pct.toFixed(1) + "%";
-            document.getElementById("pillar-ram").innerText = Math.round(speedObj.ram) + " / 64 MiB (0 GB Disk)";
-          },
-        },
-        7.2
-      );
+      // Cursor moves to "Add to queue" button
+      tl.to("#cursor", { x: 1225, y: 720, duration: 0.8, ease: "power2.inOut" }, 12.4);
 
-      // Cursor glides to sidebar "Diagnostics"
-      tl.to("#cursor", { x: 310, y: 268, duration: 1.2, ease: "power2.inOut" }, 13.0);
+      // Click "Add to queue"
+      tl.to("#cursor", { scale: 0.85, duration: 0.12 }, 13.2);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.2 }, 13.2);
+      tl.to("#btn-add-queue", { scale: 0.95, duration: 0.12 }, 13.2);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15 }, 13.35);
+      tl.to("#btn-add-queue", { scale: 1.0, duration: 0.15 }, 13.35);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 13.45);
 
-      // Click Diagnostics
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 14.3);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 14.3);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 14.43);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 14.53);
+      // Close modal
+      tl.to("#modal-layer", { opacity: 0, duration: 0.3 }, 13.5);
+      tl.set("#modal-layer", { display: "none" }, 13.8);
+      tl.set("#main-content", { display: "block" }, 13.8);
+      tl.set("#page-transfers", { display: "flex" }, 13.8);
 
       // =======================================================
-      // SCENE 4: DIAGNOSTICS & SPEED BENCHMARK (14.8s - 20.2s)
+      // SCENE 4: LIVE HIGH-SPEED STREAMING & TELEMETRY (14.5s - 20.5s)
       // =======================================================
-      // Nav switch
-      tl.to("#nav-transfers", { className: "nav-btn", duration: 0.08 }, 14.4);
-      tl.to("#nav-diagnostics", { className: "nav-btn active", duration: 0.08 }, 14.4);
+      tl.call(() => {
+        document.getElementById("step-badge-text").innerText = "Step 4 · Active Stream Telemetry & RAM Ring Buffer";
+        // Hide welcome launchpad, show active live panel and queue panel
+        document.getElementById("transfer-launchpad-wrap").style.display = "none";
+        document.getElementById("live-panel").style.display = "block";
+        document.getElementById("queue-panel").style.display = "block";
+      }, null, 13.8);
 
-      // Page cross-fade with display toggling
-      tl.to("#view-transfers", { opacity: 0, duration: 0.25, ease: "power1.in" }, 14.4);
-      tl.set("#view-transfers", { display: "none" }, 14.65);
-      tl.set("#view-diagnostics", { display: "flex" }, 14.65);
-      tl.to("#view-diagnostics", { opacity: 1, duration: 0.35, ease: "power1.out" }, 14.65);
+      tl.to("#live-panel", { opacity: 1, duration: 0.4 }, 13.9);
+      tl.to("#queue-panel", { opacity: 1, duration: 0.4 }, 14.1);
 
-      // Update Instruction Pill
-      tl.call(
-        function () {
-          document.getElementById("instruction-text").innerText = "Step 4 · Health Diagnostics & Speed Benchmark";
-        },
-        null,
-        14.65
-      );
+      // Cursor glides to monitor area
+      tl.to("#cursor", { x: 1100, y: 260, duration: 1.2, ease: "power2.inOut" }, 14.3);
 
-      // Cursor moves to "Run Quick Scan"
-      tl.to("#cursor", { x: 990, y: 390, duration: 0.8, ease: "power2.inOut" }, 15.0);
+      // Animate progress bar from 0% to 71%
+      tl.to("#active-progress-fill", { width: "71%", duration: 5.0, ease: "power1.inOut" }, 14.5);
 
-      // Click "Run Quick Scan"
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 15.9);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 15.9);
-      tl.to("#btn-run-benchmark", { scale: 0.96, background: "#0e4399", duration: 0.12 }, 15.9);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 16.03);
-      tl.to("#btn-run-benchmark", { scale: 1.0, background: "#1256c4", duration: 0.15 }, 16.03);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 16.13);
+      // Speed counter dynamics
+      tl.to("#speed-num", {
+        duration: 4.8,
+        ease: "none",
+        onUpdate: function () {
+          const val = (84.0 + this.progress() * 34.4).toFixed(1);
+          document.getElementById("speed-num").innerText = val;
+          document.getElementById("speed-console-val").innerText = val;
+        }
+      }, 14.8);
 
-      // Benchmark sweeps numbers
-      const diagObj = { rate: 32.0 };
-      tl.to(
-        diagObj,
-        {
-          rate: 116.4,
-          duration: 1.2,
-          ease: "power2.out",
-          onUpdate: function () {
-            document.getElementById("diag-rate-counter").innerText = diagObj.rate.toFixed(1) + " MB/s";
-          },
-        },
-        16.05
-      );
-
-      // Recommendation Banner appears with glow
-      tl.fromTo(
-        "#rec-banner",
-        { opacity: 0, y: 10, scale: 0.98 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "power2.out" },
-        16.8
-      );
-
-      // Cursor moves to "Apply Recommended Settings"
-      tl.to("#cursor", { x: 1470, y: 658, duration: 0.8, ease: "power2.inOut" }, 17.2);
-
-      // Click "Apply Recommended Settings"
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 18.1);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 18.1);
-      tl.to("#btn-apply-optimal", { scale: 0.96, background: "#065f46", duration: 0.12 }, 18.1);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 18.23);
-      tl.to("#btn-apply-optimal", { scale: 1.0, background: "#047857", duration: 0.15 }, 18.23);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 18.33);
+      // Telemetry SVG curve pulse
+      tl.to("#telemetry-curve", { strokeWidth: 3.5, duration: 0.8, yoyo: true, repeat: 3 }, 15.5);
 
       // =======================================================
-      // SCENE 5: CONSOLE FILES EXPLORER (20.2s - 23.8s)
+      // SCENE 5: CONSOLE FILES EXPLORER (20.5s - 24.5s)
       // =======================================================
-      // Cursor moves to "Console files"
-      tl.to("#cursor", { x: 310, y: 310, duration: 0.7, ease: "power2.inOut" }, 18.7);
+      // Cursor moves to "Console files" nav item in sidebar
+      tl.to("#cursor", { x: 120, y: 175, duration: 0.9, ease: "power2.inOut" }, 19.8);
 
       // Click "Console files"
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 19.5);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 19.5);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 19.63);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 19.73);
+      tl.to("#cursor", { scale: 0.85, duration: 0.12 }, 20.7);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.2 }, 20.7);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15 }, 20.85);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 20.95);
 
-      // Nav switch
-      tl.to("#nav-diagnostics", { className: "nav-btn", duration: 0.08 }, 19.6);
-      tl.to("#nav-files", { className: "nav-btn active", duration: 0.08 }, 19.6);
+      // Switch Nav selection & Page view
+      tl.call(() => {
+        document.getElementById("nav-item-transfers").classList.remove("selected");
+        document.getElementById("nav-item-files").classList.add("selected");
+        document.getElementById("workspace-page-title").innerText = "Console files";
+        document.getElementById("step-badge-text").innerText = "Step 5 · PS5 Storage Explorer & Directory Verification";
 
-      // Page cross-fade with display toggling
-      tl.to("#view-diagnostics", { opacity: 0, duration: 0.25, ease: "power1.in" }, 19.6);
-      tl.set("#view-diagnostics", { display: "none" }, 19.85);
-      tl.set("#view-files", { display: "flex" }, 19.85);
-      tl.to("#view-files", { opacity: 1, duration: 0.35, ease: "power1.out" }, 19.85);
+        document.getElementById("page-transfers").setAttribute("hidden", "");
+        document.getElementById("page-transfers").classList.remove("active-page");
+        document.getElementById("page-files").removeAttribute("hidden");
+        document.getElementById("page-files").classList.add("active-page");
+      }, null, 20.85);
 
-      // Update Instruction Pill
-      tl.call(
-        function () {
-          document.getElementById("instruction-text").innerText = "Step 5 · Direct PS5 Storage Explorer";
-        },
-        null,
-        19.85
-      );
+      tl.set("#page-transfers", { display: "none" }, 20.85);
+      tl.set("#page-files", { display: "flex" }, 20.85);
+      tl.to("#page-files", { opacity: 1, duration: 0.35 }, 20.9);
 
-      // Cursor moves to "Refresh" button
-      tl.to("#cursor", { x: 1540, y: 88, duration: 0.8, ease: "power2.inOut" }, 20.3);
+      // Cursor moves to Refresh button in files toolbar
+      tl.to("#cursor", { x: 1530, y: 195, duration: 1.0, ease: "power2.inOut" }, 21.4);
 
-      // Click Refresh button
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 21.2);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 21.2);
-      tl.to("#btn-refresh-files", { scale: 0.95, duration: 0.12 }, 21.2);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 21.33);
-      tl.to("#btn-refresh-files", { scale: 1.0, duration: 0.15 }, 21.33);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 21.43);
+      // Click Refresh
+      tl.to("#cursor", { scale: 0.85, duration: 0.12 }, 22.4);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.2 }, 22.4);
+      tl.to("#files-refresh-btn", { scale: 0.9, duration: 0.12 }, 22.4);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15 }, 22.55);
+      tl.to("#files-refresh-btn", { scale: 1.0, duration: 0.15 }, 22.55);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 22.65);
 
       // =======================================================
-      // SCENE 6: SETTINGS & TUNING (23.8s - 26.8s)
+      // SCENE 6: DIAGNOSTICS & HARDWARE BENCHMARK (24.5s - 27.5s)
       // =======================================================
-      // Cursor moves to "Settings"
-      tl.to("#cursor", { x: 310, y: 352, duration: 0.6, ease: "power2.inOut" }, 21.7);
+      // Cursor moves to "Diagnostics" nav item in sidebar
+      tl.to("#cursor", { x: 120, y: 220, duration: 0.8, ease: "power2.inOut" }, 23.2);
 
-      // Click Settings
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 22.4);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 22.4);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 22.53);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 22.63);
+      // Click Diagnostics
+      tl.to("#cursor", { scale: 0.85, duration: 0.12 }, 24.0);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.2 }, 24.0);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15 }, 24.15);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 24.25);
 
-      // Nav switch
-      tl.to("#nav-files", { className: "nav-btn", duration: 0.08 }, 22.5);
-      tl.to("#nav-settings", { className: "nav-btn active", duration: 0.08 }, 22.5);
+      // Switch Nav selection & Page view
+      tl.call(() => {
+        document.getElementById("nav-item-files").classList.remove("selected");
+        document.getElementById("nav-item-diagnostics").classList.add("selected");
+        document.getElementById("workspace-page-title").innerText = "Diagnostics";
+        document.getElementById("step-badge-text").innerText = "Step 6 · Gigabit Multi-Stream Diagnostic Baseline";
 
-      // Page cross-fade with display toggling
-      tl.to("#view-files", { opacity: 0, duration: 0.25, ease: "power1.in" }, 22.5);
-      tl.set("#view-files", { display: "none" }, 22.75);
-      tl.set("#view-settings", { display: "flex" }, 22.75);
-      tl.to("#view-settings", { opacity: 1, duration: 0.35, ease: "power1.out" }, 22.75);
+        document.getElementById("page-files").setAttribute("hidden", "");
+        document.getElementById("page-files").classList.remove("active-page");
+        document.getElementById("page-diagnostics").removeAttribute("hidden");
+        document.getElementById("page-diagnostics").classList.add("active-page");
+      }, null, 24.15);
 
-      // Update Instruction Pill
-      tl.call(
-        function () {
-          document.getElementById("instruction-text").innerText = "Step 6 · Engine Presets & Performance Tuning";
-        },
-        null,
-        22.75
-      );
+      tl.set("#page-files", { display: "none" }, 24.15);
+      tl.set("#page-diagnostics", { display: "flex" }, 24.15);
+      tl.to("#page-diagnostics", { opacity: 1, duration: 0.35 }, 24.2);
 
-      // Cursor moves to "Max Saturation" preset button
-      tl.to("#cursor", { x: 1530, y: 345, duration: 0.75, ease: "power2.inOut" }, 23.3);
+      // Cursor moves to "Run Quick Scan"
+      tl.to("#cursor", { x: 960, y: 285, duration: 0.8, ease: "power2.inOut" }, 24.8);
+      tl.to("#cursor", { scale: 0.85, duration: 0.12 }, 25.6);
+      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.2 }, 25.6);
+      tl.to("#btn-diag-scan", { scale: 0.95, duration: 0.12 }, 25.6);
+      tl.to("#cursor", { scale: 1.0, duration: 0.15 }, 25.75);
+      tl.to("#btn-diag-scan", { scale: 1.0, duration: 0.15 }, 25.75);
+      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 25.85);
 
-      // Click "Max Saturation"
-      tl.to("#cursor", { scale: 0.85, duration: 0.12, ease: "power1.inOut" }, 24.2);
-      tl.to("#click-ring", { opacity: 0.8, scale: 1.2, duration: 0.22, ease: "power1.out" }, 24.2);
-      tl.to("#cursor", { scale: 1.0, duration: 0.15, ease: "power1.out" }, 24.33);
-      tl.to("#click-ring", { opacity: 0, scale: 0.3, duration: 0.1 }, 24.43);
-
-      // Change presets UI state
-      tl.call(
-        function () {
-          document.getElementById("preset-turbo").classList.remove("active-preset");
-          document.getElementById("preset-max").classList.add("active-preset");
-          document.getElementById("select-streams").innerText = "32 streams (Max LAN Saturation)";
-          document.getElementById("select-chunk").innerText = "16 MiB (Max Throughput)";
-          document.getElementById("select-buffer").innerText = "128 MiB (Max Saturation Tier)";
-        },
-        null,
-        24.33
-      );
-
-      // Cursor glides offscreen
-      tl.to("#cursor", { opacity: 0, x: 1650, y: 400, duration: 0.5, ease: "power1.in" }, 25.2);
+      // Cursor fades out
+      tl.to("#cursor", { opacity: 0, duration: 0.4 }, 26.5);
 
       // =======================================================
-      // SCENE 7: BRAND OUTRO & REPO LOCKUP (26.8s - 30.0s)
+      // SCENE 7: BRAND OUTRO & REPO CALLOUT (27.5s - 30.0s)
       // =======================================================
-      tl.to("#app-window", { scale: 0.92, opacity: 0, duration: 0.4, ease: "power2.in" }, 26.4);
-      tl.fromTo(
-        "#brand-outro",
-        { opacity: 0, scale: 0.92 },
-        { opacity: 1, scale: 1, duration: 0.6, ease: "power2.out" },
-        26.8
-      );
+      tl.to("#app-shell", { opacity: 0, scale: 0.96, duration: 0.5, ease: "power2.in" }, 27.2);
 
-      // Register master timeline
+      tl.set("#brand-outro", { display: "flex", opacity: 0, scale: 0.94 }, 27.4);
+      tl.to("#brand-outro", { opacity: 1, scale: 1.0, duration: 0.6, ease: "power2.out" }, 27.5);
+
+      // Hold until exactly 30.0s
+      tl.to({}, { duration: 1.9 }, 28.1);
+
+      // Register master timeline with HyperFrames
       window.__timelines = window.__timelines || {};
       window.__timelines["main"] = tl;
       tl.seek(0);
