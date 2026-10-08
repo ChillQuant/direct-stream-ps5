@@ -1931,7 +1931,7 @@ const runVerifyLinks = async () => {
           </div>
         `;
         if (item.archive_encrypted || item.is_archive) {
-          setArchiveExtractMode(true);
+          setArchiveExtractMode(item.recommended_extract_mode || 'ps5');
           const pwdRow = $('archive-password-row');
           if (pwdRow) pwdRow.hidden = false;
           if (item.password_hint && $('archive-password')) {
@@ -1961,6 +1961,8 @@ const runVerifyLinks = async () => {
         } else if (ext === 'pkg') {
           setDestPreset('/data/pkg');
         }
+        updateAddPreview();
+        return true;
       } else {
         box.innerHTML = `
           <div class="verify-card verify-error">
@@ -1972,6 +1974,8 @@ const runVerifyLinks = async () => {
             <div class="verify-error-msg">${escaped(item.error || 'Server rejected connection or link expired')}</div>
           </div>
         `;
+        updateAddPreview();
+        return false;
       }
     } else {
       const allOk = res.verified_count === res.count;
@@ -2007,10 +2011,9 @@ const runVerifyLinks = async () => {
           </div>
         </div>
       `;
+      updateAddPreview();
+      return allOk;
     }
-
-    // Refresh add preview with the newly verified filenames
-    updateAddPreview();
   } catch (err) {
     if (box) {
       box.hidden = false;
@@ -2025,6 +2028,7 @@ const runVerifyLinks = async () => {
         </div>
       `;
     }
+    return false;
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2057,6 +2061,50 @@ $('add-form').addEventListener('submit', async e => {
       : (sourceKind === 'folder' ? 'Choose or enter a folder path.' : 'Choose or enter a file path.');
     return;
   }
+
+  // Mandatory URL verification before queueing
+  if (sourceKind === 'url') {
+    const unverified = sources.some(s => {
+      const v = getVerifiedInfo(s);
+      return !v || !v.ok;
+    });
+    if (unverified) {
+      const submitBtn = e.submitter || $('add-dialog')?.querySelector('button[type="submit"]');
+      const origText = submitBtn ? submitBtn.innerHTML : '';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="verify-spinner"></span> Verifying link...';
+      }
+      $('add-error').textContent = '';
+      try {
+        const ok = await runVerifyLinks();
+        if (!ok) {
+          $('add-error').textContent = 'Link verification failed. Please review the unreachable link details above before adding to the queue.';
+          return;
+        }
+      } catch (err) {
+        $('add-error').textContent = err.message || 'Link verification failed. Check the URL and try again.';
+        return;
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = origText || 'Add to queue';
+        }
+      }
+
+      // If an archive requires a password and none was supplied or auto-detected, prompt user
+      for (const s of sources) {
+        const vInfo = getVerifiedInfo(s);
+        if (vInfo && vInfo.archive_encrypted && !$('archive-password')?.value?.trim() && !vInfo.password_hint) {
+          if ($('archive-password-row')) $('archive-password-row').hidden = false;
+          $('archive-password')?.focus();
+          $('add-error').textContent = 'This archive is password-protected. Please enter the archive password above.';
+          return;
+        }
+      }
+    }
+  }
+
   const items = sources.map(source => ({
     source,
     name: (sourceKind === 'folder' ? $('file-name').value.trim() : '') || getVerifiedInfo(source)?.filename || ''
