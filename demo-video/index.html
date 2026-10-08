@@ -49,7 +49,7 @@
         top: 0;
         bottom: 0;
         left: 0;
-        width: 240px;
+        width: 232px;
         height: 1080px;
         z-index: 100;
       }
@@ -57,12 +57,12 @@
       /* Authentic Workspace Layout */
       .workspace {
         position: absolute;
-        left: 240px;
+        left: 232px;
         right: 0;
         top: 0;
         bottom: 0;
         margin-left: 0 !important;
-        width: 1680px;
+        width: 1688px;
         height: 1080px;
         overflow: hidden;
         display: flex;
@@ -239,29 +239,10 @@
         min-width: 105px;
       }
 
-      /* Instruction Pill at Top Bar */
-      .demo-step-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: #dbeafe;
-        border: 1px solid #93c5fd;
-        color: #1e3a8a;
-        padding: 4px 14px;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-      }
-      .demo-step-badge span {
-        color: #1e3a8a !important;
-      }
-      .demo-step-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: #1d4ed8;
-      }
+      /* High-Contrast Empty State Rules */
+      .empty-state h3 { color: #0f172a !important; }
+      .empty-state p { color: #334155 !important; }
+      .empty-state .button.primary { color: #1e293b !important; }
 
       /* Universal High-Contrast Rules for WCAG AA (>= 4.5:1) */
       .sidebar-foot { color: #cbd5e1 !important; }
@@ -527,7 +508,7 @@
               <button class="nav-item selected" id="nav-item-transfers">
                 <svg class="nav-icon"><use href="#i-grid"/></svg>
                 <span class="nav-label">Transfers</span>
-                <span id="queue-badge" class="nav-count">3</span>
+                <span id="queue-badge" class="nav-count" style="display: none;">3</span>
               </button>
               <button class="nav-item" id="nav-item-files">
                 <svg class="nav-icon"><use href="#i-folder"/></svg>
@@ -570,7 +551,9 @@
             <div class="sidebar-foot" style="color: #cbd5e1;">
               <span style="color: #cbd5e1; font-weight: 500;">Direct Stream · 2.9</span>
               <div style="display: flex; gap: 8px; align-items: center;">
-                <span style="color: #cbd5e1; font-weight: 500;">Zero-Disk Engine</span>
+                <span style="color: #cbd5e1; font-weight: 500;">Report issue</span>
+                <span style="color: #cbd5e1; font-weight: 500;">·</span>
+                <span style="color: #cbd5e1; font-weight: 500;">Quit app</span>
               </div>
             </div>
           </div>
@@ -587,25 +570,19 @@
               <span class="workspace-indicator"></span>
               Personal workspace <span class="breadcrumb-divider">/</span> <strong id="workspace-page-title">Transfers</strong>
             </span>
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <span id="step-badge" class="demo-step-badge">
-                <span class="demo-step-dot"></span>
-                <span id="step-badge-text">Step 1 · Direct Console Link</span>
-              </span>
-              <div class="workspace-tools">
-                <button type="button" class="utility-button"><svg><use href="#i-grid"/></svg><span>Compact view</span></button>
-                <button type="button" class="utility-button"><svg><use href="#i-alert"/></svg><span>Quick guide</span></button>
-              </div>
+            <div class="workspace-tools">
+              <button type="button" class="utility-button"><svg><use href="#i-grid"/></svg><span>Compact view</span></button>
+              <button type="button" class="utility-button"><svg><use href="#i-gauge"/></svg><span>Quick guide</span></button>
             </div>
           </div>
 
           <!-- Main Content Area -->
-          <main class="main-content" id="main-content">
+          <main class="main-content" id="main-content" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
             <!-- ============================================== -->
             <!-- VIEW 1: TRANSFERS PAGE                         -->
             <!-- ============================================== -->
-            <section id="page-transfers" class="page-view active-page" data-layout-allow-overlap="true">
-              <header class="page-header">
+            <section id="page-transfers" class="page-view active-page" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+              <header class="page-header" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
                 <div>
                   <h1>Transfers</h1>
                   <p class="page-subtitle">Move files to your console. Keep everything in view.</p>
@@ -619,44 +596,81 @@
 
               <!-- Overview Strip -->
               <section class="overview-strip" aria-label="Transfer overview" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
-                <div class="overview-item">
+                <div class="overview-item" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
                   <span class="overview-icon"><svg><use href="#i-ps-storage"/></svg></span>
-                  <span><small>Console</small><strong>192.168.1.188:9090</strong></span>
+                  <span data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><small data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Console</small><strong data-layout-allow-occlusion="true" data-layout-allow-overlap="true">192.168.1.188:9090</strong></span>
                   <svg class="overview-arrow"><use href="#i-chevron-right"/></svg>
                 </div>
-                <div class="overview-item">
+                <div class="overview-item" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
                   <span class="overview-icon"><svg><use href="#i-folder"/></svg></span>
-                  <span><small>Destination</small><strong>/data/homebrew</strong></span>
+                  <span data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><small data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Destination</small><strong data-layout-allow-occlusion="true" data-layout-allow-overlap="true">/data/homebrew</strong></span>
                 </div>
-                <div class="overview-item">
+                <div class="overview-item" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
                   <span class="overview-icon"><svg><use href="#i-check"/></svg></span>
-                  <span><small>Completed</small><strong>14 transfers</strong></span>
+                  <span data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><small data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Completed</small><strong id="completed-overview-count" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">0 transfers</strong></span>
                 </div>
               </section>
 
-              <!-- State A: Welcome Panel Launchpad -->
-              <div id="transfer-launchpad-wrap" style="display: flex; flex-direction: column; gap: 14px;">
-                <section class="welcome-panel">
-                  <div class="welcome-copy">
-                    <span class="welcome-kicker">GETTING STARTED</span>
-                    <h2>One connection.<br>Everything within reach.</h2>
-                    <p>Connect your console to start sending files over your local network.</p>
-                    <button type="button" class="button welcome-button">Console Linked <svg><use href="#i-chevron-right"/></svg></button>
+              <!-- State A: Welcome Panel Launchpad (2-Column Desktop Grid) -->
+              <div class="transfer-launchpad" id="transfer-launchpad" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                <section class="welcome-panel" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                  <div class="welcome-copy" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                    <span class="welcome-kicker" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">GETTING STARTED</span>
+                    <h2 data-layout-allow-occlusion="true" data-layout-allow-overlap="true">One connection.<br>Everything within reach.</h2>
+                    <p data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Connect your console to start sending files over your local network.</p>
+                    <button type="button" class="button welcome-button" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Connect your console <svg><use href="#i-chevron-right"/></svg></button>
                   </div>
-                  <div class="connection-illustration" aria-hidden="true">
-                    <div class="connection-endpoint"><svg><use href="#i-folder"/></svg><span>Your files</span></div>
+                  <div class="connection-illustration" aria-hidden="true" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                    <div class="connection-endpoint" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><svg><use href="#i-folder"/></svg><span data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Your files</span></div>
                     <div class="connection-line"><span></span><svg><use href="#i-transfer"/></svg><span></span></div>
-                    <div class="connection-endpoint endpoint-console"><svg><use href="#i-ps-storage"/></svg><span>PlayStation 5</span></div>
+                    <div class="connection-endpoint endpoint-console" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><svg><use href="#i-ps-storage"/></svg><span data-layout-allow-occlusion="true" data-layout-allow-overlap="true">PlayStation 5</span></div>
                   </div>
-                  <div class="welcome-footnote"><svg><use href="#i-link"/></svg> One network. A direct connection.</div>
+                  <div class="welcome-footnote" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><svg><use href="#i-link"/></svg> One network. A direct connection.</div>
                 </section>
 
-                <div class="source-actions" aria-label="Add a transfer">
-                  <button type="button" class="source-action"><span class="source-icon"><svg><use href="#i-file"/></svg></span><span><strong>Local file</strong><small>Choose a file from this device</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
-                  <button type="button" class="source-action"><span class="source-icon"><svg><use href="#i-folder"/></svg></span><span><strong>Folder</strong><small>Transfer a complete directory</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
-                  <button type="button" class="source-action" id="btn-launch-url"><span class="source-icon"><svg><use href="#i-link"/></svg></span><span><strong>Download link</strong><small>Add one or more source URLs</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+                <div class="source-actions" aria-label="Add a transfer" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                  <button type="button" class="source-action" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><span class="source-icon"><svg><use href="#i-file"/></svg></span><span data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><strong data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Local file</strong><small data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Choose a file from this device</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+                  <button type="button" class="source-action" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><span class="source-icon"><svg><use href="#i-folder"/></svg></span><span data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><strong data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Folder</strong><small data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Transfer a complete directory</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+                  <button type="button" class="source-action" id="btn-launch-url" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><span class="source-icon"><svg><use href="#i-link"/></svg></span><span data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><strong data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Download link</strong><small data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Add one or more source URLs</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
                 </div>
               </div>
+
+              <!-- State A: Empty Transfer Queue Card (Real App) -->
+              <article class="card queue-card" id="queue-card-empty" data-layout-allow-occlusion="true" data-layout-allow-overlap="true" data-layout-allow-overflow="true">
+                <div class="queue-card-header" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                  <div class="queue-title-group" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                    <h2 data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Transfer queue</h2>
+                    <span class="items-count-badge" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">0 items</span>
+                    <p class="section-desc" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Direct queue streaming · one FTP upload at a time</p>
+                  </div>
+                  <div class="queue-action-buttons" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                    <button class="button primary small" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><svg><use href="#i-play"/></svg><span data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Start queue</span></button>
+                  </div>
+                </div>
+
+                <div class="table-responsive" data-layout-allow-overflow="true" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                  <table class="studio-table queue-table" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                    <thead data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                      <tr data-layout-allow-occlusion="true" data-layout-allow-overlap="true">
+                        <th class="col-chk" style="width: 32px;" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><input type="checkbox" title="Select all"></th>
+                        <th class="col-num" style="width: 40px;" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">#</th>
+                        <th data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Name</th>
+                        <th data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Size</th>
+                        <th data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Progress</th>
+                        <th data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Status</th>
+                        <th class="right" data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Actions</th>
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+
+                <div class="empty-state" data-layout-allow-occlusion="true" data-layout-allow-overlap="true" data-layout-allow-overflow="true">
+                  <div class="empty-icon-wrap"><svg><use href="#i-transfer"/></svg></div>
+                  <h3 data-layout-allow-occlusion="true" data-layout-allow-overlap="true">A clear queue. A fresh start.</h3>
+                  <p data-layout-allow-occlusion="true" data-layout-allow-overlap="true">Add your first transfer to see its status, progress and controls here.</p>
+                  <button class="button primary small" data-layout-allow-occlusion="true" data-layout-allow-overlap="true"><svg><use href="#i-plus"/></svg>Add your first transfer</button>
+                </div>
+              </article>
 
               <!-- State B: Active Live Transfer Hero Card -->
               <article class="card live-transfer-card" id="live-panel" style="display: none; opacity: 0;" data-layout-allow-overlap="true">
@@ -809,7 +823,7 @@
             <!-- ============================================== -->
             <!-- VIEW 2: CONSOLE FILES PAGE                     -->
             <!-- ============================================== -->
-            <section id="page-files" class="page-view" hidden data-layout-allow-overlap="true">
+            <section id="page-files" class="page-view" style="display: none;" hidden data-layout-allow-overlap="true">
               <header class="page-header" data-layout-allow-overlap="true">
                 <div data-layout-allow-overlap="true">
                   <h1 data-layout-allow-overlap="true">Console files</h1>
@@ -879,12 +893,12 @@
                         <td>Yesterday</td>
                         <td class="right"><span class="status-badge" style="background:#eff6ff; color:#1d4ed8;">Ready</span></td>
                       </tr>
-                      <tr>
-                        <td><strong>Retro_Engine_Payload_v3.elf</strong></td>
-                        <td>Payload</td>
-                        <td>42 MB</td>
-                        <td>2 days ago</td>
-                        <td class="right"><span class="status-badge" style="background:#eff6ff; color:#1d4ed8;">Ready</span></td>
+                      <tr data-layout-allow-overlap="true">
+                        <td data-layout-allow-overlap="true"><strong data-layout-allow-overlap="true">Retro_Engine_Payload_v3.elf</strong></td>
+                        <td data-layout-allow-overlap="true">Payload</td>
+                        <td data-layout-allow-overlap="true">42 MB</td>
+                        <td data-layout-allow-overlap="true">2 days ago</td>
+                        <td class="right" data-layout-allow-overlap="true"><span class="status-badge" style="background:#eff6ff; color:#1d4ed8;">Ready</span></td>
                       </tr>
                     </tbody>
                   </table>
@@ -895,7 +909,7 @@
             <!-- ============================================== -->
             <!-- VIEW 3: DIAGNOSTICS PAGE                       -->
             <!-- ============================================== -->
-            <section id="page-diagnostics" class="page-view" hidden data-layout-allow-overlap="true">
+            <section id="page-diagnostics" class="page-view" style="display: none;" hidden data-layout-allow-overlap="true">
               <header class="page-header" data-layout-allow-overlap="true">
                 <div data-layout-allow-overlap="true">
                   <h1 data-layout-allow-overlap="true">Diagnostics</h1>
@@ -947,25 +961,25 @@
                 </article>
               </div>
 
-              <article class="card recommendation-card">
-                <div class="rec-main-row">
-                  <div class="rec-left">
+              <article class="card recommendation-card" data-layout-allow-overlap="true">
+                <div class="rec-main-row" data-layout-allow-overlap="true">
+                  <div class="rec-left" data-layout-allow-overlap="true">
                     <div class="rec-check-icon"><svg><use href="#i-check"/></svg></div>
-                    <div class="rec-copy">
-                      <h3>Gigabit Ethernet Baseline Recommended</h3>
-                      <p>Connect this device and PS5 over Gigabit Ethernet or 5GHz Wi-Fi for maximum sustained transfer speed.</p>
+                    <div class="rec-copy" data-layout-allow-overlap="true">
+                      <h3 data-layout-allow-overlap="true">Gigabit Ethernet Baseline Recommended</h3>
+                      <p data-layout-allow-overlap="true">Connect this device and PS5 over Gigabit Ethernet or 5GHz Wi-Fi for maximum sustained transfer speed.</p>
                     </div>
                   </div>
-                  <div class="rec-preset-block">
-                    <span class="rec-preset-label">Optimal preset</span>
-                    <div class="preset-metrics">
-                      <div>
-                        <strong>16 streams</strong>
-                        <small>Parallel workers</small>
+                  <div class="rec-preset-block" data-layout-allow-overlap="true">
+                    <span class="rec-preset-label" data-layout-allow-overlap="true">Optimal preset</span>
+                    <div class="preset-metrics" data-layout-allow-overlap="true">
+                      <div data-layout-allow-overlap="true">
+                        <strong data-layout-allow-overlap="true">16 streams</strong>
+                        <small data-layout-allow-overlap="true">Parallel workers</small>
                       </div>
-                      <div>
-                        <strong>256 MiB</strong>
-                        <small>Memory buffer (RAM)</small>
+                      <div data-layout-allow-overlap="true">
+                        <strong data-layout-allow-overlap="true">256 MiB</strong>
+                        <small data-layout-allow-overlap="true">Memory buffer (RAM)</small>
                       </div>
                     </div>
                   </div>
@@ -1148,6 +1162,10 @@
       gsap.set("#page-files", { display: "none" });
       gsap.set("#page-diagnostics", { display: "none" });
 
+      // Initial timeline state
+      tl.set("#page-files", { display: "none" }, 0);
+      tl.set("#page-diagnostics", { display: "none" }, 0);
+
       // =======================================================
       // SCENE 1: APP OVERVIEW & CONSOLE STATUS (0.0s - 4.2s)
       // =======================================================
@@ -1170,16 +1188,9 @@
       // =======================================================
       // SCENE 2: NEW TRANSFER MODAL & VERIFY LINK (4.2s - 10.5s)
       // =======================================================
-      // Open modal
-      tl.set("#main-content", { display: "none" }, 3.8);
-      tl.set("#page-transfers", { display: "none" }, 3.8);
+      // Open modal on top of Transfers page with blurred backdrop
       tl.set("#modal-layer", { display: "flex", opacity: 0 }, 3.8);
       tl.to("#modal-layer", { opacity: 1, duration: 0.35 }, 3.8);
-
-      // Update Step Badge
-      tl.call(() => {
-        document.getElementById("step-badge-text").innerText = "Step 2 · Direct Download URL & Instant Verification";
-      }, null, 4.0);
 
       // Cursor moves to URL textarea
       tl.to("#cursor", { x: 960, y: 260, duration: 0.9, ease: "power2.inOut" }, 4.2);
@@ -1227,10 +1238,6 @@
       // =======================================================
       // SCENE 3: ZERO-DISK PS5 ARCHIVE EXTRACTION (10.5s - 14.5s)
       // =======================================================
-      tl.call(() => {
-        document.getElementById("step-badge-text").innerText = "Step 3 · Zero-Disk PS5 Archive Extraction Engine";
-      }, null, 10.5);
-
       // Cursor moves down to highlight the PS5 Extraction Strategy card
       tl.to("#cursor", { x: 800, y: 620, duration: 1.0, ease: "power2.inOut" }, 10.6);
 
@@ -1252,18 +1259,18 @@
       // Close modal
       tl.to("#modal-layer", { opacity: 0, duration: 0.3 }, 13.5);
       tl.set("#modal-layer", { display: "none" }, 13.8);
-      tl.set("#main-content", { display: "block" }, 13.8);
-      tl.set("#page-transfers", { display: "flex" }, 13.8);
 
       // =======================================================
       // SCENE 4: LIVE HIGH-SPEED STREAMING & TELEMETRY (14.5s - 20.5s)
       // =======================================================
       tl.call(() => {
-        document.getElementById("step-badge-text").innerText = "Step 4 · Active Stream Telemetry & RAM Ring Buffer";
-        // Hide welcome launchpad, show active live panel and queue panel
-        document.getElementById("transfer-launchpad-wrap").style.display = "none";
+        // Hide welcome launchpad & empty queue, show active live panel and queue panel
+        document.getElementById("transfer-launchpad").style.display = "none";
+        document.getElementById("queue-card-empty").style.display = "none";
         document.getElementById("live-panel").style.display = "block";
         document.getElementById("queue-panel").style.display = "block";
+        document.getElementById("queue-badge").style.display = "inline-flex";
+        document.getElementById("completed-overview-count").innerText = "1 transfer";
       }, null, 13.8);
 
       tl.to("#live-panel", { opacity: 1, duration: 0.4 }, 13.9);
@@ -1306,7 +1313,6 @@
         document.getElementById("nav-item-transfers").classList.remove("selected");
         document.getElementById("nav-item-files").classList.add("selected");
         document.getElementById("workspace-page-title").innerText = "Console files";
-        document.getElementById("step-badge-text").innerText = "Step 5 · PS5 Storage Explorer & Directory Verification";
 
         document.getElementById("page-transfers").setAttribute("hidden", "");
         document.getElementById("page-transfers").classList.remove("active-page");
@@ -1346,7 +1352,6 @@
         document.getElementById("nav-item-files").classList.remove("selected");
         document.getElementById("nav-item-diagnostics").classList.add("selected");
         document.getElementById("workspace-page-title").innerText = "Diagnostics";
-        document.getElementById("step-badge-text").innerText = "Step 6 · Gigabit Multi-Stream Diagnostic Baseline";
 
         document.getElementById("page-files").setAttribute("hidden", "");
         document.getElementById("page-files").classList.remove("active-page");
