@@ -7,16 +7,22 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>DIRECT STREAM FOR PLAYSTATION 5</title>
+  <title>Direct Stream · PlayStation 5</title>
   <link rel="icon" href="/icon.svg">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=2.9.4">
-  <script src="/app.js?v=2.9.4" defer></script>
+  <link rel="stylesheet" href="/style.css?v=3.2.0">
+  <link rel="stylesheet" href="/experience.css?v=3.2.0">
+  <script src="/app.js?v=3.2.0" defer></script>
+  <script src="/experience.js?v=3.2.0" defer></script>
+  <link rel="stylesheet" href="/workflow.css?v=3.2.0">
+  <script src="/workflow.js?v=3.2.0" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to content</a>
 
 <!-- SVG Symbol Definitions -->
 <svg class="symbols" aria-hidden="true"><defs>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
   <symbol id="i-transfer" viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/></symbol>
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></symbol>
   <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M7 18h10"/><circle cx="12" cy="13" r="1.5"/></symbol>
@@ -54,7 +60,7 @@
       <svg><use href="#i-transfer"/></svg>
     </div>
     <h2>Transfer Files to PS5 Storage</h2>
-    <p>Direct zero-copy stream over Gigabit LAN</p>
+    <p>Add files to your transfer queue</p>
   </div>
 </div>
 
@@ -63,25 +69,26 @@
   <aside class="sidebar">
     <div class="sidebar-top">
       <a class="brand" href="#" aria-label="DIRECT STREAM FOR PLAYSTATION 5 home">
-        <div class="brand-text">
-          <span class="studio-title">DIRECT STREAM</span>
-          <span class="studio-sub">FOR PLAYSTATION 5</span>
+        <span class="brand-mark" aria-hidden="true"><svg><use href="#i-transfer"/></svg></span><div class="brand-text">
+          <span class="studio-title">Direct Stream</span>
+          <span class="studio-sub">PLAYSTATION 5</span>
         </div>
       </a>
 
+      <span class="nav-eyebrow">WORKSPACE</span>
       <nav class="sidebar-nav" aria-label="Main navigation">
         <button class="nav-item selected" data-page="transfers">
           <svg class="nav-icon"><use href="#i-grid"/></svg>
           <span class="nav-label">Transfers</span>
           <span id="queue-badge" class="nav-count" hidden>0</span>
         </button>
-        <button class="nav-item" data-page="diagnostics">
-          <svg class="nav-icon"><use href="#i-gauge"/></svg>
-          <span class="nav-label">Diagnostics</span>
-        </button>
         <button class="nav-item" data-page="files">
           <svg class="nav-icon"><use href="#i-folder"/></svg>
           <span class="nav-label">Console files</span>
+        </button>
+        <button class="nav-item" data-page="diagnostics">
+          <svg class="nav-icon"><use href="#i-gauge"/></svg>
+          <span class="nav-label">Diagnostics</span>
         </button>
         <button class="nav-item" data-page="activity">
           <svg class="nav-icon"><use href="#i-log"/></svg>
@@ -96,7 +103,7 @@
 
     <div class="sidebar-bottom">
       <!-- Miniature PS5 Console Target Status Card -->
-      <div class="device-card" id="sidebar-device-card" title="Click to view console connection settings" data-open-settings>
+      <button type="button" class="device-card" id="sidebar-device-card" title="Click to view console connection settings" data-open-settings>
         <div class="ps5-console-icon" aria-hidden="true">
           <svg viewBox="0 0 24 32" class="ps5-console-svg">
             <!-- Sleek PS5 Console Collar & Center Silhouette -->
@@ -107,17 +114,21 @@
           </svg>
         </div>
         <div class="device-meta">
-          <div class="device-name">PS5 connected</div>
+          <div class="device-name" id="device-name">Checking console…</div>
           <div class="device-sub">
-            <span id="connection-dot" class="dot green"></span>
-            <span id="sidebar-host">192.168.1.188</span>
+            <span id="connection-dot" class="dot"></span>
+            <span id="sidebar-host">Waiting for app</span>
           </div>
         </div>
-      </div>
+      </button>
 
       <div class="sidebar-foot">
-        <span>v2.9 · Direct Stream Engine</span>
-        <button id="quit" class="text-button">Quit app</button>
+        <span>Direct Stream · 2.9</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <a href="https://github.com/ChillQuant/direct-stream-ps5/issues/new/choose" target="_blank" rel="noopener noreferrer" class="text-button" style="text-decoration: none;" title="Report an issue or submit feedback on GitHub">Report issue</a>
+          <span style="opacity: 0.3;">·</span>
+          <button id="quit" class="text-button">Quit app</button>
+        </div>
       </div>
     </div>
   </aside>
@@ -133,10 +144,10 @@
         <span class="mobile-title">DIRECT STREAM</span>
         <span class="mobile-sub">FOR PS5</span>
       </div>
-      <div class="mobile-device-status" id="mobile-device-card" title="Click to view console connection settings" data-open-settings>
-        <span id="mobile-connection-dot" class="dot green"></span>
+      <button type="button" class="mobile-device-status" id="mobile-device-card" title="Click to view console connection settings" data-open-settings>
+        <span id="mobile-connection-dot" class="dot"></span>
         <span id="mobile-host">PS5</span>
-      </div>
+      </button>
     </header>
 
     <div id="offline-banner" class="banner error" hidden role="alert">Connection to the app was lost. Reopen DIRECT STREAM FOR PLAYSTATION 5 to reconnect.</div>
@@ -146,7 +157,7 @@
       <span id="crumb">Transfers</span>
       <span id="connection-pill" class="status-pill"><span id="connection-status-text">Connected</span></span>
       <code id="target-host">192.168.1.188:1337</code>
-      <code id="target-folder">/data/ShadowMount</code>
+      <code id="target-folder">/data/homebrew</code>
       <span id="pipeline-settings">16 streams · 256 MiB RAM</span>
       <span id="source-mode">Direct Stream</span>
       <span id="connection-message">Ready to stream</span>
@@ -156,7 +167,11 @@
       <button id="live-cancel-btn">Cancel</button>
     </div>
 
-    <main class="main-content">
+    <div class="workspace-topbar">
+      <span class="workspace-label"><span class="workspace-indicator"></span> Personal workspace <span class="breadcrumb-divider">/</span> <strong id="workspace-page">Transfers</strong></span>
+      <div class="workspace-tools"><button type="button" id="density-toggle" class="utility-button" aria-pressed="false" title="Toggle compact spacing"><svg><use href="#i-grid"/></svg><span>Compact view</span></button><button type="button" id="help-open" class="utility-button"><svg><use href="#i-alert"/></svg><span>Quick guide</span></button></div>
+    </div>
+    <main class="main-content" id="main-content" tabindex="-1">
 
       <!-- ========================================== -->
       <!-- 01: TRANSFERS PAGE                         -->
@@ -166,19 +181,37 @@
         <header class="page-header">
           <div>
             <h1>Transfers</h1>
-            <p class="page-subtitle">Send games, packages and files to your PlayStation 5 over a high-speed local network.</p>
+            <p class="page-subtitle">Move files to your console. Keep everything in view.</p>
           </div>
           <div class="header-actions">
             <button class="button primary new-transfer-btn" data-add>
-              <svg><use href="#i-plus"/></svg>+ New transfer
+              <svg><use href="#i-plus"/></svg>New transfer
             </button>
           </div>
         </header>
 
+        <section class="overview-strip" aria-label="Transfer overview">
+          <button type="button" class="overview-item" data-open-settings><span class="overview-icon"><svg><use href="#i-ps-storage"/></svg></span><span><small>Console</small><strong id="overview-connection">Checking connection…</strong></span><svg class="overview-arrow"><use href="#i-chevron-right"/></svg></button>
+          <div class="overview-item"><span class="overview-icon"><svg><use href="#i-folder"/></svg></span><span><small>Destination</small><strong id="overview-destination">—</strong></span></div>
+          <div class="overview-item"><span class="overview-icon"><svg><use href="#i-check"/></svg></span><span><small>Completed</small><strong id="overview-completed">0 transfers</strong></span></div>
+        </section>
+        <div class="transfer-launchpad" id="transfer-launchpad">
+        <section id="welcome-panel" class="welcome-panel">
+          <div class="welcome-copy"><span class="welcome-kicker">GETTING STARTED</span><h2>One connection.<br>Everything within reach.</h2><p>Connect your console to start sending files over your local network.</p><button type="button" class="button welcome-button" data-setup>Connect your console <svg><use href="#i-chevron-right"/></svg></button></div>
+          <div class="connection-illustration" aria-hidden="true"><div class="connection-endpoint"><svg><use href="#i-folder"/></svg><span>Your files</span></div><div class="connection-line"><span></span><svg><use href="#i-transfer"/></svg><span></span></div><div class="connection-endpoint endpoint-console"><svg><use href="#i-ps-storage"/></svg><span>PlayStation 5</span></div></div>
+          <div class="welcome-footnote"><svg><use href="#i-link"/></svg> One network. A direct connection.</div>
+        </section>
+        <div class="source-actions" aria-label="Add a transfer">
+          <button type="button" class="source-action" data-source="local"><span class="source-icon"><svg><use href="#i-file"/></svg></span><span><strong>Local file</strong><small>Choose a file from this device</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+          <button type="button" class="source-action" data-source="folder"><span class="source-icon"><svg><use href="#i-folder"/></svg></span><span><strong>Folder</strong><small>Transfer a complete directory</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+          <button type="button" class="source-action" data-source="url"><span class="source-icon"><svg><use href="#i-link"/></svg></span><span><strong>Download link</strong><small>Add one or more source URLs</small></span><svg class="source-arrow"><use href="#i-plus"/></svg></button>
+        </div>
+        </div>
+        <section id="recovery-panel" class="workflow-card recovery-panel" aria-labelledby="recovery-heading" hidden><div class="workflow-heading"><span class="workflow-symbol"><svg><use href="#i-alert"/></svg></span><div><h2 id="recovery-heading">Let’s get you moving again.</h2><p id="recovery-caption"></p></div></div><div id="recovery-items"></div></section>
         <!-- Active Transfer Hero Card -->
-        <article class="card live-transfer-card" id="live-panel">
+        <article class="card live-transfer-card" id="live-panel" hidden>
           <div class="transfer-card-header">
-            <div class="transfer-tag-group">
+            <div class="transfer-tag-group"><span class="live-label">Transfer monitor</span>
               <span id="live-state" class="status-badge idle">Idle</span>
               <span id="bottleneck" class="bottleneck-tag" hidden>Optimal path</span>
             </div>
@@ -195,6 +228,8 @@
             </div>
           </div>
 
+          <div id="transfer-journey" class="transfer-journey" aria-label="Transfer stages" hidden></div>
+          <p id="journey-description" class="journey-description" hidden></p>
           <!-- Progress Meta Row -->
           <div class="transfer-progress-meta">
             <div class="meta-left">
@@ -204,7 +239,7 @@
             </div>
             <div class="meta-right">
               <span class="eta-label"><span id="eta">—</span></span>
-              <strong id="live-speed-heading" class="live-speed-heading"><span id="upload-speed">0.0</span> MB/s</strong>
+              <strong id="live-speed-heading" class="live-speed-heading"><span id="upload-speed">0.0</span><span id="upload-speed-unit"> MB/s</span></strong>
             </div>
           </div>
 
@@ -213,19 +248,20 @@
             <div id="progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
           </div>
 
+          <details class="transfer-insights"><summary>Transfer insights <span>Speed, source & memory</span></summary>
           <!-- 3 Metric Pillars -->
           <div class="telemetry-pillars">
             <div class="pillar-stat">
               <div class="pillar-top">
                 <span class="indicator-dot blue"></span>
-                <strong id="live-stat-console" class="pillar-num"><span id="upload-speed-display">0.0</span> MB/s</strong>
+                <strong id="live-stat-console" class="pillar-num"><span id="upload-speed-display">0.0</span><span id="console-stat-unit"> MB/s</span></strong>
               </div>
               <span class="pillar-label">To console</span>
             </div>
             <div class="pillar-stat">
               <div class="pillar-top">
                 <span class="indicator-dot purple"></span>
-                <strong id="live-stat-source" class="pillar-num"><span id="download-speed">0.0</span> MB/s</strong>
+                <strong id="live-stat-source" class="pillar-num"><span id="download-speed">0.0</span><span id="source-stat-unit"> MB/s</span></strong>
               </div>
               <span class="pillar-label">From source</span>
             </div>
@@ -234,7 +270,7 @@
                 <span class="indicator-dot green"></span>
                 <strong id="buffer-value" class="pillar-num">0 / 512 MiB</strong>
               </div>
-              <span class="pillar-label">RAM buffer</span>
+              <span class="pillar-label">Memory buffer (RAM)</span>
               <div class="mini-buffer-track" hidden><div id="buffer-fill" style="width: 0%;"></div></div>
             </div>
           </div>
@@ -269,7 +305,7 @@
             <span>30s</span>
             <span>Now</span>
           </div>
-          <p id="active-detail" hidden></p>
+          </details><p id="active-detail" hidden></p>
         </article>
 
         <!-- Transfer Queue Card -->
@@ -283,7 +319,7 @@
             </div>
             <div class="queue-action-buttons">
               <button id="quick-start-queue" class="button primary small" title="Start or pause the transfer queue">
-                <svg><use href="#i-play"/></svg><span id="quick-start-label">Start Queue</span>
+                <svg><use href="#i-play"/></svg><span id="quick-start-label">Start queue</span>
               </button>
               <button id="quick-browse-file" class="button outline small">
                 <svg><use href="#i-file"/></svg>Add files
@@ -297,6 +333,10 @@
             </div>
           </div>
 
+          <div class="queue-tools" id="queue-tools" hidden>
+            <div class="queue-filters" role="group" aria-label="Filter transfers"><button type="button" data-queue-filter="all" aria-pressed="true">All transfers</button><button type="button" data-queue-filter="pending" aria-pressed="false">In progress</button><button type="button" data-queue-filter="failed" aria-pressed="false">Needs attention</button><button type="button" data-queue-filter="completed" aria-pressed="false">Completed</button></div>
+            <label class="queue-search"><svg><use href="#i-search"/></svg><input id="queue-search" type="search" placeholder="Find a transfer…" aria-label="Search transfers"></label>
+          </div><p id="queue-no-results" class="no-results" hidden>No matching transfers. Try another search or filter.</p>
           <!-- Smart Merge Suggestion Banner -->
           <div id="smart-merge-banner" class="smart-merge-banner" hidden>
             <div class="smart-merge-info">
@@ -340,26 +380,27 @@
           </div>
 
           <!-- Empty State -->
-          <div id="queue-empty" class="empty-state" hidden>
+          <div id="queue-empty" class="empty-state">
             <div class="empty-icon-wrap"><svg><use href="#i-transfer"/></svg></div>
-            <h3>Queue is clear</h3>
-            <p>Paste a direct download link or drop game files / packages anywhere to start streaming.</p>
-            <button class="button primary small" data-add><svg><use href="#i-plus"/></svg>Add Transfer</button>
+            <h3>A clear queue. A fresh start.</h3>
+            <p>Add your first transfer to see its status, progress and controls here.</p>
+            <button class="button primary small" data-add><svg><use href="#i-plus"/></svg>Add your first transfer</button>
           </div>
 
           <!-- Queue Controls Footer -->
           <div class="queue-footer-row">
             <div class="queue-footer-left">
-              <span class="verified-tip"><svg><use href="#i-check"/></svg>Files verified byte-for-byte before atomic PS5 finalization</span>
+              <span class="verified-tip"><svg><use href="#i-check"/></svg>Transfers run in queue order. You’re in control.</span>
             </div>
             <div class="queue-footer-actions">
-              <button id="start-queue" class="button primary small">Start Queue</button>
-              <button id="pause-all" class="button outline small">Pause Queue</button>
-              <button id="clear-completed" class="button outline small">Clear Completed</button>
-              <button id="validate-links" class="button outline small" title="Verify HTTP direct links without downloading">Verify Links</button>
+              <button id="start-queue" class="button primary small">Start queue</button>
+              <button id="pause-all" class="button outline small">Pause queue</button>
+              <button id="clear-completed" class="button outline small">Clear completed</button>
+              <button id="validate-links" class="button outline small" title="Verify HTTP direct links without downloading">Verify links</button>
             </div>
           </div>
         </article>
+        <section id="completion-panel" class="workflow-card completion-panel" aria-labelledby="completion-heading" hidden><div class="workflow-heading"><span class="workflow-symbol"><svg><use href="#i-check"/></svg></span><div><p class="workflow-eyebrow">DELIVERED TO YOUR CONSOLE</p><h2 id="completion-heading">Your files have arrived.</h2><p id="completion-summary"></p></div></div><div id="completion-items"></div></section>
       </section>
 
 
@@ -382,7 +423,7 @@
             
             <div class="input-with-icon">
               <svg class="field-icon"><use href="#i-link"/></svg>
-              <input id="benchmark-url" type="url" placeholder="https://example.com/studio/Studio%20archive.pkg">
+              <input id="benchmark-url" aria-label="Download URL for speed test" type="url" placeholder="https://example.com/studio/Studio%20archive.pkg">
             </div>
 
             <div class="benchmark-controls-row">
@@ -431,10 +472,10 @@
             <div id="benchmark-result" class="benchmark-result-meta" hidden></div>
           </article>
 
-          <!-- Card 2: Mac-to-PS5 local path -->
+          <!-- Card 2: Device-to-PS5 local path -->
           <article class="card diag-card">
-            <h2>Mac-to-PS5 local path</h2>
-            <p class="card-caption">Test the speed from your Mac to the console.</p>
+            <h2>Device-to-PS5 local path</h2>
+            <p class="card-caption">Test the speed from the device running this app to the console.</p>
 
             <div class="local-choose-buttons">
               <button class="button outline small" id="add-local">
@@ -480,7 +521,7 @@
               </div>
               <div class="rec-copy">
                 <h3>Gigabit Ethernet Baseline Recommended</h3>
-                <p>Connect your Mac and PS5 over Gigabit Ethernet or 5GHz Wi-Fi for maximum sustained transfer speed.</p>
+                <p>Connect the device running this app and PS5 over Gigabit Ethernet or 5GHz Wi-Fi for maximum sustained transfer speed.</p>
               </div>
             </div>
             <div class="rec-preset-block">
@@ -492,7 +533,7 @@
                 </div>
                 <div>
                   <strong>256 MiB</strong>
-                  <small>RAM buffer</small>
+                  <small>Memory buffer (RAM)</small>
                 </div>
               </div>
             </div>
@@ -504,7 +545,7 @@
               <div class="three-columns-clean">
                 <div>
                   <h4>Ethernet Link</h4>
-                  <p>Connect both Mac and PS5 over Gigabit Ethernet to eliminate Wi-Fi interference.</p>
+                  <p>Connect the device running Direct Stream and your PS5 by Ethernet for a more stable connection.</p>
                 </div>
                 <div>
                   <h4>Parallel Streams</h4>
@@ -512,7 +553,7 @@
                 </div>
                 <div>
                   <h4>Decoupled Buffer</h4>
-                  <p>256 MiB RAM buffer prevents stalls when source download rate fluctuates.</p>
+                  <p>256 MiB Memory buffer (RAM) prevents stalls when source download rate fluctuates.</p>
                 </div>
               </div>
             </div>
@@ -554,14 +595,14 @@
             <form id="browse-form" class="files-breadcrumb-form">
               <div class="breadcrumb-pill">
                 <svg class="drive-icon"><use href="#i-folder"/></svg>
-                <input id="browse-path" value="/data/PS5Direct" spellcheck="false">
+                <input id="browse-path" aria-label="Console directory" value="/data/PS5Direct" spellcheck="false">
               </div>
               <button class="button small" type="submit" hidden>Go</button>
             </form>
 
             <div class="files-search-box">
               <svg><use href="#i-search"/></svg>
-              <input id="files-search" type="search" placeholder="Search files...">
+              <input id="files-search" aria-label="Search console files" type="search" placeholder="Search files...">
             </div>
 
             <span id="browse-message" class="browse-status-msg" style="font-size:11.5px;color:var(--muted);white-space:nowrap;">Read-only</span>
@@ -662,7 +703,7 @@
             </div>
             <div class="activity-search-box">
               <svg><use href="#i-search"/></svg>
-              <input id="activity-search-input" type="search" placeholder="Search activity...">
+              <input id="activity-search-input" aria-label="Search activity" type="search" placeholder="Search activity...">
             </div>
           </div>
 
@@ -694,13 +735,14 @@
             <h1>Settings</h1>
             <p class="page-subtitle">Configure your console connection and transfer preferences.</p>
           </div>
-        </header>
+        <button type="button" class="button outline" data-setup>Connection setup</button></header>
 
         <form id="settings-page-form" class="settings-page-container">
           <div class="settings-tabs-row" role="tablist" aria-label="Settings categories">
-            <button type="button" class="settings-tab-btn selected" data-settings-tab="all" role="tab" aria-selected="true">All Settings</button>
+            <button type="button" class="settings-tab-btn selected" data-settings-tab="all" role="tab" aria-selected="true">Overview</button>
             <button type="button" class="settings-tab-btn" data-settings-tab="connection" role="tab" aria-selected="false">Connection</button>
-            <button type="button" class="settings-tab-btn" data-settings-tab="transfers" role="tab" aria-selected="false">Transfer Engine</button>
+            <button type="button" class="settings-tab-btn" data-settings-tab="transfers" role="tab" aria-selected="false">Performance</button>
+            <button type="button" class="settings-tab-btn" data-settings-tab="unrar" role="tab" aria-selected="false">Archive extraction</button>
           </div>
 
           <!-- Section: Console Connection -->
@@ -717,7 +759,7 @@
               </div>
               <div class="form-field wide">
                 <label for="page-setting-folder">Destination directory</label>
-                <input id="page-setting-folder" value="/data/PS5Direct" required spellcheck="false">
+                <input id="page-setting-folder" value="/data/homebrew" required spellcheck="false">
               </div>
             </div>
 
@@ -731,12 +773,12 @@
             </div>
           </article>
 
-          <!-- Section: Transfer Engine -->
+          <!-- Section: Performance -->
           <article class="card settings-section-card" id="settings-transfers-section">
             <div class="card-header-row">
               <div>
                 <h2>Transfer engine</h2>
-                <p class="section-desc">Fine-tune parallel workers, RAM caching, and socket throughput.</p>
+                <p class="section-desc">Choose a preset or adjust the performance settings below.</p>
               </div>
               <div class="engine-preset-group" aria-label="Performance presets">
                 <span class="preset-label">Presets:</span>
@@ -749,7 +791,7 @@
 
             <div class="settings-form-grid engine-grid">
               <div class="form-field">
-                <label for="page-setting-streams">Parallel streams</label>
+                <label for="page-setting-streams">Parallel connections</label>
                 <select id="page-setting-streams">
                   <option value="1">1 stream · Single</option>
                   <option value="2">2 streams · Low/Wi-Fi</option>
@@ -777,7 +819,7 @@
               </div>
 
               <div class="form-field">
-                <label for="page-setting-buffer_mb">RAM buffer</label>
+                <label for="page-setting-buffer_mb">Memory buffer (RAM)</label>
                 <select id="page-setting-buffer_mb">
                   <option value="32">32 MiB · Minimal</option>
                   <option value="64">64 MiB · Standard</option>
@@ -821,7 +863,7 @@
               <div class="form-field wide">
                 <label for="page-setting-staging_dir">Archive staging directory (optional)</label>
                 <input id="page-setting-staging_dir" placeholder="Default (/tmp). Enter external SSD path e.g. /Volumes/ExternalDrive/staging" spellcheck="false">
-                <small class="field-hint">Used for unpacking .rar/.7z archives if internal Mac storage is low. Cleaned up immediately after transfer.</small>
+                <small class="field-hint">Choose a folder for temporary extraction files, such as a folder on an external drive.</small>
               </div>
 
               <div class="form-field wide toggle-row">
@@ -834,6 +876,71 @@
                   <span class="slider"></span>
                 </label>
               </div>
+            </div>
+          </article>
+
+          <!-- Section: PS5 On-Console Extraction (unrar-ps5) -->
+          <article class="card settings-section-card" id="settings-unrar-section">
+            <div class="card-header-row">
+              <div>
+                <h2>PS5 on-console extraction</h2>
+                <p class="section-desc">Send archives to the PS5 and unpack them there, without using local space for extraction.</p>
+              </div>
+              <div>
+                <span id="unrar-payload-badge" class="meta-pill pill-pkg">PAYLOAD READY</span>
+              </div>
+            </div>
+
+            <div class="settings-form-grid">
+              <div class="form-field">
+                <label for="page-setting-extract_mode">Default archive extraction mode</label>
+                <select id="page-setting-extract_mode">
+                  <option value="ps5" selected>Extract on PS5 (unrar payload · 0 GB local disk)</option>
+                  <option value="mac">Extract on this device (local staging)</option>
+                  <option value="none">Stream raw archive without extraction</option>
+                </select>
+                <small class="field-hint">Default behavior when adding archives to the queue.</small>
+              </div>
+
+              <div class="form-field">
+                <label for="page-setting-payload_port">Extraction helper port</label>
+                <input id="page-setting-payload_port" type="number" min="1" max="65535" value="9021" required>
+                <small class="field-hint">Default Extraction helper port is 9021.</small>
+              </div>
+
+              <div class="form-field wide">
+                <label for="page-setting-unrar_extract_location">PS5 extraction destination</label>
+                <input id="page-setting-unrar_extract_location" value="/data/homebrew" required spellcheck="false">
+                <small class="field-hint">Folder where unrar-ps5 unpacks packages (e.g. /data/homebrew, /data/ShadowMount, or /data/pkg).</small>
+              </div>
+
+              <div class="form-field wide toggle-row">
+                <div class="toggle-copy">
+                  <strong>Start the console extraction helper automatically</strong>
+                  <span>Sends a small program (the unrar-ps5 payload) to the console so it can unpack the uploaded archive.</span>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="page-setting-unrar_auto_payload" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+
+              <div class="form-field wide toggle-row">
+                <div class="toggle-copy">
+                  <strong>Delete archives after extraction</strong>
+                  <span>Removes uploaded archives from /data/unrar once unrar-ps5 finishes on the console.</span>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="page-setting-unrar_delete_after" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="connection-status-action-row" style="margin-top: 16px;">
+              <button type="button" id="btn-test-payload" class="button outline small">Send extraction helper</button>
+              <button type="button" id="btn-view-unrar-log" class="button outline small">View extraction log</button>
+              <span id="payload-status-msg" class="conn-sub"></span>
             </div>
           </article>
 
@@ -850,11 +957,11 @@
     <!-- Clean Studio Footer Stamp -->
     <footer class="studio-clean-footer">
       <div class="footer-sig">
-        <span>PRECISION STREAMING ARCHITECTURE</span>
+        <span>DIRECT STREAM</span>
       </div>
       <div class="footer-meta">
-        <span>DIRECT STREAM FOR PLAYSTATION 5 <b>2.9.0</b></span>
-        <span>A quieter kind of performance.</span>
+        <span>Direct Stream <b>2.9</b><span class="ui-build">Interface 3.2</span></span>
+        <span>Local connection · Direct transfer</span>
       </div>
     </footer>
   </div>
@@ -864,7 +971,7 @@
 <!-- ========================================== -->
 <!-- 06: MODAL: NEW TRANSFER                    -->
 <!-- ========================================== -->
-<dialog id="add-dialog" class="studio-modal">
+<dialog id="add-dialog" class="studio-modal" aria-label="Add">
   <form id="add-form" novalidate>
     <div class="modal-header">
       <div>
@@ -874,6 +981,7 @@
       <button type="button" class="icon-circle-btn" data-close="add-dialog" aria-label="Close new transfer">×</button>
     </div>
 
+    <div class="modal-step-label">Source</div>
     <!-- Segmented Source Switcher -->
     <div class="segmented-pill-switcher" role="group" aria-label="Transfer source type">
       <button type="button" class="selected" data-kind="url">Link</button>
@@ -891,9 +999,9 @@
       </div>
       <div class="input-with-icon">
         <svg class="field-icon"><use href="#i-link"/></svg>
-        <textarea id="source-urls" rows="2" placeholder="https://example.com/downloads/Demon_Souls.ffpfsc or .pkg / .exfat" spellcheck="false"></textarea>
+        <textarea id="source-urls" rows="2" placeholder="Paste a download link. Add multiple links on separate lines." spellcheck="false"></textarea>
       </div>
-      <div class="resolver-tag-row">
+      <details class="supported-hosts"><summary>Supported link services</summary><div class="resolver-tag-row">
         <span class="resolver-label">Auto-resolvers:</span>
         <span class="resolver-chip">AkiraBox</span>
         <span class="resolver-chip">Rootz</span>
@@ -902,7 +1010,7 @@
         <span class="resolver-chip">FileDitch</span>
         <span class="resolver-chip">Google Drive</span>
       </div>
-      <div id="url-verification-status" class="verification-status-box" hidden></div>
+      </details><div id="url-verification-status" class="verification-status-box" hidden></div>
     </div>
 
     <!-- Local Path Field -->
@@ -945,29 +1053,114 @@
       </div>
     </div>
 
+    <!-- Destination on PS5 Field with Presets -->
+    <div class="modal-field-block">
+      <div class="field-label-row">
+        <label for="modal-dest-folder">Destination</label>
+        <span class="dest-recommended-hint" id="dest-hint">Homebrew (/data/homebrew)</span>
+      </div>
+      <div class="dest-presets-row" role="group" aria-label="PS5 Destination folder preset">
+        <button type="button" class="dest-preset-btn selected" data-dest="/data/homebrew">
+          Homebrew
+        </button>
+        <button type="button" class="dest-preset-btn" data-dest="/data/ShadowMount">
+          ShadowMount
+        </button>
+        <button type="button" class="dest-preset-btn" data-dest="/data/pkg">
+          Packages (/data/pkg)
+        </button>
+        <button type="button" class="dest-preset-btn" data-dest="custom">
+          Custom
+        </button>
+      </div>
+      <div class="input-with-icon" id="dest-input-wrap">
+        <svg class="field-icon"><use href="#i-folder"/></svg>
+        <input id="modal-dest-folder" value="/data/homebrew" spellcheck="false" placeholder="/data/homebrew">
+      </div>
+    </div>
+
     <!-- Prominent Archive Extraction Mode Switcher -->
     <div id="archive-mode-block" class="modal-feature-block" hidden>
       <div class="feature-block-header">
         <div style="display: flex; align-items: center; justify-content: space-between;">
           <span class="feature-block-title">
             <svg class="feature-title-icon"><use href="#i-archive-crate"/></svg>
-            Archive Extraction
+            Archive handling
           </span>
           <span id="archive-type-pill" class="meta-pill pill-archive">ZIP ARCHIVE</span>
         </div>
-        <span class="feature-block-sub">Choose extraction method for this compressed archive</span>
+        <span class="feature-block-sub">Choose where to unpack your archive, or send it as-is.</span>
       </div>
-      <div class="segmented-pill-switcher archive-switcher" role="group" aria-label="Archive extraction mode">
-        <button type="button" id="btn-extract-on" class="selected" data-extract="true">
-          <svg class="feature-btn-icon"><use href="#i-transfer"/></svg>Extract to PS5
-        </button>
-        <button type="button" id="btn-extract-off" data-extract="false">
-          <svg class="feature-btn-icon"><use href="#i-archive-crate"/></svg>Stream Raw Archive
-        </button>
+
+      <div class="strategy-selector-grid" role="radiogroup" aria-label="Archive extraction strategy">
+        <!-- Strategy 1: PS5 (0 GB Mac Disk) -->
+        <div class="strategy-card card-ps5 selected" id="btn-extract-ps5" data-extract-mode="ps5" role="radio" aria-checked="true" tabindex="0">
+          <div class="strategy-card-top">
+            <div class="strategy-tag-row">
+              <span class="meta-pill pill-ps5-extract">RECOMMENDED</span>
+              <span class="meta-pill pill-verified">NO LOCAL DISK</span>
+            </div>
+            <span class="strategy-radio-dot"></span>
+          </div>
+          <div class="strategy-card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            Extract on PS5
+          </div>
+          <p class="strategy-desc">Unpack on your console without using local disk space. Requires the PS5 unrar payload.</p>
+          <div class="strategy-features-list">
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Zero bytes on local drive</div>
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Best for folder dumps & multiparts</div>
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Network resumable upload</div>
+          </div>
+        </div>
+
+        <!-- Strategy 2: Mac Extraction -->
+        <div class="strategy-card" id="btn-extract-mac" data-extract-mode="mac" role="radio" aria-checked="false" tabindex="0">
+          <div class="strategy-card-top">
+            <div class="strategy-tag-row">
+              <span class="meta-pill pill-archive">LOCAL ENGINE</span>
+              <span class="meta-pill pill-pkg">RAM / STAGING</span>
+            </div>
+            <span class="strategy-radio-dot"></span>
+          </div>
+          <div class="strategy-card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Extract on this device
+          </div>
+          <p class="strategy-desc">Unpack on this device. Single files stream through memory; folders need temporary disk space.</p>
+          <div class="strategy-features-list">
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Standalone files stream via RAM (0 GB disk)</div>
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Folder dumps unpack to temporary local storage</div>
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Runs without PS5 unrar payload</div>
+          </div>
+        </div>
+
+        <!-- Strategy 3: Raw Archive -->
+        <div class="strategy-card" id="btn-extract-off" data-extract-mode="none" role="radio" aria-checked="false" tabindex="0">
+          <div class="strategy-card-top">
+            <div class="strategy-tag-row">
+              <span class="meta-pill pill-disk">STORAGE ONLY</span>
+              <span class="meta-pill pill-folder">RAW FILE</span>
+            </div>
+            <span class="strategy-radio-dot"></span>
+          </div>
+          <div class="strategy-card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10M7 12h10M7 17h10"/></svg>
+            Send without extracting
+          </div>
+          <p class="strategy-desc">Send the original compressed file. Unpack it yourself later on the console.</p>
+          <div class="strategy-features-list">
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Direct raw file transfer</div>
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Remains compressed on PS5</div>
+            <div class="strategy-feature-item"><svg class="strategy-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> No payload or staging required</div>
+          </div>
+        </div>
       </div>
-      <p id="archive-mode-hint" class="field-hint" style="margin-top: 4px;">
-        Extracts inner game package to PS5 (.zip on-the-fly uses 0 GB Mac disk; .rar/.7z uses temporary staging with auto-cleanup).
-      </p>
+
+      <div class="strategy-callout" id="archive-mode-callout">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span id="archive-mode-hint">Streams directly to PS5 /data/unrar using unrar-ps5 payload with 0 GB local disk space.</span>
+      </div>
       <div id="archive-password-row" class="modal-field-block" style="margin-top: 10px;" hidden>
         <div class="field-label-row">
           <label for="archive-password">Archive Password</label>
@@ -980,29 +1173,6 @@
         <p id="password-hint-text" class="field-hint" style="margin-top: 4px;">
           Encrypted archives are unpacked locally into secure temporary staging and cleanly deleted once transferred to PS5.
         </p>
-      </div>
-    </div>
-
-    <!-- Destination on PS5 Field with Presets -->
-    <div class="modal-field-block">
-      <div class="field-label-row">
-        <label for="modal-dest-folder">Destination on PS5</label>
-        <span class="dest-recommended-hint" id="dest-hint">ShadowMount (Games)</span>
-      </div>
-      <div class="dest-presets-row" role="group" aria-label="PS5 Destination folder preset">
-        <button type="button" class="dest-preset-btn selected" data-dest="/data/ShadowMount">
-          ShadowMount
-        </button>
-        <button type="button" class="dest-preset-btn" data-dest="/data/pkg">
-          Packages (/data/pkg)
-        </button>
-        <button type="button" class="dest-preset-btn" data-dest="custom">
-          Custom
-        </button>
-      </div>
-      <div class="input-with-icon" id="dest-input-wrap">
-        <svg class="field-icon"><use href="#i-folder"/></svg>
-        <input id="modal-dest-folder" value="/data/ShadowMount" spellcheck="false" placeholder="/data/ShadowMount">
       </div>
     </div>
 
@@ -1024,7 +1194,7 @@
         </label>
         <label id="zip-decompress-option" class="studio-checkbox-label">
           <input id="decompress-zip" type="checkbox" checked>
-          <span>Extract archives into PS5 packages (.zip on-the-fly 0 GB disk; .rar/.7z staged with auto-cleanup)</span>
+          <span id="archive-extraction-label" aria-live="polite">Extract archives on PS5 (no local disk space used; requires the PS5 unrar payload)</span>
         </label>
       </div>
     </details>
@@ -1040,7 +1210,7 @@
 
 
 <!-- MODAL: SETTINGS (Dialog Fallback) -->
-<dialog id="settings-dialog" class="studio-modal">
+<dialog id="settings-dialog" class="studio-modal" aria-label="Settings">
   <form id="settings-form">
     <div class="modal-header">
       <div>
@@ -1068,7 +1238,7 @@
         <input id="setting-password" type="password" placeholder="Leave empty for anonymous">
       </div>
       <div class="form-field">
-        <label for="setting-streams">Parallel streams</label>
+        <label for="setting-streams">Parallel connections</label>
         <select id="setting-streams">
           <option value="1">1</option>
           <option value="2">2</option>
@@ -1092,7 +1262,7 @@
         </select>
       </div>
       <div class="form-field">
-        <label for="setting-buffer_mb">RAM buffer</label>
+        <label for="setting-buffer_mb">Memory buffer (RAM)</label>
         <select id="setting-buffer_mb">
           <option value="32">32 MiB</option>
           <option value="64">64 MiB</option>
@@ -1132,7 +1302,7 @@
 
 
 <!-- MODAL: UPDATE LINK -->
-<dialog id="edit-dialog" class="studio-modal">
+<dialog id="edit-dialog" class="studio-modal" aria-label="Edit">
   <form id="edit-form">
     <div class="modal-header">
       <div>
@@ -1156,14 +1326,14 @@
 
 
 <!-- MODAL: ERROR DIAGNOSTICS & PUSH -->
-<dialog id="error-dialog" class="studio-modal error-modal">
+<dialog id="error-dialog" class="studio-modal error-modal" aria-label="Error">
   <div class="modal-header">
     <div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <h2>Error Diagnostics</h2>
         <span id="error-type-badge" class="meta-pill" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3);">Error</span>
       </div>
-      <p id="error-job-name" class="modal-subtitle">Review failure details and push a bug report.</p>
+      <p id="error-job-name" class="modal-subtitle">Review what happened and the recommended next step.</p>
     </div>
     <button type="button" class="icon-circle-btn" data-close="error-dialog" aria-label="Close error diagnostics">×</button>
   </div>
@@ -1208,7 +1378,7 @@
     </div>
 
     <!-- Technical Stack Trace (Collapsible) -->
-    <details id="error-trace-details" class="error-trace-details" open style="margin-top: 14px;">
+    <details id="error-trace-details" class="error-trace-details" style="margin-top: 14px;">
       <summary class="error-trace-summary" style="cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px;">Technical stack trace & log output</summary>
       <div class="traceback-container">
         <pre><code id="error-traceback-code"></code></pre>
@@ -1223,12 +1393,41 @@
         <svg width="14" height="14" viewBox="0 0 24 24"><use href="#i-export"/></svg>Copy bug report
       </button>
       <button type="button" id="btn-push-github" class="button primary" style="background: #2563eb;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>Push to GitHub Issue
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>Open GitHub issue
       </button>
     </div>
   </div>
 </dialog>
 
+<!-- MODAL: PS5 UNRAR LOG -->
+<dialog id="unrar-log-dialog" class="studio-modal" aria-label="Unrar Log">
+  <div class="modal-header">
+    <div>
+      <h2>PS5 unrar log</h2>
+      <p class="modal-subtitle">Live output from /data/unrar/unrar.log on console</p>
+    </div>
+    <button type="button" class="icon-circle-btn" data-close="unrar-log-dialog" aria-label="Close unrar log">×</button>
+  </div>
+  <div class="modal-field-block">
+    <pre id="unrar-log-content" style="max-height: 400px; overflow-y: auto; background: var(--bg-card); padding: 12px; border-radius: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: var(--text-primary); border: 1px solid var(--border-subtle);">Loading log from PS5…</pre>
+  </div>
+  <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+    <button type="button" id="btn-refresh-unrar-log" class="button outline small">Refresh log</button>
+    <button type="button" class="button primary" data-close="unrar-log-dialog">Close</button>
+  </div>
+</dialog>
+
+<dialog id="guide-dialog" class="studio-modal" aria-labelledby="guide-title"><div class="modal-header"><div><p class="eyebrow">GETTING STARTED</p><h2 id="guide-title">From source to console.</h2></div><button type="button" class="icon-circle-btn" data-close="guide-dialog" aria-label="Close quick guide">×</button></div><ol class="guide-steps"><li><strong>Connect your PS5</strong><p>Keep this device and your console on the same network. Run an FTP server on the PS5, then enter its address and port in Settings and test the connection.</p></li><li><strong>Choose what to send</strong><p>Add a local file, a folder, or a download link. Choose your console destination. Archive options appear when an archive is detected.</p></li><li><strong>Review, then start</strong><p>Check the queue and select Start queue. Pause, resume, reorder, or inspect individual transfers from their row controls.</p></li></ol><div class="guide-note"><svg><use href="#i-link"/></svg>A wired network is a good choice for large transfers.</div><div class="modal-footer"><span class="field-hint">Shortcut: Ctrl / ⌘ K · New transfer</span><button type="button" class="button primary" data-close="guide-dialog">Got it</button></div></dialog>
+<dialog id="setup-dialog" class="studio-modal setup-dialog" aria-labelledby="setup-title">
+<form id="setup-form"><div class="modal-header"><div><p class="eyebrow">CONSOLE SETUP</p><h2 id="setup-title">A connection you can count on.</h2><p class="modal-subtitle">We’ll check the connection before you start sending files.</p></div><button type="button" class="icon-circle-btn" data-close="setup-dialog" aria-label="Close setup">×</button></div>
+<ol class="setup-stepper" aria-label="Setup progress"><li data-setup-step="0" aria-current="step">1 · Prepare</li><li data-setup-step="1">2 · Connect</li><li data-setup-step="2">3 · Check</li></ol>
+<section id="setup-prepare"><h3>Before we connect</h3><ul class="setup-checklist"><li><svg><use href="#i-link"/></svg><div><strong>Use the same network</strong><p>Your console and the device running Direct Stream must be on the same local network. Ethernet is useful for large transfers.</p></div></li><li><svg><use href="#i-ps-storage"/></svg><div><strong>Start the file server on your PS5</strong><p>Open your console’s FTP server and keep it running. Copy the IP address and port displayed there.</p></div></li></ul><details class="setup-explainer"><summary>What is an FTP server?</summary><p>It lets this app send files to your console over your network. Direct Stream cannot enable it remotely. Your PS5 needs a compatible file server already installed and running.</p></details><button type="button" id="setup-next" class="button primary">I have the address <svg><use href="#i-chevron-right"/></svg></button></section>
+<section id="setup-address" hidden><div class="settings-form-grid"><div class="form-field"><label for="setup-host">Console IP address</label><input id="setup-host" placeholder="e.g. 192.168.1.20" autocomplete="off" spellcheck="false" required><small class="field-hint">Use the address shown by the PS5 file server.</small></div><div class="form-field"><label for="setup-port">File server port</label><input id="setup-port" type="number" min="1" max="65535" required><small class="field-hint">Copy the port exactly; it varies by server.</small></div><div class="form-field wide"><label for="setup-folder">Default destination</label><input id="setup-folder" required spellcheck="false"><small class="field-hint">An absolute folder path on your PS5. You can choose a different one for each transfer.</small></div><div class="form-field"><label for="setup-username">File server username</label><input id="setup-username" autocomplete="off" placeholder="anonymous"><small class="field-hint">Use anonymous unless your server specifies a username.</small></div><div class="form-field"><label for="setup-password">File server password (optional)</label><input id="setup-password" type="password" autocomplete="new-password"><small id="setup-password-hint" class="field-hint">Leave blank if your server does not require a password.</small><label id="setup-clear-password-row" class="studio-checkbox-label" hidden><input type="checkbox" id="setup-clear-password">Remove the saved server password</label></div></div><p id="setup-error" class="form-error" role="alert"></p><div class="modal-footer"><button type="button" id="setup-back" class="button outline">Back</button><button type="submit" id="setup-test" class="button primary">Save and test connection</button></div></section>
+<section id="setup-result" hidden><div id="setup-result-icon" class="setup-result-icon"><svg><use href="#i-link"/></svg></div><h3 id="setup-result-title">Checking your console…</h3><p id="setup-result-copy" role="status" aria-live="polite">This can take a moment.</p><details id="setup-test-details" class="setup-explainer" hidden><summary>Connection details</summary><p id="setup-test-message"></p></details><p class="field-hint">This checks the file server connection. Destination permissions and archive extraction are checked separately during transfer.</p><div class="modal-footer"><button type="button" id="setup-edit" class="button outline">Edit connection</button><button type="button" id="setup-finish" class="button primary" hidden>Ready to transfer</button></div></section>
+</form></dialog>
+<dialog id="recovery-password-dialog" class="studio-modal" aria-labelledby="recovery-password-title"><form id="recovery-password-form"><div class="modal-header"><div><h2 id="recovery-password-title">Unlock this archive</h2><p id="recovery-password-name" class="modal-subtitle"></p></div><button type="button" class="icon-circle-btn" data-close="recovery-password-dialog" aria-label="Close archive password">×</button></div><div class="modal-field-block"><label for="recovery-password-input">Archive password</label><input id="recovery-password-input" type="password" autocomplete="new-password" required></div><p id="recovery-password-error" class="form-error" role="alert"></p><div class="modal-footer"><button type="button" class="button outline" data-close="recovery-password-dialog">Cancel</button><button type="submit" class="button primary">Save password and queue retry</button></div></form></dialog>
+<div id="workflow-announcement" class="sr-only" role="status" aria-live="polite"></div>
+<div id="queue-action-menu" class="queue-action-menu" role="menu" aria-label="Transfer actions" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 </body>
 </html>

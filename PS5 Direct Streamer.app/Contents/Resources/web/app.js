@@ -44,6 +44,20 @@ const activeStates = ['starting', 'running', 'retrying', 'pausing', 'cancelling'
 const bytes = n => n == null ? 'Unknown size' : n < 1e6 ? `${(n/1e3).toFixed(0)} KB` : n < 1e9 ? `${(n/1e6).toFixed(1)} MB` : `${(n/1e9).toFixed(2)} GB`;
 const duration = s => s == null || !Number.isFinite(s) ? '—' : s < 60 ? `${Math.ceil(s)}s` : s < 3600 ? `${Math.floor(s/60)}m ${Math.floor(s%60)}s` : `${Math.floor(s/3600)}h ${Math.floor(s%3600/60)}m`;
 
+function cleanJobDetail(detail) {
+  if (!detail) return '';
+  let str = String(detail).trim();
+  if (str.includes('done archive=') || str.includes('extract_ms=') || str.includes('normalize_ms=')) {
+    const tidMatch = str.match(/title_id=([A-Za-z0-9_-]+)/);
+    const tid = tidMatch ? ` (${tidMatch[1]})` : '';
+    return `Extraction complete${tid} · Cleaned up on PS5 (no local disk usage)`;
+  }
+  if (str.includes('start archive=')) {
+    return 'Extracting on PS5 (Unpacking archive...)';
+  }
+  return str;
+}
+
 function updateSoundIcon() {
   const el = $('sound-icon');
   if (el) el.innerHTML = `<use href="#${soundEnabled ? 'i-sound' : 'i-sound-mute'}"/>`;
@@ -128,11 +142,15 @@ async function perform(path, data, success) {
 
 function page(name) {
   currentPage = name;
+  const pageLabel = {transfers:'Transfers',files:'Console files',diagnostics:'Diagnostics',activity:'Activity',settings:'Settings'}[name];
+  if ($('workspace-page')) $('workspace-page').textContent = pageLabel || 'Transfers';
+  document.title = `${pageLabel || 'Transfers'} · Direct Stream`;
   document.querySelectorAll('.page').forEach(el => {
     el.hidden = el.id !== `page-${name}`;
   });
   document.querySelectorAll('.nav-item[data-page]').forEach(el => {
     el.classList.toggle('selected', el.dataset.page === name);
+    if (el.dataset.page === name) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
   });
   const crumb = $('crumb');
   if (crumb) {
@@ -176,7 +194,9 @@ function updatePipelineCalc() {
 
 function setSelectValueSafely(el, val) {
   if (!el) return;
-  if (el.tagName === 'SELECT') {
+  if (el.type === 'checkbox') {
+    el.checked = Boolean(val);
+  } else if (el.tagName === 'SELECT') {
     const strVal = String(val);
     const exists = Array.from(el.options).some(o => o.value === strVal);
     if (!exists && val !== undefined && val !== null && val !== '') {
@@ -199,6 +219,15 @@ function populateSettingsInputs() {
     const pageInput = $('page-setting-' + k);
     if (pageInput && document.activeElement !== pageInput) setSelectValueSafely(pageInput, v);
   }
+  if ($('unrar-payload-badge')) {
+    if (state.unrar_payload_available) {
+      $('unrar-payload-badge').textContent = 'PAYLOAD READY (v1.4.0)';
+      $('unrar-payload-badge').className = 'meta-pill pill-pkg';
+    } else {
+      $('unrar-payload-badge').textContent = 'PAYLOAD MISSING';
+      $('unrar-payload-badge').className = 'meta-pill pill-archive';
+    }
+  }
   updatePipelineCalc();
 }
 
@@ -206,6 +235,7 @@ function selectKind(kind) {
   sourceKind = kind;
   document.querySelectorAll('[data-kind]').forEach(el => {
     el.classList.toggle('selected', el.dataset.kind === kind);
+    el.setAttribute('aria-pressed', String(el.dataset.kind === kind));
   });
   if ($('url-fields')) $('url-fields').hidden = sourceKind !== 'url';
   if ($('local-fields')) $('local-fields').hidden = sourceKind === 'url';
@@ -234,6 +264,10 @@ function selectKind(kind) {
 
 function openAdd(kind='url') {
   selectKind(kind);
+  setArchiveExtractMode(state?.settings?.extract_mode || 'ps5');
+  if (!$('modal-dest-folder')?.value.trim()) {
+    setDestPreset(state?.settings?.folder || '/data/homebrew');
+  }
   if ($('add-error')) $('add-error').textContent = '';
   if (typeof resetVerifyStatus === 'function') resetVerifyStatus();
   if ($('add-dialog')) $('add-dialog').showModal();
@@ -273,7 +307,8 @@ function updateBulkBar() {
   }
   const selectAll = $('select-all');
   if (selectAll && state) {
-    const valid = state.jobs.filter(j => j.state !== 'completed');
+    const valid = state.jobs.filter(j => j.state !== 'completed' && (!window.matchesTransfer || window.matchesTransfer(j)));
+    selectAll.indeterminate = valid.some(j => selectedJobs.has(j.id)) && !valid.every(j => selectedJobs.has(j.id));
     selectAll.checked = valid.length > 0 && valid.every(j => selectedJobs.has(j.id));
   }
 }
@@ -355,6 +390,11 @@ function parseJobVisuals(job) {
 }
 
 function row(job, index) {
+  const v = parseJobVisuals(job);
+  const isMulti = job.kind === 'multipart';
+  const partsCount = (job.parts && job.parts.length) || 2;
+  const isArchive = ['zip', 'zip64', 'rar', '7z', 'tar', 'gz'].includes(v.tag.toLowerCase()) || job.is_zip || job.is_archive || !!job.archive_info;
+
   const pct = job.state === 'completed' ? 100 : (job.total ? Math.min(100, (job.transferred || 0) / job.total * 100) : 0);
   const isActive = activeStates.includes(job.state);
   let primary = '';
@@ -368,24 +408,28 @@ function row(job, index) {
     }
   } else if (job.state === 'queued') {
     primary = `<button class="button small outline" data-job="${job.id}" data-action="pause">Pause</button>`;
+  } else if (job.state === 'completed') {
+    primary = isArchive
+      ? `<button class="button small quiet" data-job="${job.id}" data-action="view_unrar_log" title="View PS5 extraction log">Log</button>`
+      : `<button class="button small quiet" data-job="${job.id}" data-action="restart" title="Restart transfer from beginning">Restart</button>`;
   }
-
-  const v = parseJobVisuals(job);
-  const isMulti = job.kind === 'multipart';
-  const partsCount = (job.parts && job.parts.length) || 2;
-  const isArchive = ['zip', 'zip64', 'rar', '7z', 'tar', 'gz'].includes(v.tag.toLowerCase()) || job.is_zip || job.is_archive || !!job.archive_info;
 
   let menu = `<button data-job="${job.id}" data-action="up">Move up</button><button data-job="${job.id}" data-action="down">Move down</button>`;
   if (job.kind === 'url' && !isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="edit">Update link</button>`;
-  if (isArchive && !isActive && job.state !== 'completed') {
-    const isExtracting = job.decompress !== false;
-    menu += `<button data-job="${job.id}" data-action="toggle_extract">${isExtracting ? 'Disable extraction (Stream raw archive)' : 'Enable extraction (Decompress to PS5)'}</button>`;
-    menu += `<button data-job="${job.id}" data-action="prompt_password">${job.archive_password ? 'Edit archive password' : 'Set archive password'}</button>`;
+  if (isArchive && !isActive) {
+    if (job.state !== 'completed') {
+      menu += `<button data-job="${job.id}" data-action="set_extract_ps5">Extract on PS5 (no local disk usage)</button>`;
+      menu += `<button data-job="${job.id}" data-action="set_extract_mac">Extract on this device (Staging)</button>`;
+      menu += `<button data-job="${job.id}" data-action="set_extract_none">Stream raw archive (No extract)</button>`;
+      menu += `<button data-job="${job.id}" data-action="prompt_password">${job.archive_password ? 'Edit archive password' : 'Set archive password'}</button>`;
+      menu += `<button data-job="${job.id}" data-action="trigger_payload">Trigger PS5 unrar payload (Port 9021)</button>`;
+    }
+    menu += `<button data-job="${job.id}" data-action="view_unrar_log">View PS5 unrar log</button>`;
   }
   if (job.state === 'failed' || job.error_info) {
     menu += `<button data-job="${job.id}" data-action="view_error">View error report & push</button>`;
   }
-  if (!isActive && job.state !== 'completed') menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
+  if (!isActive) menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
   if (job.state !== 'completed' && job.state !== 'cancelled') menu += `<button data-job="${job.id}" data-action="cancel">Cancel transfer</button>`;
   if (!isActive && job.state !== 'completed' && index + 1 < (state.jobs || []).length) {
     menu += `<button data-job="${job.id}" data-action="merge_next">Merge with next part</button>`;
@@ -393,39 +437,21 @@ function row(job, index) {
   if (!isActive) menu += `<button data-job="${job.id}" data-action="remove">Remove from queue</button>`;
 
   const isChecked = selectedJobs.has(job.id);
-  const statusLabel = job.state === 'running' ? 'Transferring' : job.state === 'completed' ? 'Verified' : job.state[0].toUpperCase() + job.state.slice(1);
-  const statusDotClass = (job.state === 'running' || job.state === 'completed') ? 'green' : job.state === 'failed' ? 'error' : '';
-  const statusDotStyle = job.state === 'queued' ? 'background: #1668e3;' : job.state === 'paused' ? 'background: #f59e0b;' : '';
+  const cleanDet = cleanJobDetail(job.detail);
+  const isExtracting = job.state === 'running' && cleanDet && cleanDet.toLowerCase().includes('extracting on ps5');
+  const extractPctMatch = isExtracting && cleanDet.match(/(\d+)%/);
+  const extractPct = extractPctMatch ? parseInt(extractPctMatch[1], 10) : null;
+  const displayPct = (isExtracting && extractPct !== null) ? extractPct : pct;
+  const statusLabel = isExtracting
+    ? (extractPct !== null ? `Extracting ${extractPct}%` : 'PS5 Extracting')
+    : (job.state === 'running' ? 'Transferring' : job.state === 'completed' ? 'Verified' : job.state[0].toUpperCase() + job.state.slice(1));
+  const statusDotClass = isExtracting ? 'blue' : ((job.state === 'running' || job.state === 'completed') ? 'green' : job.state === 'failed' ? 'error' : '');
+  const statusDotStyle = isExtracting ? 'background: #0070d1; box-shadow: 0 0 8px rgba(0,112,209,0.8);' : (job.state === 'queued' ? 'background: #1668e3;' : job.state === 'paused' ? 'background: #f59e0b;' : '');
 
-  let cardHtml = `
-    <div class="ps-game-card ${v.cardClass}" title="${v.formatLabel}">
-      <div class="card-glass-shine"></div>
-      <span class="card-plat-pill">${v.platform}</span>
-      <div class="card-icon-center">
-        <svg class="card-vector"><use href="${v.iconHref}"/></svg>
-      </div>
-      <span class="card-fmt-pill">${v.tag}</span>
-    </div>
-  `;
-
-  if (isMulti) {
-    cardHtml = `
-      <div class="card-stack-wrapper" title="${partsCount} parts stacked: merging into ${escaped(job.name)}">
-        <div class="ps-game-card ${v.cardClass} card-stack">
-          <div class="card-glass-shine"></div>
-          <span class="card-plat-pill">${v.platform}</span>
-          <div class="card-icon-center">
-            <svg class="card-vector"><use href="${v.iconHref}"/></svg>
-          </div>
-          <span class="card-fmt-pill">${v.tag}</span>
-          <span class="card-stack-badge">${partsCount}P</span>
-        </div>
-      </div>
-    `;
-  }
+  const cardHtml = `<div class="file-glyph" title="${escaped(v.formatLabel)}" aria-hidden="true"><svg><use href="${v.iconHref}"/></svg>${isMulti ? `<span>${partsCount}</span>` : ''}</div>`;
 
   return `<tr data-job-id="${job.id}" data-index="${index}" class="${isActive ? 'row-active' : ''}">
-    <td class="col-chk"><input type="checkbox" class="row-select" data-id="${job.id}" ${isChecked ? 'checked' : ''}></td>
+    <td class="col-chk"><input type="checkbox" class="row-select" aria-label="Select ${escaped(job.name)}" data-id="${job.id}" ${isChecked ? 'checked' : ''}></td>
     <td class="col-num">${index + 1}</td>
     <td>
       <div class="queue-name">
@@ -434,7 +460,7 @@ function row(job, index) {
           <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
             <strong class="game-title-text" title="${escaped(v.rawName)}">${escaped(v.cleanTitle)}</strong>
             ${v.titleId ? `<span class="id-badge">${v.titleId}</span>` : ''}
-            <span class="meta-pill ${v.pillClass}">${v.tag}</span>
+            <span class="file-type-label">${v.tag}</span>
             ${job.kind === 'folder' ? `<span class="meta-pill pill-folder">${job.files_count ? job.files_count + ' files' : 'Folder'}</span>` : ''}
             ${isMulti ? `
               <button type="button" class="stack-expand-btn" data-toggle-stack="${job.id}" title="Inspect all ${partsCount} parts">
@@ -443,7 +469,13 @@ function row(job, index) {
                 <svg class="stack-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
               </button>
             ` : ''}
-            ${isArchive ? `<span class="meta-pill ${job.decompress !== false ? 'pill-archive' : 'pill-disk'}">${job.decompress !== false ? 'Extract' : 'Raw'}</span>` : ''}
+            ${isArchive ? (
+              job.extract_mode === 'none' || job.decompress === false
+                ? '<span class="meta-pill pill-disk">Raw Archive</span>'
+                : (job.extract_mode === 'mac' || job.staged_extraction
+                    ? '<span class="meta-pill pill-archive">Extract locally</span>'
+                    : '<span class="meta-pill pill-ps5-extract">Extract on PS5</span>')
+            ) : ''}
             ${job.archive_encrypted ? (
               job.archive_password
                 ? `<span class="meta-pill pill-pwd-ready" data-job="${job.id}" data-action="prompt_password" title="Archive password configured (click to edit)">Password Set</span>`
@@ -452,14 +484,14 @@ function row(job, index) {
           </div>
           <div class="game-sub-text">
             <span>${v.formatLabel}</span>
-            ${job.detail ? `<span style="opacity: 0.5;">·</span><span>${escaped(job.detail)}</span>` : ''}
-            ${job.state === 'failed' ? `<button type="button" class="error-details-pill" data-job="${job.id}" data-action="view_error" title="Click to view error diagnostics and push report"><svg width="10" height="10" viewBox="0 0 24 24"><use href="#i-alert"/></svg>Diagnostics & Push</button>` : ''}
+            ${cleanDet ? `<span style="opacity: 0.5;">·</span><span>${escaped(cleanDet)}</span>` : ''}
+            ${job.state === 'failed' ? `<button type="button" class="error-details-pill" data-job="${job.id}" data-action="view_error" title="Click to view error diagnostics and push report"><svg width="10" height="10" viewBox="0 0 24 24"><use href="#i-alert"/></svg>View details</button>` : ''}
           </div>
           ${isMulti ? `
             <div class="stack-parts-panel" id="stack-panel-${job.id}" hidden>
               <div class="stack-panel-header">
                 <span class="stack-panel-title">Merged Stream: ${escaped(job.name)}</span>
-                <span class="stack-panel-dest">PS5 target: ${escaped(job.folder || '/data/ShadowMount')}</span>
+                <span class="stack-panel-dest">PS5 target: ${escaped(job.folder || state?.settings?.folder || '/data/homebrew')}</span>
               </div>
               <div class="stack-parts-grid">
                 ${(job.parts || []).map((p, pIdx) => `
@@ -478,8 +510,8 @@ function row(job, index) {
     <td>${job.total ? bytes(job.total) : '—'}</td>
     <td>
       <div class="row-progress">
-        <div class="row-track"><div style="width: ${pct}%;"></div></div>
-        <span>${pct.toFixed(0)}%</span>
+        <div class="row-track ${job.state === 'completed' ? 'completed' : ''}"><div data-width="${displayPct}"></div></div>
+        <span class="${job.state === 'completed' ? 'green-percent' : ''}">${isExtracting ? (extractPct !== null ? `${extractPct}% (PS5)` : 'Extracting') : pct.toFixed(0) + '%'}</span>
       </div>
     </td>
     <td>
@@ -491,10 +523,8 @@ function row(job, index) {
     <td class="right">
       <div class="row-actions" style="display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px;">
         ${primary}
-        <details>
-          <summary aria-label="More actions for ${escaped(job.name)}" class="icon-btn tiny">···</summary>
-          <div class="action-menu">${menu}</div>
-        </details>
+        <button type="button" class="icon-btn tiny queue-menu-trigger" data-menu-job="${job.id}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${escaped(job.name)}">···</button>
+        <template data-menu-template="${job.id}">${menu}</template>
       </div>
     </td>
   </tr>`;
@@ -799,12 +829,14 @@ function renderBenchmarkResult(d) {
 
 function render(s) {
   state = s;
+  window.updateExperience?.(s);
+  window.renderWorkflow?.(s);
   const jobs = s.jobs;
   const active = jobs.find(j => j.id === s.active);
   const m = s.metrics || {};
   const pending = jobs.filter(j => !['completed', 'cancelled'].includes(j.state)).length;
 
-  $('live-panel')?.classList.toggle('is-idle', !active || active.state !== 'running');
+  $('live-panel')?.classList.toggle('is-idle', !active);
 
   // Sound chime detection on completed jobs
   const completedJobs = new Set(jobs.filter(j => j.state === 'completed').map(j => j.id));
@@ -847,7 +879,7 @@ function render(s) {
   if ($('pipeline-settings')) $('pipeline-settings').textContent = `${s.settings.streams} streams · ${s.settings.buffer_mb} MiB RAM`;
   let modeDesc = 'Direct stream · async buffers';
   if (active?.staged_extraction || (active?.is_archive && active?.decompress !== false)) {
-    modeDesc = 'Staged Extraction · Decrypt & unpack to /data/ShadowMount';
+    modeDesc = `Staged Extraction · Decrypt & unpack to ${active?.folder || active?.unrar_extract_location || '/data/homebrew'}`;
   } else if (active?.kind === 'folder') {
     modeDesc = 'Local directory · Recursive folder transfer';
   } else if (active?.kind === 'local') {
@@ -878,6 +910,7 @@ function render(s) {
         : '<svg viewBox="0 0 24 24"><use href="#i-play"/></svg>';
       livePause.disabled = active.state === 'pausing' || active.state === 'cancelling';
       livePause.title = active.state === 'running' ? 'Pause transfer' : 'Resume transfer';
+      livePause.setAttribute('aria-label', livePause.title);
       livePause.onclick = () => perform('action', { action: active.state === 'running' ? 'pause' : 'resume', id: active.id });
     } else {
       livePause.hidden = true;
@@ -898,12 +931,17 @@ function render(s) {
   if (active) {
     if ($('active-name')) $('active-name').textContent = active.name;
     const st = active.state;
-    const det = (active.detail || '').toLowerCase();
+    const cleanDet = cleanJobDetail(active.detail);
+    const det = cleanDet.toLowerCase();
+    const isExtracting = st === 'running' && det.includes('extracting');
+    const extractPctMatch = isExtracting && cleanDet.match(/(\d+)%/);
+    const extractPct = extractPctMatch ? parseInt(extractPctMatch[1], 10) : null;
+
     if (stateBadge) {
       let badgeLabel = st === 'running' ? 'Transferring' : st === 'completed' ? 'Verified' : st[0].toUpperCase() + st.slice(1);
       let badgeClass = st === 'running' ? 'transferring' : st;
-      if (st === 'running' && det.includes('extracting')) {
-        badgeLabel = 'Extracting';
+      if (isExtracting) {
+        badgeLabel = extractPct !== null ? `Extracting (${extractPct}%)` : 'Extracting';
         badgeClass = 'extracting';
       } else if (st === 'running' && det.includes('downloading')) {
         badgeLabel = 'Downloading';
@@ -912,20 +950,36 @@ function render(s) {
       stateBadge.textContent = badgeLabel;
       stateBadge.className = 'status-badge ' + badgeClass;
     }
-    const pct = active.state === 'completed' ? 100 : (active.total ? Math.min(100, (active.transferred || 0) / active.total * 100) : 0);
-    if ($('progress-fill')) $('progress-fill').style.width = pct + '%';
-    if ($('main-progress')) $('main-progress').setAttribute('aria-valuenow', pct.toFixed(1));
-    if ($('progress-percent')) $('progress-percent').textContent = active.total ? pct.toFixed(0) + '%' : (active.state === 'completed' ? '100%' : '—');
+    const basePct = active.state === 'completed' ? 100 : (active.total ? Math.min(100, (active.transferred || 0) / active.total * 100) : 0);
+    const displayHeroPct = (isExtracting && extractPct !== null) ? extractPct : basePct;
+
+    if ($('progress-fill')) $('progress-fill').style.width = displayHeroPct + '%';
+    if ($('main-progress')) $('main-progress').setAttribute('aria-valuenow', displayHeroPct.toFixed(1));
+    if ($('progress-percent')) {
+      if (isExtracting && extractPct !== null) {
+        $('progress-percent').textContent = `${extractPct}% (PS5)`;
+      } else {
+        $('progress-percent').textContent = active.total ? basePct.toFixed(0) + '%' : (active.state === 'completed' ? '100%' : '—');
+      }
+    }
     const transferredBytes = active.state === 'completed' && active.total ? active.total : (active.transferred || 0);
-    if ($('progress-bytes')) $('progress-bytes').textContent = `${bytes(transferredBytes)} of ${bytes(active.total)}`;
+    if ($('progress-bytes')) {
+      if (isExtracting) {
+        const unpMatch = cleanDet.match(/(\d+(?:\.\d+)?\s*(?:GB|MB|KB))\s*unpacked/i);
+        const unpStr = unpMatch ? `${unpMatch[1]} unpacked on PS5` : 'Decompressing on PS5';
+        $('progress-bytes').textContent = `${unpStr} · ${bytes(active.total)} uploaded`;
+      } else {
+        $('progress-bytes').textContent = `${bytes(transferredBytes)} of ${bytes(active.total)}`;
+      }
+    }
     if ($('live-speed-heading')) $('live-speed-heading').hidden = false;
 
-    if (active.detail) {
+    if (cleanDet) {
       if (phaseBar && phaseText) {
         phaseBar.hidden = false;
-        phaseText.textContent = active.detail;
+        phaseText.textContent = cleanDet;
         let pCls = 'streaming';
-        if (det.includes('extracting')) pCls = 'extracting';
+        if (isExtracting) pCls = 'extracting';
         else if (det.includes('downloading')) pCls = 'downloading';
         else if (det.includes('complete') || st === 'completed') pCls = 'completed';
         else if (st === 'failed') pCls = 'failed';
@@ -937,38 +991,125 @@ function render(s) {
   } else {
     if (phaseBar) phaseBar.hidden = true;
     const next = jobs.find(j => j.state === 'queued');
+    const allCompleted = jobs.length > 0 && jobs.every(j => j.state === 'completed');
     if (next) {
       if ($('active-name')) $('active-name').textContent = next.name;
       if (stateBadge) {
         stateBadge.textContent = 'Queued';
         stateBadge.className = 'status-badge queued';
       }
-      if ($('progress-fill')) $('progress-fill').style.width = '0%';
+      if ($('progress-fill')) {
+        $('progress-fill').style.width = '0%';
+        $('progress-fill').style.background = '';
+      }
       if ($('main-progress')) $('main-progress').setAttribute('aria-valuenow', '0');
       if ($('progress-percent')) $('progress-percent').textContent = '0%';
       if ($('progress-bytes')) $('progress-bytes').textContent = next.total ? `0 of ${bytes(next.total)}` : 'Ready to start';
+    } else if (allCompleted) {
+      const totalVerifiedBytes = jobs.reduce((acc, j) => acc + (j.total || j.transferred || 0), 0);
+      if ($('active-name')) $('active-name').textContent = jobs.length === 1 ? `${jobs[0].name}` : 'All transfers verified on PS5';
+      if (stateBadge) {
+        stateBadge.textContent = 'All Verified';
+        stateBadge.className = 'status-badge verified';
+      }
+      if ($('progress-fill')) {
+        $('progress-fill').style.width = '100%';
+        $('progress-fill').style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+      }
+      if ($('main-progress')) $('main-progress').setAttribute('aria-valuenow', '100');
+      if ($('progress-percent')) {
+        $('progress-percent').textContent = '100%';
+        $('progress-percent').className = 'green-percent';
+      }
+      if ($('progress-bytes')) $('progress-bytes').textContent = `${bytes(totalVerifiedBytes)} ready on PlayStation 5`;
     } else {
       if ($('active-name')) $('active-name').textContent = 'No active transfer';
       if (stateBadge) {
-        stateBadge.textContent = jobs.length > 0 ? 'Paused' : 'Idle';
+        stateBadge.textContent = jobs.some(j => j.state === 'paused') ? 'Paused' : 'Idle';
         stateBadge.className = 'status-badge idle';
       }
-      if ($('progress-fill')) $('progress-fill').style.width = '0%';
+      if ($('progress-fill')) {
+        $('progress-fill').style.width = '0%';
+        $('progress-fill').style.background = '';
+      }
       if ($('main-progress')) $('main-progress').setAttribute('aria-valuenow', '0');
-      if ($('progress-percent')) $('progress-percent').textContent = '0%';
-      if ($('progress-bytes')) $('progress-bytes').textContent = jobs.length > 0 ? 'All transfers completed' : 'Queue is empty';
+      if ($('progress-percent')) {
+        $('progress-percent').textContent = '0%';
+        $('progress-percent').className = 'blue-percent';
+      }
+      if ($('progress-bytes')) $('progress-bytes').textContent = jobs.length > 0 ? 'Queue is paused' : 'Queue is empty';
     }
   }
 
-  if ($('active-detail')) $('active-detail').textContent = active?.detail || (jobs.some(j => j.state === 'queued') ? 'Your queue is ready. Press Start queue to stream.' : 'Paste a download link above or drag package files directly onto this window.');
+  const cleanActiveDet = cleanJobDetail(active?.detail);
+  const isActExtracting = active && active.state === 'running' && cleanActiveDet.toLowerCase().includes('extracting');
+  const speedMatch = isActExtracting && cleanActiveDet.match(/(\d+(?:\.\d+)?\s*(?:MB|KB|GB)\/s)/i);
+  const allCompleted = !active && jobs.length > 0 && jobs.every(j => j.state === 'completed');
 
-  const upMb = m.upload_bps != null ? (m.upload_bps / 1e6).toFixed(1) : '0.0';
-  const downMb = m.download_bps != null ? (m.download_bps / 1e6).toFixed(1) : '0.0';
-  if ($('upload-speed')) $('upload-speed').textContent = upMb;
-  if ($('upload-speed-display')) $('upload-speed-display').textContent = upMb;
-  if ($('download-speed')) $('download-speed').textContent = downMb;
-  if ($('eta')) $('eta').textContent = active ? duration(m.eta) : '—';
-  if ($('bottleneck')) $('bottleneck').textContent = m.bottleneck || 'Optimal path';
+  let defaultActiveDetail = 'Paste a download link above or drag package files directly onto this window.';
+  if (allCompleted) {
+    defaultActiveDetail = `${jobs.length} transfer${jobs.length > 1 ? 's' : ''} verified on PlayStation 5 SSD. Ready for new transfers.`;
+  } else if (jobs.some(j => j.state === 'queued')) {
+    defaultActiveDetail = 'Your queue is ready. Press Start queue to stream.';
+  }
+
+  if ($('active-detail')) $('active-detail').textContent = cleanActiveDet || defaultActiveDetail;
+
+  let upVal = '0.0';
+  let upUnit = ' MB/s';
+  let consoleVal = '0.0';
+  let consoleUnit = ' MB/s';
+  let sourceVal = '0.0';
+  let sourceUnit = ' MB/s';
+  let etaText = '—';
+
+  if (allCompleted) {
+    upVal = 'Verified';
+    upUnit = '';
+    consoleVal = '0.0';
+    consoleUnit = ' MB/s';
+    sourceVal = '0.0';
+    sourceUnit = ' MB/s';
+    etaText = '';
+  } else if (isActExtracting) {
+    if (speedMatch) {
+      upVal = speedMatch[1].replace(/\s*(?:MB|KB|GB)\/s/i, '');
+      const sm = speedMatch[1].match(/(?:MB|KB|GB)\/s/i);
+      upUnit = sm ? (' ' + sm[0]) : ' MB/s';
+    } else {
+      upVal = 'Unpacking';
+      upUnit = '';
+    }
+    consoleVal = 'PS5 SSD';
+    consoleUnit = '';
+    sourceVal = 'Direct';
+    sourceUnit = '';
+    etaText = active ? duration(m.eta) : '—';
+  } else if (active) {
+    upVal = m.upload_bps != null ? (m.upload_bps / 1e6).toFixed(1) : '0.0';
+    upUnit = ' MB/s';
+    consoleVal = upVal;
+    consoleUnit = ' MB/s';
+    sourceVal = m.download_bps != null ? (m.download_bps / 1e6).toFixed(1) : '0.0';
+    sourceUnit = ' MB/s';
+    etaText = duration(m.eta);
+  }
+
+  if ($('upload-speed')) $('upload-speed').textContent = upVal;
+  if ($('upload-speed-unit')) $('upload-speed-unit').textContent = upUnit;
+  if ($('upload-speed-display')) $('upload-speed-display').textContent = consoleVal;
+  if ($('console-stat-unit')) $('console-stat-unit').textContent = consoleUnit;
+  if ($('download-speed')) $('download-speed').textContent = sourceVal;
+  if ($('source-stat-unit')) $('source-stat-unit').textContent = sourceUnit;
+  if ($('eta')) $('eta').textContent = etaText;
+  if ($('live-speed-heading')) {
+    if (allCompleted) {
+      $('live-speed-heading').classList.add('verified');
+    } else {
+      $('live-speed-heading').classList.remove('verified');
+    }
+  }
+  if ($('bottleneck')) $('bottleneck').textContent = isActExtracting ? 'PS5 Hardware Decompressor' : (allCompleted ? 'PS5 SSD Verified' : (m.bottleneck || 'Optimal path'));
 
   if ($('buffer-value')) $('buffer-value').textContent = `${Math.max(0, (m.buffered || 0) / 1048576).toFixed(0)} / ${s.settings.buffer_mb} MiB`;
   if ($('buffer-fill')) $('buffer-fill').style.width = Math.min(100, (m.buffered || 0) / (s.settings.buffer_mb * 1048576) * 100) + '%';
@@ -992,10 +1133,10 @@ function render(s) {
     quickStartBtn.disabled = diagnosticBusy || (!isRunning && !hasActive && !hasQueued);
     if (isRunning || (active && active.state === 'running')) {
       quickStartBtn.className = 'button outline small';
-      quickStartBtn.innerHTML = '<svg><use href="#i-pause"/></svg><span id="quick-start-label">Pause Queue</span>';
+      quickStartBtn.innerHTML = '<svg><use href="#i-pause"/></svg><span id="quick-start-label">Pause queue</span>';
     } else {
       quickStartBtn.className = 'button primary small';
-      quickStartBtn.innerHTML = '<svg><use href="#i-play"/></svg><span id="quick-start-label">Start Queue</span>';
+      quickStartBtn.innerHTML = '<svg><use href="#i-play"/></svg><span id="quick-start-label">Start queue</span>';
     }
   }
 
@@ -1023,13 +1164,14 @@ function render(s) {
   }
 
   const signature = JSON.stringify(jobs.map(j => [j.id, j.state, j.name, j.detail, j.total, Math.floor(j.transferred / 1e6)]));
-  if (signature !== queueSignature && !$('queue-body').querySelector('details[open]') && !$('queue-body').contains(document.activeElement)) {
+  if (signature !== queueSignature && !document.querySelector('#queue-action-menu:not([hidden])') && !$('queue-body').contains(document.activeElement)) {
     queueSignature = signature;
     $('queue-body').innerHTML = jobs.map(row).join('');
     $('queue-body').querySelectorAll('[data-width]').forEach(el => {
       el.style.width = el.dataset.width + '%';
     });
     bindQueueEvents();
+    window.filterTransferQueue?.();
     updateBulkBar();
   }
 
@@ -1167,6 +1309,11 @@ async function poll() {
     $('offline-banner').hidden = true;
   } catch (e) {
     $('offline-banner').hidden = false;
+    window.workflowDisconnected?.();
+    if ($('device-name')) $('device-name').textContent = 'App disconnected';
+    if ($('overview-connection')) $('overview-connection').textContent = 'App disconnected';
+    if ($('connection-dot')) $('connection-dot').className = 'dot error';
+    if ($('mobile-connection-dot')) $('mobile-connection-dot').className = 'dot error';
     $('offline-banner').textContent = token
       ? `Connection to the app was lost. ${e.message}`
       : 'Launch DIRECT STREAM FOR PLAYSTATION 5 from its launcher (or run "ps5" in Termux) to connect.';
@@ -1204,6 +1351,33 @@ async function jobAction(action, id) {
     if (r) toast(val.trim() ? 'Archive password configured' : 'Archive password cleared');
     return;
   }
+  if (action === 'set_extract_ps5') {
+    if (!job) return;
+    const r = await perform('action', { action: 'set_extract_mode', id, extract_mode: 'ps5' });
+    if (r) toast('Set to PS5 extraction (no local disk usage)');
+    return;
+  }
+  if (action === 'set_extract_mac') {
+    if (!job) return;
+    const r = await perform('action', { action: 'set_extract_mode', id, extract_mode: 'mac' });
+    if (r) toast('Set to temporary local storage extraction');
+    return;
+  }
+  if (action === 'set_extract_none') {
+    if (!job) return;
+    const r = await perform('action', { action: 'set_extract_mode', id, extract_mode: 'none' });
+    if (r) toast('Extraction disabled (Stream raw archive)');
+    return;
+  }
+  if (action === 'trigger_payload') {
+    const r = await perform('action', { action: 'trigger_unrar_payload', id });
+    if (r) toast(r.message || 'unrar-ps5 payload sent to console');
+    return;
+  }
+  if (action === 'view_unrar_log') {
+    openUnrarLogDialog();
+    return;
+  }
   if (action === 'edit') {
     editId = id;
     $('edit-source').value = job.source;
@@ -1233,6 +1407,7 @@ document.addEventListener('click', async e => {
   if (el.dataset.close) $(el.dataset.close).close();
   if (el.dataset.kind) selectKind(el.dataset.kind);
   if (el.dataset.action) {
+    window.closeQueueMenu?.(false);
     el.closest('details')?.removeAttribute('open');
     await jobAction(el.dataset.action, el.dataset.job);
     el.blur?.();
@@ -1318,7 +1493,8 @@ function detectMultipartSequence(items) {
   return [true, parsed[0].base, parsed.map(p => p.item)];
 }
 
-let modalExtractMode = true;
+let modalExtractMode = 'ps5';
+let lastEnabledExtractMode = 'ps5';
 
 function setDestPreset(dest) {
   const input = $('modal-dest-folder');
@@ -1327,7 +1503,10 @@ function setDestPreset(dest) {
   buttons.forEach(b => {
     b.classList.toggle('selected', b.dataset.dest === dest);
   });
-  if (dest === '/data/ShadowMount') {
+  if (dest === '/data/homebrew') {
+    if (input) input.value = '/data/homebrew';
+    if (hint) hint.textContent = 'Homebrew (/data/homebrew)';
+  } else if (dest === '/data/ShadowMount') {
     if (input) input.value = '/data/ShadowMount';
     if (hint) hint.textContent = 'ShadowMount (Games & PFS Images)';
   } else if (dest === '/data/pkg') {
@@ -1349,7 +1528,10 @@ $('modal-dest-folder')?.addEventListener('input', e => {
   const val = e.target.value.trim();
   const buttons = document.querySelectorAll('.dest-preset-btn');
   const hint = $('dest-hint');
-  if (val === '/data/ShadowMount') {
+  if (val === '/data/homebrew') {
+    buttons.forEach(b => b.classList.toggle('selected', b.dataset.dest === '/data/homebrew'));
+    if (hint) hint.textContent = 'Homebrew (/data/homebrew)';
+  } else if (val === '/data/ShadowMount') {
     buttons.forEach(b => b.classList.toggle('selected', b.dataset.dest === '/data/ShadowMount'));
     if (hint) hint.textContent = 'ShadowMount (Games & PFS Images)';
   } else if (val === '/data/pkg') {
@@ -1361,30 +1543,76 @@ $('modal-dest-folder')?.addEventListener('input', e => {
   }
 });
 
-function setArchiveExtractMode(enabled) {
-  modalExtractMode = !!enabled;
-  if (modalExtractMode) {
-    $('btn-extract-on')?.classList.add('selected');
-    $('btn-extract-off')?.classList.remove('selected');
-    if ($('decompress-zip')) $('decompress-zip').checked = true;
-    const hint = $('archive-mode-hint');
-    if (hint) hint.textContent = 'Decompresses inner game package (.pkg / .ffpfsc) on-the-fly directly to PS5 with 0 GB Mac disk space.';
-  } else {
-    $('btn-extract-off')?.classList.add('selected');
-    $('btn-extract-on')?.classList.remove('selected');
-    if ($('decompress-zip')) $('decompress-zip').checked = false;
-    const hint = $('archive-mode-hint');
-    if (hint) hint.textContent = 'Transfers raw intact archive directly to PS5 without extraction.';
+function setArchiveExtractMode(mode) {
+  modalExtractMode = ['ps5', 'mac', 'none'].includes(mode) ? mode : 'ps5';
+  if (modalExtractMode !== 'none') lastEnabledExtractMode = modalExtractMode;
+  const extractionLabel = $('archive-extraction-label');
+  if (extractionLabel) extractionLabel.textContent = {
+    ps5: 'Extract archives on PS5 (no local disk space used; requires the PS5 unrar payload)',
+    mac: 'Extract archives on this computer (single files stream through RAM; folders use temporary disk space)',
+    none: 'Extraction off — send the archive unchanged. Check to enable extraction.'
+  }[modalExtractMode];
+  const btnPs5 = $('btn-extract-ps5');
+  const btnMac = $('btn-extract-mac');
+  const btnOff = $('btn-extract-off');
+
+  if (btnPs5) {
+    btnPs5.classList.toggle('selected', modalExtractMode === 'ps5');
+    btnPs5.setAttribute('aria-checked', modalExtractMode === 'ps5' ? 'true' : 'false');
+  }
+  if (btnMac) {
+    btnMac.classList.toggle('selected', modalExtractMode === 'mac');
+    btnMac.setAttribute('aria-checked', modalExtractMode === 'mac' ? 'true' : 'false');
+  }
+  if (btnOff) {
+    btnOff.classList.toggle('selected', modalExtractMode === 'none');
+    btnOff.setAttribute('aria-checked', modalExtractMode === 'none' ? 'true' : 'false');
+  }
+
+  const decompressCheck = $('decompress-zip');
+  if (decompressCheck) decompressCheck.checked = (modalExtractMode !== 'none');
+  const hint = $('archive-mode-hint');
+  if (hint) {
+    if (modalExtractMode === 'ps5') {
+      hint.textContent = 'PS5 Console Extraction (no local disk usage): Streams raw archive directly to PS5 internal SSD. The native console decompressor unpacks game folder dumps (tons of folders/files) & multipart archives with zero local disk usage.';
+    } else if (modalExtractMode === 'mac') {
+      hint.textContent = 'Local extraction (RAM Stream or Local Staging): Standalone payload files (ffpfsc, pkg, exfat, iso, mp4) stream on the fly directly through RAM with 0 disk writes. Game folder dumps with tons of loose files unpack into temporary temporary local storage before transferring.';
+    } else {
+      hint.textContent = 'Raw Archive Storage: Streams the intact compressed file (.rar, .7z, .zip) straight to PS5 storage without unpacking.';
+    }
   }
 }
 
-$('btn-extract-on')?.addEventListener('click', () => {
-  setArchiveExtractMode(true);
+document.querySelectorAll('.strategy-card').forEach(card => {
+  card.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      const mode = card.dataset.extractMode;
+      if (mode) {
+        setArchiveExtractMode(mode);
+        updateAddPreview();
+      }
+    }
+  });
+});
+
+$('decompress-zip')?.addEventListener('change', e => {
+  setArchiveExtractMode(e.target.checked ? lastEnabledExtractMode : 'none');
+  updateAddPreview();
+});
+
+$('btn-extract-ps5')?.addEventListener('click', () => {
+  setArchiveExtractMode('ps5');
+  updateAddPreview();
+});
+
+$('btn-extract-mac')?.addEventListener('click', () => {
+  setArchiveExtractMode('mac');
   updateAddPreview();
 });
 
 $('btn-extract-off')?.addEventListener('click', () => {
-  setArchiveExtractMode(false);
+  setArchiveExtractMode('none');
   updateAddPreview();
 });
 
@@ -1441,11 +1669,13 @@ const updateAddPreview = () => {
         }
         const hint = $('archive-mode-hint');
         if (hint) {
-          hint.textContent = modalExtractMode
-            ? (['rar', '7z'].includes(ext)
-                ? 'Extracts archive locally in temporary staging (auto-deleted once transferred to PS5).'
-                : 'Decompresses inner game package on-the-fly directly to PS5 with 0 GB Mac disk space.')
-            : 'Streams raw multi-part archive directly onto PS5 without extraction.';
+          if (modalExtractMode === 'ps5') {
+            hint.textContent = 'Streams multi-part archive directly to PS5 /data/unrar using unrar-ps5 payload with no local disk usage space.';
+          } else if (modalExtractMode === 'mac') {
+            hint.textContent = 'Unpacks multi-part archive locally using temporary storage and streams extracted game package to PS5.';
+          } else {
+            hint.textContent = 'Streams raw multi-part archive directly onto PS5 without extraction.';
+          }
         }
       }
       if (['ffpfsc', 'exfat', 'ufs', 'iso', 'bin', 'img'].includes(ext)) {
@@ -1551,9 +1781,20 @@ const updateAddPreview = () => {
         if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
         if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Encrypted archives stage locally in temporary storage and cleanly self-delete once on PS5.';
       }
-    } else if (modalExtractMode) {
+    } else if (modalExtractMode === 'ps5') {
       if ($('preview-filename')) $('preview-filename').textContent = `${archName} Archive: ${name}`;
-      formatLabel = 'Auto-extracting directly to PS5';
+      formatLabel = 'PS5 on-console extraction (no local disk usage · recommended for folder dumps)';
+      if (pwdHint && $('archive-password-row')) {
+        $('archive-password-row').hidden = false;
+        if ($('archive-password') && !$('archive-password').value) {
+          $('archive-password').value = pwdHint;
+          if ($('password-hint-badge')) $('password-hint-badge').style.display = 'inline-block';
+          if ($('password-hint-text')) $('password-hint-text').textContent = 'Password detected from filename. Will be saved in /data/unrar/config.ini on PS5.';
+        }
+      }
+    } else if (modalExtractMode === 'mac') {
+      if ($('preview-filename')) $('preview-filename').textContent = `${archName} Archive: ${name}`;
+      formatLabel = 'Local extraction (single files use memory; folders use temporary storage)';
       if (pwdHint && $('archive-password-row')) {
         $('archive-password-row').hidden = false;
         if ($('archive-password') && !$('archive-password').value) {
@@ -1579,7 +1820,7 @@ const updateAddPreview = () => {
 
   // Auto-route destination if user hasn't explicitly set a custom folder
   const currentDest = $('modal-dest-folder')?.value.trim();
-  if (smartDest && (!currentDest || currentDest === '/data/PS5Direct' || currentDest === '/data/ShadowMount' || currentDest === '/data/pkg')) {
+  if (smartDest && (!currentDest || currentDest === '/data/PS5Direct' || currentDest === '/data/ShadowMount' || currentDest === '/data/homebrew' || currentDest === '/data/pkg')) {
     setDestPreset(smartDest);
   }
 };
@@ -1842,7 +2083,9 @@ $('add-form').addEventListener('submit', async e => {
       items: jobItems,
       name: $('file-name').value.trim() || (willStitch ? mergedName : ''),
       combine_multipart: willStitch,
-      decompress: (sourceKind === 'folder' ? false : modalExtractMode),
+      decompress: (sourceKind === 'folder' ? false : (modalExtractMode !== 'none')),
+      extract_mode: (sourceKind === 'folder' ? 'none' : modalExtractMode),
+      staged_extraction: (modalExtractMode === 'mac'),
       archive_password: $('archive-password')?.value?.trim() || '',
       overwrite: $('overwrite').checked
     });
@@ -1857,7 +2100,7 @@ $('add-form').addEventListener('submit', async e => {
     toast(willStitch ? `Merged multi-part stream (${sortedParts.length} parts) added to queue` : `${r.count} transfer${r.count === 1 ? '' : 's'} added to queue`);
     page('transfers');
     await poll();
-    if (!state.settings.host) openSettings();
+    if (!state.settings.host) window.openConnectionSetup ? window.openConnectionSetup() : openSettings();
   } catch (err) {
     $('add-error').textContent = err.message;
   } finally {
@@ -1872,7 +2115,7 @@ $('settings-form').addEventListener('submit', async e => {
     const el = $('setting-' + key);
     if (el) data[key] = el.value;
   }
-  data.password = $('setting-password')?.value || '';
+  if ($('setting-password')?.value || !state.has_password) data.password = $('setting-password')?.value || ''; 
   try {
     await api('settings', data);
     $('settings-dialog').close();
@@ -1898,7 +2141,11 @@ if (settingsPageForm) {
       limit_mbps: $('page-setting-limit_mbps')?.value || '0',
       retries: $('page-setting-retries')?.value || '3',
       staging_dir: $('page-setting-staging_dir')?.value?.trim() || '',
-      password: ''
+      extract_mode: $('page-setting-extract_mode')?.value || 'ps5',
+      payload_port: $('page-setting-payload_port')?.value?.trim() || '9021',
+      unrar_extract_location: $('page-setting-unrar_extract_location')?.value?.trim() || '/data/homebrew',
+      unrar_auto_payload: $('page-setting-unrar_auto_payload') ? $('page-setting-unrar_auto_payload').checked : true,
+      unrar_delete_after: $('page-setting-unrar_delete_after') ? $('page-setting-unrar_delete_after').checked : true,
     };
     try {
       await api('settings', data);
@@ -1924,10 +2171,15 @@ if (resetDefaultsBtn) {
     if ($('page-setting-buffer_mb')) $('page-setting-buffer_mb').value = '256';
     if ($('page-setting-limit_mbps')) $('page-setting-limit_mbps').value = '0';
     if ($('page-setting-retries')) $('page-setting-retries').value = '3';
-    if ($('page-setting-folder')) $('page-setting-folder').value = '/data/PS5Direct';
+    if ($('page-setting-folder')) $('page-setting-folder').value = '/data/homebrew';
     if ($('page-setting-staging_dir')) $('page-setting-staging_dir').value = '';
+    if ($('page-setting-extract_mode')) $('page-setting-extract_mode').value = 'ps5';
+    if ($('page-setting-payload_port')) $('page-setting-payload_port').value = '9021';
+    if ($('page-setting-unrar_extract_location')) $('page-setting-unrar_extract_location').value = '/data/homebrew';
+    if ($('page-setting-unrar_auto_payload')) $('page-setting-unrar_auto_payload').checked = true;
+    if ($('page-setting-unrar_delete_after')) $('page-setting-unrar_delete_after').checked = true;
     updatePipelineCalc();
-    toast('Settings reset to recommended defaults (16 streams · 8 MiB chunk · 256 MiB RAM)');
+    toast('Settings reset to recommended defaults (16 streams · 8 MiB chunk · 256 MiB RAM · PS5 unrar)');
   });
 }
 
@@ -1942,18 +2194,69 @@ document.querySelectorAll('[data-settings-tab]').forEach(tab => {
     const tabName = tab.dataset.settingsTab;
     const connSec = $('settings-connection-section');
     const transSec = $('settings-transfers-section');
+    const unrarSec = $('settings-unrar-section');
     if (tabName === 'connection') {
       if (connSec) connSec.hidden = false;
       if (transSec) transSec.hidden = true;
+      if (unrarSec) unrarSec.hidden = true;
     } else if (tabName === 'transfers') {
       if (connSec) connSec.hidden = true;
       if (transSec) transSec.hidden = false;
+      if (unrarSec) unrarSec.hidden = true;
+    } else if (tabName === 'unrar') {
+      if (connSec) connSec.hidden = true;
+      if (transSec) transSec.hidden = true;
+      if (unrarSec) unrarSec.hidden = false;
     } else {
       if (connSec) connSec.hidden = false;
       if (transSec) transSec.hidden = false;
+      if (unrarSec) unrarSec.hidden = false;
     }
   });
 });
+
+async function openUnrarLogDialog() {
+  const dlg = $('unrar-log-dialog');
+  const contentEl = $('unrar-log-content');
+  if (contentEl) contentEl.textContent = 'Fetching /data/unrar/unrar.log from PS5…';
+  if (dlg && !dlg.open) dlg.showModal();
+  try {
+    const res = await api('unrar_log');
+    if (contentEl) {
+      contentEl.textContent = res.log || '(Log is empty or no unrar job has run yet)';
+    }
+  } catch (err) {
+    if (contentEl) {
+      contentEl.textContent = 'Error reading log from PS5: ' + err.message;
+    }
+  }
+}
+
+$('btn-test-payload')?.addEventListener('click', async () => {
+  const btn = $('btn-test-payload');
+  const msgEl = $('payload-status-msg');
+  const host = $('page-setting-host')?.value?.trim() || state?.settings?.host || '';
+  const port = parseInt($('page-setting-payload_port')?.value?.trim() || state?.settings?.payload_port || '9021', 10);
+  if (!host) {
+    toast('Please enter a PS5 console IP address first', true);
+    return;
+  }
+  btn.disabled = true;
+  if (msgEl) msgEl.textContent = `Sending payload to ${host}:${port}…`;
+  try {
+    const res = await api('send_payload', { host, port });
+    toast(res.message || 'Payload sent to PS5');
+    if (msgEl) msgEl.textContent = 'Payload delivered successfully';
+  } catch (err) {
+    toast(err.message, true);
+    if (msgEl) msgEl.textContent = 'Failed: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('btn-view-unrar-log')?.addEventListener('click', openUnrarLogDialog);
+$('btn-refresh-unrar-log')?.addEventListener('click', openUnrarLogDialog);
 
 document.querySelectorAll('[data-log-filter]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2060,7 +2363,7 @@ async function quickAddUrl(url) {
     $('quick-url').value = '';
     toast(`${r.count || 1} transfer added to queue`);
     await poll();
-    if (!state.settings.host) openSettings();
+    if (!state.settings.host) window.openConnectionSetup ? window.openConnectionSetup() : openSettings();
   } catch (err) {
     toast(err.message, true);
   }
@@ -2147,10 +2450,10 @@ $('select-all').addEventListener('change', e => {
   selectedJobs.clear();
   if (checked) {
     state.jobs.forEach(j => {
-      if (j.state !== 'completed') selectedJobs.add(j.id);
+      if (j.state !== 'completed' && (!window.matchesTransfer || window.matchesTransfer(j))) selectedJobs.add(j.id);
     });
   }
-  document.querySelectorAll('.row-select').forEach(cb => { cb.checked = checked; });
+  document.querySelectorAll('.row-select').forEach(cb => { cb.checked = selectedJobs.has(cb.dataset.id); });
   updateBulkBar();
 });
 
@@ -2467,7 +2770,7 @@ function openErrorDialog(job) {
   } else if (sLow.includes('404')) {
     recommendation = 'File not found on hosting server. The file may have been taken down.';
   } else if (sLow.includes('space') || sLow.includes('storage')) {
-    recommendation = 'Insufficient disk space. Free up storage on your PS5 or Mac staging disk.';
+    recommendation = 'Insufficient disk space. Free up storage on your PS5 or temporary local storage disk.';
   } else if (sLow.includes('refused')) {
     recommendation = 'Connection refused by PS5. Ensure the PS5 FTP server payload (e.g. GoldHEN / FTPS5) is running on port 1337 or 2121.';
   } else if (sLow.includes('unar') || sLow.includes('extraction')) {
@@ -2476,15 +2779,16 @@ function openErrorDialog(job) {
   if ($('error-recommended-action')) $('error-recommended-action').textContent = `Suggested fix: ${recommendation}`;
 
   if ($('diag-app-ver')) $('diag-app-ver').textContent = err.app_version || state.version || '2.9.0';
-  if ($('diag-platform')) $('diag-platform').textContent = err.platform || 'macOS';
+  if ($('diag-platform')) $('diag-platform').textContent = err.platform || state?.host_platform || 'Unknown';
   if ($('diag-python')) $('diag-python').textContent = err.python || 'Python 3';
   if ($('diag-mode')) $('diag-mode').textContent = (job.staged_extraction || (job.is_archive && job.decompress !== false)) ? 'Staged Extraction (unar)' : `${job.kind} direct stream`;
-  if ($('diag-dest')) $('diag-dest').textContent = job.folder || state.settings?.folder || '/data/ShadowMount';
+  if ($('diag-dest')) $('diag-dest').textContent = job.folder || state.settings?.folder || '/data/homebrew';
   if ($('diag-time')) $('diag-time').textContent = err.time || new Date().toLocaleTimeString();
 
   const tbCode = err.traceback || (job.detail ? `${job.detail}\n\n(No Python stack trace available for this event)` : 'No traceback captured.');
   if ($('error-traceback-code')) $('error-traceback-code').textContent = tbCode;
 
+  window.configureRecoveryDialog?.(job);
   $('error-dialog')?.showModal();
 }
 
@@ -2505,11 +2809,11 @@ function generateMarkdownBugReport(job) {
     ``,
     `#### Environment`,
     `- **App Version:** ${err.app_version || state.version || '2.9.0'}`,
-    `- **Platform:** ${err.platform || 'macOS'}`,
+    `- **Platform:** ${err.platform || state?.host_platform || 'Unknown'}`,
     `- **Python:** ${err.python || '3.x'}`,
     `- **Archive Tool (unar):** ${err.unar_available ? 'Detected' : 'Not detected'}`,
     `- **Job Kind:** \`${job.kind}\` (Staged Extraction: ${job.staged_extraction ? 'Yes' : 'No'})`,
-    `- **PS5 Destination:** \`${job.folder || state.settings?.folder || '/data/ShadowMount'}\``,
+    `- **PS5 Destination:** \`${job.folder || state.settings?.folder || '/data/homebrew'}\``,
     `- **Timestamp:** ${err.time || new Date().toISOString()}`,
     ``,
     `#### Python Stack Trace`,
@@ -2558,6 +2862,10 @@ $('quit')?.addEventListener('click', async () => {
   const r = await perform('shutdown', {});
   if (r) {
     $('offline-banner').hidden = false;
+    if ($('device-name')) $('device-name').textContent = 'App disconnected';
+    if ($('overview-connection')) $('overview-connection').textContent = 'App disconnected';
+    if ($('connection-dot')) $('connection-dot').className = 'dot error';
+    if ($('mobile-connection-dot')) $('mobile-connection-dot').className = 'dot error';
     $('offline-banner').textContent = 'DIRECT STREAM FOR PLAYSTATION 5 has stopped. You can close this tab.';
   }
 });
@@ -2597,26 +2905,21 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// Close open dropdowns when clicking outside
-document.addEventListener('click', e => {
-  document.querySelectorAll('details[open]').forEach(el => {
-    if (!el.contains(e.target)) el.removeAttribute('open');
-  });
-});
-
-// Position action menu
-document.addEventListener('toggle', e => {
-  const el = e.target;
-  if (el.tagName !== 'DETAILS' || !el.open) return;
-  const rect = el.getBoundingClientRect();
-  const menu = el.querySelector('.action-menu');
-  if (!menu) return;
-  menu.style.setProperty('--menu-x', Math.max(8, Math.min(innerWidth - 154, rect.right - 146)) + 'px');
-  menu.style.setProperty('--menu-y', Math.max(8, Math.min(innerHeight - menu.offsetHeight - 8, rect.bottom + 4)) + 'px');
-}, true);
-
 // Start polling
 tick();
 
+// Check hash parameters for direct modal open
+const initialHashParams = new URLSearchParams(location.hash.slice(1));
+if (initialHashParams.get('open') === 'add') {
+  setTimeout(() => {
+    openAdd('url');
+    const urls = $('source-urls');
+    if (urls) {
+      urls.value = initialHashParams.get('sample') || 'https://example.com/games/[DLPSGAME.COM]-PPSA27158_BP_5.xx.rar';
+      urls.dispatchEvent(new Event('input'));
+    }
+  }, 300);
+}
+
 window.renderBenchmarkResult = renderBenchmarkResult;
-window.setPage = setPage;
+window.setPage = page;

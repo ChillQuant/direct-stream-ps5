@@ -31,15 +31,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp,
     connect_ftp, make_reader, probe_source, safe_text, transfer, valid_folder,
     valid_name, valid_url, check_ftp_storage, validate_source_url, validate_multipart_source,
-    find_unar_tool, cleanup_stale_staging_directories, MIB, HEADERS)
+    find_unar_tool, cleanup_stale_staging_directories, MIB, HEADERS,
+    find_unrar_ps5_payload, send_ps5_payload, generate_unrar_config, fetch_ps5_unrar_log,
+    DEFAULT_UNRAR_DIR, DEFAULT_UNRAR_CONFIG_PATH, DEFAULT_UNRAR_LOG_PATH, DEFAULT_ETA_HEN_PAYLOAD_PORT)
 from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info, get_request_headers_for_url
 from zip_streamer import is_archive_candidate, inspect_archive, EncryptedArchiveError, extract_password_hint
 
 VERSION = "2.9.0"
 BASE = Path(__file__).resolve().parent
-DEFAULTS = {"host": "", "port": 1337, "folder": "/data/ShadowMount", "username": "anonymous",
+DEFAULTS = {"host": "", "port": 1337, "folder": "/data/homebrew", "username": "anonymous",
             "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3,
-            "staging_dir": ""}
+            "staging_dir": "", "extract_mode": "ps5", "payload_port": 9021,
+            "unrar_extract_location": "/data/homebrew", "unrar_delete_after": True,
+            "unrar_auto_payload": True}
 ACTIVE = {"starting", "running", "retrying", "pausing", "cancelling"}
 
 
@@ -162,6 +166,20 @@ def validated_settings(raw):
         cfg["staging_dir"] = str(s_path)
     else:
         cfg["staging_dir"] = ""
+    mode = str(cfg.get("extract_mode", "ps5")).lower()
+    if mode not in ("ps5", "mac", "none"):
+        mode = "ps5"
+    cfg["extract_mode"] = mode
+    try:
+        pport = float(cfg.get("payload_port", 9021))
+        if not math.isfinite(pport) or pport != int(pport) or not 1 <= pport <= 65535:
+            raise ValueError()
+        cfg["payload_port"] = int(pport)
+    except (TypeError, ValueError, OverflowError):
+        raise TransferError("Payload port must be a whole number between 1 and 65535 (default: 9021).")
+    cfg["unrar_extract_location"] = valid_folder(cfg.get("unrar_extract_location", "/data/homebrew"))
+    cfg["unrar_delete_after"] = bool(cfg.get("unrar_delete_after", True))
+    cfg["unrar_auto_payload"] = bool(cfg.get("unrar_auto_payload", True))
     return cfg
 
 
@@ -284,18 +302,27 @@ class Manager:
                         recovered = extract_url_filename(job["source"])
                         if recovered and recovered not in ("download.bin", name) and "." in recovered:
                             job["name"] = recovered
-                if job["state"] in ACTIVE or job["state"] == "queued":
+                det = job.get("detail", "")
+                if "done archive=" in det or "reason=success" in det or det.startswith("Extracted to"):
+                    job["state"] = "completed"
+                    job["detail"] = "Complete · Extracted on PS5 (0 GB Mac disk)"
+                    if job.get("total"):
+                        job["transferred"] = job["total"]
+                elif job["state"] in ACTIVE or job["state"] == "queued":
                     job["state"] = "paused"
                     job["detail"] = "Restored after app restart. Resume when ready."
             self.save()
         except FileNotFoundError:
-            try:
-                old = json.loads((Path.home() / ".ps5_streamer.json").read_text())
-                self.settings.update({"host": str(old.get("ip", "")), "port": int(old.get("port", 1337)),
-                                      "folder": old.get("dir", DEFAULTS["folder"])})
-                self.settings = validated_settings(self.settings)
-                self.settings.pop("password", None)
-            except Exception:
+            if self.directory == Path.home() / ".ps5-transfer":
+                try:
+                    old = json.loads((Path.home() / ".ps5_streamer.json").read_text())
+                    self.settings.update({"host": str(old.get("ip", "")), "port": int(old.get("port", 1337)),
+                                          "folder": old.get("dir", DEFAULTS["folder"])})
+                    self.settings = validated_settings(self.settings)
+                    self.settings.pop("password", None)
+                except Exception:
+                    self.settings = dict(DEFAULTS)
+            else:
                 self.settings = dict(DEFAULTS)
         except Exception:
             self.settings = dict(DEFAULTS)
@@ -316,6 +343,7 @@ class Manager:
             # ponytail: shallow copies under lock avoids heavy copy.deepcopy memoization on every poll
             return {
                 "version": VERSION,
+                "host_platform": platform.system(),
                 "settings": dict(self.settings),
                 "jobs": [dict(j) for j in self.jobs],
                 "running": self.running,
@@ -325,7 +353,9 @@ class Manager:
                 "metrics": dict(self.metrics),
                 "history": list(self.history),
                 "logs": list(self.logs),
-                "has_password": bool(self.password)
+                "has_password": bool(self.password),
+                "unrar_payload_available": bool(find_unrar_ps5_payload()),
+                "unar_available": bool(find_unar_tool())
             }
 
     def configure(self, raw):
@@ -333,7 +363,9 @@ class Manager:
         with self.lock:
             if self.current or self.diagnostic["state"] == "running":
                 raise TransferError("Pause transfers and finish diagnostics before changing settings.")
-            self.password = cfg.pop("password")
+            new_password = cfg.pop("password")
+            if "password" in raw:
+                self.password = new_password
             self.settings = cfg
             self.connection = {"state": "unknown", "message": "Settings saved · test the connection"}
             self.save()
@@ -395,10 +427,15 @@ class Manager:
                 ext = Path(target_name).suffix.lower()
                 if ext in (".ffpfsc", ".exfat", ".ufs"):
                     dest_folder = "/data/ShadowMount"
-                elif ext == ".pkg" and self.settings.get("folder") == "/data/ShadowMount":
+                elif ext == ".pkg" and self.settings.get("folder") in ("/data/ShadowMount", "/data/homebrew"):
                     dest_folder = "/data/pkg"
                 else:
-                    dest_folder = self.settings.get("folder", "/data/ShadowMount")
+                    dest_folder = self.settings.get("folder", "/data/homebrew")
+
+            is_multi_arch = is_archive_candidate(target_name) or any(is_archive_candidate(p["name"]) for p in parts_list)
+            job_extract_mode = data.get("extract_mode") or (self.settings.get("extract_mode", "ps5") if is_multi_arch else "none")
+            is_decomp = bool(data.get("decompress", True)) and job_extract_mode != "none"
+            multi_pwd = data.get("archive_password") or extract_password_hint(target_name) or ""
 
             new = [{
                 "id": secrets.token_hex(6),
@@ -408,11 +445,19 @@ class Manager:
                 "folder": dest_folder,
                 "kind": "multipart",
                 "state": "queued",
-                "detail": f"Queued ({len(parts_list)} parts) · direct PS5 stitch",
+                "detail": (f"Queued ({len(parts_list)} parts) · PS5 extraction (0 GB Mac disk)"
+                           if is_multi_arch and job_extract_mode == "ps5"
+                           else f"Queued ({len(parts_list)} parts) · direct PS5 stitch"),
                 "total": None,
                 "transferred": 0,
                 "overwrite": bool(data.get("overwrite", False)),
-                "decompress": bool(data.get("decompress", True)),
+                "decompress": is_decomp,
+                "extract_mode": job_extract_mode,
+                "archive_password": multi_pwd,
+                "staged_extraction": (job_extract_mode == "mac") or bool(data.get("staged_extraction", False)),
+                "unrar_extract_location": data.get("unrar_extract_location") or self.settings.get("unrar_extract_location", "/data/homebrew"),
+                "unrar_delete_after": bool(data.get("unrar_delete_after", self.settings.get("unrar_delete_after", True))),
+                "unrar_auto_payload": bool(data.get("unrar_auto_payload", self.settings.get("unrar_auto_payload", True))),
                 "created": time.time(),
                 "identity": None
             }]
@@ -443,10 +488,10 @@ class Manager:
                     ext = Path(name).suffix.lower()
                     if ext in (".ffpfsc", ".exfat", ".ufs"):
                         dest_base = "/data/ShadowMount"
-                    elif ext == ".pkg" and self.settings.get("folder") == "/data/ShadowMount":
+                    elif ext == ".pkg" and self.settings.get("folder") in ("/data/ShadowMount", "/data/homebrew"):
                         dest_base = "/data/pkg"
                     else:
-                        dest_base = self.settings.get("folder", "/data/ShadowMount")
+                        dest_base = self.settings.get("folder", "/data/homebrew")
 
                 if item_kind == "folder":
                     f_count = 0
@@ -485,15 +530,24 @@ class Manager:
                     item_name = name
                     item_total = None
                     item_detail = "Waiting to start"
-                    is_decomp = bool(data.get("decompress", True))
+                    is_arch = is_archive_candidate(name) or is_archive_candidate(src)
+                    job_extract_mode = data.get("extract_mode") or (self.settings.get("extract_mode", "ps5") if is_arch else "none")
+                    is_decomp = bool(data.get("decompress", True)) and job_extract_mode != "none"
                     archive_pwd = data.get("archive_password") or extract_password_hint(src) or extract_password_hint(name) or ""
-                    staged_ext = bool(data.get("staged_extraction", False)) if is_decomp else False
+                    staged_ext = (job_extract_mode == "mac") or bool(data.get("staged_extraction", False))
+                    if is_arch and is_decomp:
+                        if job_extract_mode == "ps5":
+                            arch_type = Path(name).suffix.lstrip(".").upper() or "ARCHIVE"
+                            item_detail = f"{arch_type} Archive · PS5 extraction (0 GB Mac disk)"
+                        elif job_extract_mode == "mac":
+                            arch_type = Path(name).suffix.lstrip(".").upper() or "ARCHIVE"
+                            item_detail = f"{arch_type} Archive · Staged extraction to PS5"
                     if item_kind == "local":
                         try:
                             item_total = os.path.getsize(src)
                         except OSError:
                             pass
-                        if is_decomp and is_archive_candidate(src):
+                        if is_decomp and is_arch:
                             try:
                                 tok = StopToken()
                                 arch_src = probe_source("local", src, tok, decompress=True)
@@ -502,10 +556,13 @@ class Manager:
                                     item_total = arch_src.size
                                     arch_type = (arch_src.archive_info or {}).get("archive_type", "Archive")
                                     item_detail = f"{arch_type.upper()} Archive · Extracting directly to PS5"
-                                    if item_name.lower().endswith(".pkg") and dest_base == "/data/ShadowMount":
+                                    if item_name.lower().endswith(".pkg") and dest_base in ("/data/ShadowMount", "/data/homebrew"):
                                         dest_base = "/data/pkg"
                             except Exception:
-                                if find_unar_tool():
+                                if job_extract_mode == "ps5" and find_unrar_ps5_payload():
+                                    arch_type = Path(src).suffix.lstrip(".").upper() or "ARCHIVE"
+                                    item_detail = f"{arch_type} Archive · PS5 unrar payload (0 GB Mac disk)"
+                                elif find_unar_tool():
                                     staged_ext = True
                                     arch_type = Path(src).suffix.lstrip(".").upper() or "ARCHIVE"
                                     item_detail = f"{arch_type} Archive · Staged extraction to PS5"
@@ -521,8 +578,12 @@ class Manager:
                         "transferred": 0,
                         "overwrite": bool(data.get("overwrite", False)),
                         "decompress": is_decomp,
+                        "extract_mode": job_extract_mode,
                         "archive_password": archive_pwd,
                         "staged_extraction": staged_ext,
+                        "unrar_extract_location": data.get("unrar_extract_location") or self.settings.get("unrar_extract_location", "/data/homebrew"),
+                        "unrar_delete_after": bool(data.get("unrar_delete_after", self.settings.get("unrar_delete_after", True))),
+                        "unrar_auto_payload": bool(data.get("unrar_auto_payload", self.settings.get("unrar_auto_payload", True))),
                         "created": time.time(),
                         "identity": None
                     })
@@ -634,11 +695,11 @@ class Manager:
                 use_parts = sorted_parts if is_seq else all_parts
                 target_name = valid_name(extra.get("name") or detected_name or (use_parts[0]["name"] if is_seq else "merged_archive.bin"))
 
-                dest_folder = target_jobs[0].get("folder") or self.settings.get("folder", "/data/ShadowMount")
+                dest_folder = target_jobs[0].get("folder") or self.settings.get("folder", "/data/homebrew")
                 ext = Path(target_name).suffix.lower()
                 if ext in (".ffpfsc", ".exfat", ".ufs"):
                     dest_folder = "/data/ShadowMount"
-                elif ext == ".pkg" and self.settings.get("folder") == "/data/ShadowMount":
+                elif ext == ".pkg" and self.settings.get("folder") in ("/data/ShadowMount", "/data/homebrew"):
                     dest_folder = "/data/pkg"
 
                 total_sizes = [j.get("total") for j in target_jobs if j.get("total") is not None]
@@ -670,6 +731,16 @@ class Manager:
             elif action == "validate_links":
                 threading.Thread(target=self._validate_queued_links, daemon=True, name="link-validator").start()
                 return {"ok": True, "message": "Link validation started in background"}
+            elif action == "trigger_unrar_payload":
+                host = safe_text(extra.get("host") or self.settings.get("host", ""), "PS5 IP", 253)
+                if not host:
+                    raise TransferError("Save your PS5 IP address in Settings first.")
+                port = int(extra.get("port") or self.settings.get("payload_port", 9021))
+                send_ps5_payload(host, port)
+                return {"ok": True, "message": f"unrar-ps5 payload sent to {host}:{port}"}
+            elif action == "get_unrar_log":
+                log_content = fetch_ps5_unrar_log(self.settings)
+                return {"ok": True, "log": log_content}
             else:
                 job = next((j for j in self.jobs if j["id"] == job_id), None)
                 if not job:
@@ -681,10 +752,18 @@ class Manager:
                     elif job["state"] != "completed":
                         job["state"] = "paused" if action == "pause" else "cancelled"
                         job["detail"] = "Partial file retained on PS5, if any"
+                elif action == "mark_completed":
+                    job["state"] = "completed"
+                    job["detail"] = extra.get("detail") or "Complete · Extracted on PS5 (0 GB Mac disk)"
+                    if job.get("total"):
+                        job["transferred"] = job["total"]
+                    if job["id"] == self.current:
+                        self.current = None
+                        self.running = False
                 elif action in ("resume", "restart"):
                     if job["id"] == self.current:
                         raise TransferError("Wait for the current operation to stop.")
-                    if job["state"] == "completed":
+                    if job["state"] == "completed" and action == "resume":
                         raise TransferError("This job is already complete.")
                     if action == "restart":
                         # New partial path; never delete a potentially valuable old partial silently.
@@ -775,6 +854,33 @@ class Manager:
                             job["detail"] = "Password configured"
                     else:
                         job["detail"] = "Password cleared"
+                elif action == "set_extract_mode":
+                    if job["id"] == self.current:
+                        raise TransferError("Pause the transfer before changing extraction settings.")
+                    if job["state"] == "completed":
+                        raise TransferError("This transfer is already completed.")
+                    mode = str((extra or {}).get("extract_mode", "ps5")).lower()
+                    if mode not in ("ps5", "mac", "none"):
+                        raise TransferError("Invalid extraction mode.")
+                    job["extract_mode"] = mode
+                    job["identity"] = None
+                    job["stage_owned"] = False
+                    job["transferred"] = 0
+                    if job["state"] == "failed":
+                        job["state"] = "queued"
+                        job["error_info"] = None
+                    if mode == "none":
+                        job["decompress"] = False
+                        job["staged_extraction"] = False
+                        job["detail"] = "Extraction disabled: streaming raw archive (0 GB Mac disk)"
+                    elif mode == "ps5":
+                        job["decompress"] = True
+                        job["staged_extraction"] = False
+                        job["detail"] = "Extract on PS5 (unrar payload, 0 GB Mac disk)"
+                    elif mode == "mac":
+                        job["decompress"] = True
+                        job["staged_extraction"] = True
+                        job["detail"] = "Extract on Mac (staging)"
                 else:
                     raise TransferError("Unknown queue action.")
             self.save()
@@ -903,6 +1009,7 @@ class Manager:
                 fn_clean = info.filename or extract_url_filename(resolved)
                 pwd_hint = pwd_hint or extract_password_hint(fn_clean) or extract_password_hint(direct_url) or extract_password_hint(src)
                 can_stage = bool(find_unar_tool())
+                can_ps5_unrar = bool(find_unrar_ps5_payload())
                 results.append({
                     "url": src,
                     "resolved_url": direct_url if direct_url != src else None,
@@ -918,6 +1025,9 @@ class Manager:
                     "password_hint": pwd_hint,
                     "staged_extraction": (is_encrypted or arch_meta is None) and is_arch and can_stage,
                     "archive_payload": arch_meta.get("selected") if arch_meta else None,
+                    "unrar_payload_available": can_ps5_unrar,
+                    "can_stage": can_stage,
+                    "recommended_extract_mode": ("ps5" if can_ps5_unrar else ("mac" if can_stage else "none")) if is_arch else "none",
                 })
             except Exception as e:
                 overall_ok = False
@@ -960,6 +1070,8 @@ class Manager:
                 if job.get("kind") == "folder":
                     cnt = value.get("files_count") or job.get("files_count")
                     job["detail"] = f"Complete · {cnt} files verified on PS5" if cnt else "Complete · Folder structure verified"
+                elif job.get("detail") and ("Extracted to" in job["detail"] or "extracted" in job["detail"].lower()):
+                    pass
                 else:
                     job["detail"] = "Complete · PS5 file size verified"
                 job["finished"] = time.time()
@@ -1285,7 +1397,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             self.send(200, self.server.manager.snapshot())
             return
-        assets = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/icon.svg": "icon.svg", "/manifest.json": "manifest.json"}
+        if path == "/api/unrar_log":
+            log_content = fetch_ps5_unrar_log(self.server.manager.settings)
+            self.send(200, {"ok": True, "log": log_content})
+            return
+        assets = {"/": "index.html", "/app.js": "app.js", "/style.css": "style.css", "/experience.css": "experience.css", "/experience.js": "experience.js", "/workflow.js": "workflow.js", "/workflow.css": "workflow.css", "/icon.svg": "icon.svg", "/manifest.json": "manifest.json"}
         if path not in assets:
             self.send(404, {"error": "Not found"})
             return
@@ -1404,6 +1520,16 @@ class Handler(BaseHTTPRequestHandler):
                     result = {"paths": paths, "path": paths[0] if paths else "", "picker_unsupported": picker_unsupported and not paths}
             elif route == "/api/verify":
                 result = m.verify_links(data)
+            elif route == "/api/send_payload":
+                host = safe_text(data.get("host") or m.settings.get("host", ""), "PS5 IP", 253)
+                if not host:
+                    raise TransferError("PS5 IP address is required to send payload.")
+                port = int(data.get("port") or m.settings.get("payload_port", 9021))
+                send_ps5_payload(host, port)
+                result = {"ok": True, "message": f"unrar-ps5 payload sent to {host}:{port}"}
+            elif route == "/api/unrar_log":
+                log_content = fetch_ps5_unrar_log(m.settings)
+                result = {"ok": True, "log": log_content}
             elif route == "/api/shutdown":
                 result = {"ok": True}
                 threading.Thread(target=self.server.shutdown, daemon=True).start()

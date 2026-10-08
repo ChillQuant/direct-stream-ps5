@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Release Notes & Binaries
+    url: https://github.com/ChillQuant/direct-stream-ps5/releases
+    about: Download the latest compiled binaries and read release changelogs.

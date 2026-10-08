@@ -1,0 +1,106 @@
+name: Transfer or Extraction Failure
+description: Report a failed transfer, extraction stall, timeout, or console unpack error
+title: "[Transfer Failure]: "
+labels: ["bug", "transfer-engine"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to report transfer interruptions, decompression errors, or unrar payload failures.
+        If you encountered this in the Web Dashboard, you can click **Diagnostics & Push** or **Copy bug report** in the error dialog to obtain the preformatted diagnostic payload.
+
+  - type: input
+    id: app_version
+    attributes:
+      label: Application Version
+      description: What version of Direct Stream for PlayStation 5 are you running?
+      placeholder: "2.9.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: host_os
+    attributes:
+      label: Host Operating System
+      description: The operating system running Direct Stream
+      options:
+        - "macOS (Apple Silicon)"
+        - "macOS (Intel)"
+        - "Windows 11 / 10"
+        - "Linux"
+        - "Other"
+    validations:
+      required: true
+
+  - type: input
+    id: ps5_firmware
+    attributes:
+      label: PS5 Firmware & Payload Environment
+      description: Your PlayStation 5 firmware version and active homebrew payload
+      placeholder: "e.g. Firmware 4.03, etaHEN 1.8b, unrar-ps5 v1.4.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transfer_kind
+    attributes:
+      label: Transfer Kind
+      description: Type of transfer that failed
+      options:
+        - "Direct URL Link (HTTP/HTTPS)"
+        - "Local File (.pkg, .ffpfsc, .exfat, .iso)"
+        - "Local Game Directory Hierarchy (Folder)"
+        - "Multi-part Archive (.part1.rar, .001, etc.)"
+        - "Single Archive (.rar, .7z, .zip)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: extraction_strategy
+    attributes:
+      label: Extraction Strategy Selected
+      options:
+        - "Extract on PS5 (0 GB Mac disk · unrar payload)"
+        - "Extract on Mac (RAM streaming / staging)"
+        - "Stream Raw Archive (No extraction)"
+        - "Not Applicable (Not an archive)"
+    validations:
+      required: true
+
+  - type: input
+    id: destination_path
+    attributes:
+      label: PS5 Destination Folder
+      placeholder: "/data/homebrew (or /data/ShadowMount, /data/pkg, etc.)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: failure_description
+    attributes:
+      label: Problem Description
+      description: Describe what happened, at what percentage/speed the failure occurred, and any console notifications observed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostic_report
+    attributes:
+      label: In-App Diagnostic Report or Traceback
+      description: Paste the content copied from the "Copy bug report" button or console logs here.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Reproduction Steps
+      description: Steps to reproduce the issue
+      placeholder: |
+        1. Add transfer with direct URL / local file...
+        2. Set destination to /data/homebrew...
+        3. Start transfer...
+        4. Transfer fails at 100% or after upload finishes...
+    validations:
+      required: false

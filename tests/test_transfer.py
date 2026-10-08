@@ -17,7 +17,9 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, probe_source,
     transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, validate_multipart_source,
-    find_unar_tool, find_extracted_payload, cleanup_stale_staging_directories, transfer_staged_archive, connect_ftp, close_ftp)
+    find_unar_tool, find_extracted_payload, cleanup_stale_staging_directories, transfer_staged_archive, connect_ftp, close_ftp,
+    find_unrar_ps5_payload, send_ps5_payload, generate_unrar_config, fetch_ps5_unrar_log, transfer_ps5_remote_archive,
+    DEFAULT_UNRAR_DIR, DEFAULT_UNRAR_CONFIG_PATH, DEFAULT_UNRAR_LOG_PATH, DEFAULT_ETA_HEN_PAYLOAD_PORT)
 from ps5_streamer import Manager, Handler, validated_settings
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
@@ -356,6 +358,11 @@ class Integration(unittest.TestCase):
             m.add_jobs({"kind": "url", "folder": "/data/custom_dir", "items": [{"source": "http://127.0.0.1:9099/custom.bin"}]})
             j3 = next(j for j in m.jobs if "custom.bin" in j["name"])
             self.assertEqual(j3.get("folder"), "/data/custom_dir")
+
+            # 4. Default destination routes to /data/homebrew
+            m.add_jobs({"kind": "url", "items": [{"source": "http://127.0.0.1:9099/homebrew_tool.elf"}]})
+            j4 = next(j for j in m.jobs if "homebrew_tool.elf" in j["name"])
+            self.assertEqual(j4.get("folder"), "/data/homebrew")
             m.stop()
 
     def test_multipart_local_upload_and_stitch(self):
@@ -798,6 +805,161 @@ class Integration(unittest.TestCase):
             # Non-existent directory
             with self.assertRaises(TransferError):
                 validated_settings({"staging_dir": "/non/existent/path/for/staging"})
+
+    def test_generate_unrar_config(self):
+        cfg = generate_unrar_config(
+            filename="game.rar",
+            archive_location="/data/unrar",
+            extract_location="/data/ShadowMount",
+            password="secret_password",
+            delete_after=True,
+            progress=10,
+            threads=0,
+            nice=-20,
+            cpu_mask=0
+        )
+        self.assertIn("filename=game.rar", cfg)
+        self.assertIn("archive_location=/data/unrar", cfg)
+        self.assertIn("extract_location=/data/ShadowMount", cfg)
+        self.assertIn("archive_password=secret_password", cfg)
+        self.assertIn("delete_after=1", cfg)
+        self.assertIn("progress=10", cfg)
+
+        # Test delete_after=False
+        cfg_keep = generate_unrar_config(
+            filename="game.7z",
+            archive_location="/data/unrar",
+            extract_location="/data/pkg",
+            password="",
+            delete_after=False
+        )
+        self.assertIn("filename=game.7z", cfg_keep)
+        self.assertIn("extract_location=/data/pkg", cfg_keep)
+        self.assertIn("delete_after=0", cfg_keep)
+        self.assertIn("archive_password=\n", cfg_keep)
+
+        # Test default extract_location is /data/homebrew
+        cfg_default = generate_unrar_config(filename="homebrew.rar")
+        self.assertIn("extract_location=/data/homebrew", cfg_default)
+
+    def test_send_ps5_payload(self):
+        import socket
+        received_bytes = bytearray()
+        server_ready = threading.Event()
+        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_sock.bind(("127.0.0.1", 0))
+        server_sock.listen(1)
+        port = server_sock.getsockname()[1]
+
+        def listener():
+            server_ready.set()
+            try:
+                conn, _ = server_sock.accept()
+                with conn:
+                    while True:
+                        chunk = conn.recv(4096)
+                        if not chunk:
+                            break
+                        received_bytes.extend(chunk)
+            finally:
+                server_sock.close()
+
+        t = threading.Thread(target=listener, daemon=True)
+        t.start()
+        server_ready.wait(timeout=2.0)
+
+        dummy_elf = b"\x7fELF" + b"TEST_PAYLOAD_CONTENT" * 100
+        send_ps5_payload("127.0.0.1", port=port, elf_bytes=dummy_elf, timeout=3.0)
+        t.join(timeout=2.0)
+        self.assertEqual(bytes(received_bytes), dummy_elf)
+
+    def test_transfer_ps5_remote_archive(self):
+        # Setup local dummy archive
+        with tempfile.TemporaryDirectory() as d:
+            arch_path = Path(d) / "test_game.rar"
+            arch_path.write_bytes(b"RAR_DUMMY_CONTENT_" * 1024)
+
+            job = {
+                "id": "test_ps5_unrar_job_1",
+                "name": "test_game.rar",
+                "source": str(arch_path),
+                "kind": "local",
+                "folder": "/data/ShadowMount",
+                "archive_password": "test_pass",
+                "unrar_extract_location": "/data/ShadowMount",
+                "unrar_delete_after": True,
+                "unrar_auto_payload": False,
+                "transferred": 0,
+                "total": None
+            }
+            tok = StopToken()
+            statuses = []
+            def report(ev, val):
+                if ev == "status":
+                    statuses.append(val)
+            def save():
+                pass
+
+            transfer_ps5_remote_archive(job, self.cfg, tok, report, save)
+
+            # Check that archive and config.ini are in FTP root under /data/unrar
+            target_file = self.root / "data" / "unrar" / "test_game.rar"
+            target_cfg = self.root / "data" / "unrar" / "config.ini"
+
+            self.assertTrue(target_file.exists())
+            self.assertEqual(target_file.read_bytes(), arch_path.read_bytes())
+            self.assertTrue(target_cfg.exists())
+            cfg_content = target_cfg.read_text(encoding="utf-8")
+            self.assertIn("filename=test_game.rar", cfg_content)
+            self.assertIn("extract_location=/data/ShadowMount", cfg_content)
+            self.assertIn("archive_password=test_pass", cfg_content)
+            self.assertIn("delete_after=1", cfg_content)
+
+    def test_ps5_unrar_settings_and_actions(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                # Test validated settings
+                cfg = validated_settings({
+                    "extract_mode": "ps5",
+                    "payload_port": 9021,
+                    "unrar_extract_location": "/data/ShadowMount",
+                    "unrar_delete_after": True,
+                    "unrar_auto_payload": True
+                })
+                self.assertEqual(cfg["extract_mode"], "ps5")
+                self.assertEqual(cfg["payload_port"], 9021)
+                self.assertEqual(cfg["unrar_extract_location"], "/data/ShadowMount")
+                self.assertTrue(cfg["unrar_delete_after"])
+                self.assertTrue(cfg["unrar_auto_payload"])
+
+                # Test invalid payload_port
+                with self.assertRaises(TransferError):
+                    validated_settings({"payload_port": 999999})
+
+                # Test set_extract_mode queue action
+                m.add_jobs({"items": [{"source": "http://127.0.0.1:9/game.rar"}]})
+                job = m.jobs[0]
+
+                m.action("set_extract_mode", job["id"], extra={"extract_mode": "ps5"})
+                self.assertEqual(job["extract_mode"], "ps5")
+                self.assertTrue(job["decompress"])
+                self.assertFalse(job["staged_extraction"])
+                self.assertIn("Extract on PS5", job["detail"])
+
+                m.action("set_extract_mode", job["id"], extra={"extract_mode": "none"})
+                self.assertEqual(job["extract_mode"], "none")
+                self.assertFalse(job["decompress"])
+                self.assertIn("Extraction disabled", job["detail"])
+
+                m.action("set_extract_mode", job["id"], extra={"extract_mode": "mac"})
+                self.assertEqual(job["extract_mode"], "mac")
+                self.assertTrue(job["decompress"])
+                self.assertTrue(job["staged_extraction"])
+                self.assertIn("Extract on Mac", job["detail"])
+            finally:
+                m.stop()
 
 if __name__=='__main__':unittest.main()
 

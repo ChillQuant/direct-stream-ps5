@@ -1,0 +1,67 @@
+name: Bug Report
+description: Report an unexpected error, crash, UI problem, or auto-resolver failure
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please provide as much context as possible to help isolate and resolve the issue quickly.
+
+  - type: input
+    id: app_version
+    attributes:
+      label: Application Version
+      placeholder: "2.9.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - "macOS 15 Sequoia"
+        - "macOS 14 Sonoma"
+        - "macOS 13 Ventura or earlier"
+        - "Windows 11"
+        - "Windows 10"
+        - "Linux"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior.
+      placeholder: |
+        1. Open Direct Stream dashboard
+        2. Click '...'
+        3. Observe error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots_logs
+    attributes:
+      label: Screenshots or Logs
+      description: Attach screenshots, browser console output, or terminal traceback if available.
+    validations:
+      required: false

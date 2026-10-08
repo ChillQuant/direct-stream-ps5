@@ -52,6 +52,11 @@ HEADERS = {
     "Connection": "keep-alive",
 }
 
+DEFAULT_UNRAR_DIR = "/data/unrar"
+DEFAULT_UNRAR_CONFIG_PATH = "/data/unrar/config.ini"
+DEFAULT_UNRAR_LOG_PATH = "/data/unrar/unrar.log"
+DEFAULT_ETA_HEN_PAYLOAD_PORT = 9021
+
 class TransferError(Exception):
     """A problem that needs user action; don't blindly retry it."""
 
@@ -1025,6 +1030,17 @@ def format_bytes(n):
     return f"{n} B"
 
 
+def format_duration(seconds):
+    if seconds is None or seconds < 0:
+        return "—"
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m {s % 60}s"
+    return f"{s // 3600}h {(s % 3600) // 60}m"
+
+
 def validate_source_url(url, token, decompress=True):
     """Fast probe of a URL to check validity, range support, and size without downloading."""
     try:
@@ -1367,6 +1383,90 @@ def find_unar_tool():
     if found and os.access(found, os.X_OK):
         return found
     return None
+
+
+def find_unrar_ps5_payload():
+    """Find the path to the unrar_ps5.elf executable (bundled in app, local bin, or resources)."""
+    res_dir = os.environ.get("RESOURCEPATH")
+    if res_dir:
+        p = os.path.join(res_dir, "bin", "unrar_ps5.elf")
+        if os.path.isfile(p):
+            return p
+
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base, "bin", "unrar_ps5.elf"),
+        os.path.join(base, "PS5 Direct Streamer.app", "Contents", "Resources", "bin", "unrar_ps5.elf"),
+        os.path.join(os.path.dirname(base), "Resources", "bin", "unrar_ps5.elf"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def send_ps5_payload(host, port=9021, elf_path=None, elf_bytes=None, timeout=10):
+    """Sends an ELF payload (e.g. unrar_ps5.elf) over TCP to the PS5 payload loader port (e.g. 9021 for etaHEN)."""
+    if not host:
+        raise TransferError("PS5 host address is required to inject payload.")
+    if elf_bytes is None:
+        if not elf_path:
+            elf_path = find_unrar_ps5_payload()
+        if not elf_path or not os.path.isfile(elf_path):
+            raise TransferError("PS5 unrar payload binary (unrar_ps5.elf) not found.")
+        with open(elf_path, "rb") as f:
+            elf_bytes = f.read()
+
+    if not elf_bytes:
+        raise TransferError("ELF payload is empty.")
+
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout) as s:
+            s.sendall(elf_bytes)
+    except (socket.error, OSError) as e:
+        raise TransferError(
+            f"Failed to connect to PS5 payload loader at {host}:{port}: {e}. "
+            f"Ensure etaHEN or ELF loader is active on port {port} on your PS5."
+        )
+    return True
+
+
+def generate_unrar_config(filename="", archive_location="/data/unrar", extract_location="/data/homebrew",
+                          password=None, delete_after=True, progress=10, threads=0, nice=-20, cpu_mask=0):
+    """Generates the config.ini content for bizkut/unrar-ps5."""
+    lines = [
+        f"filename={filename or ''}",
+        f"archive_location={archive_location}",
+        f"archive_password={password or ''}",
+        f"delete_after={'1' if delete_after else '0'}",
+        f"extract_location={extract_location}",
+        f"threads={int(threads)}",
+        f"nice={int(nice)}",
+        f"cpu_mask={cpu_mask}",
+        f"progress={max(1, min(100, int(progress)))}",
+        ""
+    ]
+    return "\n".join(lines)
+
+
+def fetch_ps5_unrar_log(settings, max_bytes=65536):
+    """Fetches /data/unrar/unrar.log from PS5 over FTP if it exists."""
+    tok = StopToken()
+    ftp = None
+    try:
+        ftp = connect_ftp(settings, tok)
+        size = remote_size(ftp, "/data/unrar/unrar.log")
+        if size is None or size <= 0:
+            return "No log found at /data/unrar/unrar.log on PS5."
+        buf = io.BytesIO()
+        rest = max(0, size - max_bytes) if size > max_bytes else None
+        ftp.retrbinary("RETR /data/unrar/unrar.log", buf.write, rest=rest)
+        return buf.getvalue().decode("utf-8", errors="replace")
+    except Exception as e:
+        return f"Could not read /data/unrar/unrar.log: {e}"
+    finally:
+        if ftp:
+            close_ftp(ftp, tok, clean=False)
 
 
 def find_extracted_payload(extract_dir, fallback_name="ExtractedGame"):
@@ -1723,12 +1823,12 @@ def transfer_staged_archive(job, settings, token, report, save):
 
         payload_type, payload_path, payload_name = find_extracted_payload(extract_dir, fallback_name=Path(archive_name).stem)
 
-        dest_base = valid_folder(job.get("folder") or settings.get("folder") or "/data/ShadowMount")
+        dest_base = valid_folder(job.get("folder") or settings.get("folder") or "/data/homebrew")
 
         if payload_type == "folder":
-            # If destination was /data/pkg but extracted payload is a game folder, route to /data/ShadowMount
+            # If destination was /data/pkg but extracted payload is a game folder, route to /data/homebrew
             if dest_base == "/data/pkg":
-                dest_base = "/data/ShadowMount"
+                dest_base = "/data/homebrew"
             if dest_base.rstrip("/").endswith("/" + payload_name):
                 target_ps5_folder = dest_base.rstrip("/")
             else:
@@ -1747,7 +1847,7 @@ def transfer_staged_archive(job, settings, token, report, save):
             return res
         else:
             # Single package file (.pkg / .ffpfsc)
-            if dest_base == "/data/ShadowMount" and payload_name.lower().endswith(".pkg"):
+            if dest_base in ("/data/ShadowMount", "/data/homebrew") and payload_name.lower().endswith(".pkg"):
                 dest_base = "/data/pkg"
             job["kind"] = "local"
             job["source"] = payload_path
@@ -1768,6 +1868,573 @@ def transfer_staged_archive(job, settings, token, report, save):
         shutil.rmtree(staging_dir, ignore_errors=True)
 
 
+def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
+                       meter=None, hist=None, started=None, cumulative_offset=0, total_bytes=None,
+                       file_label="", on_part_change=None):
+    """Streams a single SourceInfo or reader-compatible source directly to FTP in the current folder,
+    handling .ps5part temporary naming, resume checks, async queue buffering, speed calculations,
+    remote size verification, and final rename. Uses 0 bytes of Mac disk space."""
+    if meter is None:
+        meter = Meter()
+    if started is None:
+        started = time.monotonic()
+    last = started
+    if hist is None:
+        previous = meter.snapshot()
+        hist = [(started, previous["uploaded"], previous["downloaded"])]
+
+    part = f"{name}.{job['id']}.ps5part"
+    existing = remote_size(ftp, name)
+    if existing is not None and not job.get("overwrite"):
+        raise TransferError("Destination file already exists. Rename this job or explicitly enable replacement in a new job.")
+
+    partial_size = remote_size(ftp, part)
+    offset = partial_size or 0
+    if partial_size is not None and not job.get("stage_owned"):
+        raise TransferError("Found a partial file without source history; restart this job.")
+    if offset and (source.size is None or offset > source.size):
+        raise TransferError("Partial file is larger than the source or source length is unknown. Restart the job.")
+    if offset and not source.resumable():
+        raise TransferError("This link does not provide stable resume metadata. Restart, or download to your Mac and send the local file.")
+    job["stage_owned"] = True
+    save()
+
+    data_socket = None
+    reader = None
+
+    file_total = source.size
+    display_total = total_bytes or file_total
+
+    if file_total is None or offset < file_total or file_total == 0:
+        report("status", f"Resuming at {offset} bytes" if offset else (f"Transferring {file_label}" if file_label else "Transferring"))
+        try:
+            data_socket = token.track(ftp.transfercmd("STOR " + part, rest=offset or None))
+        except ftplib.error_perm as e:
+            raise TransferError("PS5 FTP refused upload/resume. Confirm write access and REST support, or restart the job.") from e
+        try:
+            data_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2 * MIB)
+        except OSError:
+            pass
+        data_socket.settimeout(30)
+
+        reader = make_reader(source, offset, settings, token, meter, on_part_change=on_part_change)
+
+        if source.kind in ("url", "multipart") and source.size and (source.size - offset) > 16 * MIB:
+            prebuffer_target = min(64 * MIB, max(16 * MIB, (settings["buffer_mb"] * MIB) // 4))
+            t_pre = time.monotonic()
+            report("status", "Pre-buffering pipeline…")
+            while not token.event.is_set():
+                snap = meter.snapshot()
+                if snap["buffered"] >= prebuffer_target or (time.monotonic() - t_pre) > 3.0:
+                    break
+                token.wait(0.1)
+            report("status", f"Resuming at {offset} bytes" if offset else (f"Transferring {file_label}" if file_label else "Transferring"))
+
+        transferred = offset
+        q_depth = max(16, min(64, (settings["buffer_mb"] * MIB) // BLOCK // 2))
+        send_q = queue.Queue(maxsize=q_depth)
+        sender_error = [None]
+        send_done = threading.Event()
+
+        def sender_loop():
+            curr = offset
+            try:
+                while not token.event.is_set():
+                    item = send_q.get()
+                    if item is None:
+                        send_q.task_done()
+                        break
+                    cap = settings.get("limit_mbps", 0) * 1_000_000
+                    if cap:
+                        wait = (curr - offset + len(item)) / cap - (time.monotonic() - started)
+                        if wait > 0:
+                            token.wait(wait)
+                    t = time.monotonic()
+                    data_socket.sendall(item)
+                    meter.add(uploaded=len(item), sending=time.monotonic() - t)
+                    curr += len(item)
+                    send_q.task_done()
+            except Exception as ex:
+                sender_error[0] = ex
+            finally:
+                send_done.set()
+
+        sender_thread = threading.Thread(target=sender_loop, daemon=True, name="ftp-async-sender")
+        sender_thread.start()
+
+        try:
+            while True:
+                token.check()
+                if sender_error[0]:
+                    raise sender_error[0]
+                t = time.monotonic()
+                block = reader.read(BLOCK)
+                meter.add(waiting=time.monotonic() - t)
+                if not block:
+                    break
+                while not token.event.is_set():
+                    if sender_error[0]:
+                        raise sender_error[0]
+                    try:
+                        send_q.put(block, timeout=0.1)
+                        break
+                    except queue.Full:
+                        pass
+                token.check()
+                transferred += len(block)
+                overall_transferred = cumulative_offset + transferred
+                job["transferred"] = overall_transferred
+                now = time.monotonic()
+                if now - last >= 0.4:
+                    snap = meter.snapshot()
+                    up, down = windowed_rates(hist, now, snap)
+                    capacity = settings["buffer_mb"] * MIB
+                    bottleneck = "Speed cap enabled" if settings.get("limit_mbps") else (
+                        "Waiting for source" if snap["buffered"] < capacity * 0.25 else "PS5 / local network")
+                    rem = (display_total - overall_transferred) if display_total else 0
+                    report("progress", {
+                        "transferred": overall_transferred,
+                        "total": display_total or overall_transferred,
+                        "upload_bps": up,
+                        "download_bps": down,
+                        "buffered": snap["buffered"],
+                        "buffer_capacity": settings["buffer_mb"] * MIB,
+                        "elapsed": now - started,
+                        "eta": rem / up if display_total and up else None,
+                        "bottleneck": bottleneck,
+                        "offset": cumulative_offset + offset,
+                        "current_file": file_label or name,
+                    })
+                    last = now
+            while not token.event.is_set():
+                if sender_error[0]:
+                    raise sender_error[0]
+                try:
+                    send_q.put(None, timeout=0.1)
+                    break
+                except queue.Full:
+                    pass
+            sender_thread.join(timeout=30)
+            if sender_error[0]:
+                raise sender_error[0]
+        finally:
+            if sender_thread.is_alive():
+                try:
+                    send_q.put_nowait(None)
+                except Exception:
+                    pass
+                sender_thread.join(timeout=1.0)
+            if reader:
+                reader.close()
+                reader = None
+            if data_socket:
+                token.untrack(data_socket)
+                data_socket.close()
+                data_socket = None
+            ftp.voidresp()
+
+        if source.size is not None and transferred != source.size:
+            raise TransferError("Source byte count did not match. Incomplete file retained.")
+
+    token.check()
+    report("status", f"Verifying PS5 file size for {name}")
+    actual = remote_size(ftp, part)
+    expected = source.size if source.size is not None else transferred
+    if actual != expected:
+        raise TransferError(f"PS5 size mismatch for {name}: expected {expected} bytes, received {actual}. Partial retained; do not use it.")
+
+    if source.kind == "local":
+        curr_id = probe_source("local", source.location, token, decompress=False).identity()
+        orig_id = source.identity()
+        if curr_id.get("size") != orig_id.get("size"):
+            raise TransferError("Local file changed while uploading. Partial retained; restart with a stable file.")
+    elif source.kind == "multipart":
+        for p in (source.parts or []):
+            if p.kind == "local":
+                curr_p_id = probe_source("local", p.location, token, decompress=False).identity()
+                orig_p_id = p.identity()
+                if curr_p_id.get("size") != orig_p_id.get("size"):
+                    raise TransferError(f"Local part {p.filename} changed while uploading. Partial retained; restart with a stable file.")
+
+    if not job.get("overwrite") and remote_size(ftp, name) is not None:
+        raise TransferError(f"Destination appeared during upload for {name}. Verified partial retained to avoid replacing it.")
+
+    report("status", f"Finalizing {name}")
+    try:
+        ftp.rename(part, name)
+    except ftplib.all_errors as e:
+        raise TransferError(f"Upload size verified, but rename failed for {name}: {e}") from e
+
+    return expected
+
+
+def transfer_ps5_remote_archive(job, settings, token, report, save):
+    """Streams single or multipart compressed archives directly to the PS5 internal SSD
+    at /data/unrar/[filename] over FTP (using exactly 0 GB of Mac disk space),
+    writes the /data/unrar/config.ini configuration file, and triggers the unrar_ps5.elf
+    payload injection to the PS5 payload loader port (default 9021) for high-speed on-console extraction."""
+    ftp = None
+    clean = False
+    meter = Meter()
+
+    # Determine files to upload
+    files_to_upload = []
+    primary_archive_name = ""
+
+    if job.get("kind") == "multipart" or job.get("parts"):
+        parts = list(job.get("parts") or [])
+        if not parts:
+            raise TransferError("No parts provided for multi-part archive transfer.")
+
+        normalized_parts = []
+        for p in parts:
+            if isinstance(p, dict):
+                p_src = p.get("source", "")
+                p_kind = p.get("kind", "url" if str(p_src).startswith(("http://", "https://")) else "local")
+                p_name = p.get("name") or valid_name(os.path.basename(str(p_src)) or "part.bin")
+            else:
+                p_src = str(p)
+                p_kind = "url" if p_src.startswith(("http://", "https://")) else "local"
+                p_name = valid_name(os.path.basename(p_src) or "part.bin")
+            normalized_parts.append({"source": p_src, "kind": p_kind, "name": p_name})
+
+        is_seq, _, sorted_parts = detect_multipart_sequence(normalized_parts)
+        use_parts = sorted_parts if is_seq else normalized_parts
+
+        for idx, p in enumerate(use_parts):
+            token.check()
+            info = probe_source(p["kind"], p["source"], token, decompress=False)
+            p_fname = valid_name(p.get("name") or info.filename or f"part_{idx+1}.bin")
+            files_to_upload.append({"name": p_fname, "info": info, "kind": p["kind"], "source": p["source"]})
+
+        primary_archive_name = files_to_upload[0]["name"]
+        total_size = sum((item["info"].size or 0) for item in files_to_upload)
+    else:
+        raw_kind = job.get("kind", "url")
+        raw_src = probe_source(raw_kind, job["source"], token, decompress=False)
+        if raw_src.kind == "url" and raw_src.location != job.get("source"):
+            job["source"] = raw_src.location
+        archive_name = valid_name(raw_src.filename or job.get("name") or "archive.bin")
+        primary_archive_name = archive_name
+        total_size = raw_src.size
+        files_to_upload.append({"name": archive_name, "info": raw_src, "kind": raw_kind, "source": job["source"]})
+
+    job["total"] = total_size
+    job["resumable"] = all(item["info"].resumable() for item in files_to_upload)
+    save()
+
+    report("source", {
+        "ranges": all(item["info"].ranges for item in files_to_upload),
+        "resumable": job["resumable"],
+        "size": total_size,
+        "is_zip": False,
+        "is_archive": True,
+        "archive_info": None,
+        "is_folder": False
+    })
+
+    try:
+        report("status", "Connecting to PS5 FTP (/data/unrar)")
+        ftp = connect_ftp(settings, token)
+        unrar_base = "/data/unrar"
+        ensure_folder(ftp, unrar_base)
+        ftp.cwd(unrar_base)
+
+        free_space = check_ftp_storage(ftp, unrar_base)
+        if free_space is not None and total_size:
+            if total_size > free_space:
+                raise TransferError(
+                    f"Insufficient PS5 disk space: needs {total_size/1e9:.2f} GB in /data/unrar, but only {free_space/1e9:.2f} GB is available."
+                )
+
+        started = time.monotonic()
+        previous = meter.snapshot()
+        hist = [(started, previous["uploaded"], previous["downloaded"])]
+        cumulative_transferred = 0
+
+        for file_idx, f_item in enumerate(files_to_upload):
+            token.check()
+            file_name = f_item["name"]
+            src_info = f_item["info"]
+            file_size = src_info.size or 0
+
+            existing = remote_size(ftp, file_name)
+            if existing is not None and existing == file_size and not job.get("overwrite"):
+                cumulative_transferred += file_size
+                continue
+
+            report("status", f"Streaming {file_name} directly to PS5 ({file_idx+1}/{len(files_to_upload)})")
+            f_transferred = stream_file_to_ftp(
+                ftp, src_info, file_name, job, settings, token, report, save,
+                meter=meter, hist=hist, started=started,
+                cumulative_offset=cumulative_transferred, total_bytes=total_size,
+                file_label=file_name
+            )
+            cumulative_transferred += (f_transferred or file_size)
+
+        # Generate and upload /data/unrar/config.ini
+        pwd = (
+            job.get("archive_password")
+            or extract_password_hint(primary_archive_name)
+            or extract_password_hint(job.get("source", ""))
+            or ""
+        )
+        extract_loc = valid_folder(
+            job.get("unrar_extract_location")
+            or settings.get("unrar_extract_location")
+            or job.get("folder")
+            or "/data/homebrew"
+        )
+        if extract_loc == "/data/unrar":
+            extract_loc = "/data/homebrew"
+
+        del_after = bool(job.get("unrar_delete_after", settings.get("unrar_delete_after", True)))
+        cfg_text = generate_unrar_config(
+            filename=primary_archive_name,
+            archive_location="/data/unrar",
+            extract_location=extract_loc,
+            password=pwd,
+            delete_after=del_after
+        )
+
+        report("status", "Writing /data/unrar/config.ini on PS5")
+        try:
+            ftp.cwd(unrar_base)
+            cfg_bytes = cfg_text.encode("utf-8")
+            ftp.storbinary("STOR config.ini", io.BytesIO(cfg_bytes))
+        except ftplib.all_errors as e:
+            raise TransferError(f"Failed to write /data/unrar/config.ini on PS5: {e}")
+
+        # Inject payload if auto_payload enabled
+        auto_payload = bool(job.get("unrar_auto_payload", settings.get("unrar_auto_payload", True)))
+        payload_port = int(settings.get("payload_port", 9021))
+        payload_msg = ""
+
+        if auto_payload and settings.get("host"):
+            log_path = "/data/unrar/unrar.log"
+            log_offset = remote_size(ftp, log_path) or 0
+
+            report("status", f"Sending unrar-ps5 payload to port {payload_port}")
+            try:
+                send_ps5_payload(settings["host"], payload_port)
+                payload_msg = f"Payload launched on port {payload_port}."
+            except Exception as pe:
+                payload_msg = f"Archive uploaded to /data/unrar. Payload injection notice: {pe}"
+
+            if "Payload launched" in payload_msg:
+                report("status", f"PS5 is extracting {primary_archive_name}...")
+                job["transferred"] = total_size or cumulative_transferred
+                job["total"] = total_size or cumulative_transferred
+                job["detail"] = f"Extracting on PS5 (0% · unpacking {primary_archive_name})..."
+                save()
+
+                stage_dir = f"{extract_loc}/.unrar-staging"
+                extract_done = False
+                extract_failed = False
+                failure_reason = ""
+                extracted_title_id = ""
+                extracted_final_path = ""
+                poll_count = 0
+                extract_start_time = time.monotonic()
+
+                # Poll unrar log and staging size until completion
+                while not extract_done:
+                    token.check()
+                    time.sleep(2.0)
+                    poll_count += 1
+
+                    # 1. Fetch newly appended lines from unrar.log via existing FTP connection
+                    new_lines = []
+                    try:
+                        buf = io.BytesIO()
+                        ftp.retrbinary(f"RETR {log_path}", buf.write, rest=log_offset)
+                        appended = buf.getvalue()
+                        if appended:
+                            log_offset += len(appended)
+                            new_text = appended.decode("utf-8", errors="replace")
+                            new_lines = [ln.strip() for ln in new_text.splitlines() if ln.strip()]
+                    except Exception:
+                        pass
+
+                    # 2. Check for completion or error markers in newly appended log lines
+                    for line in new_lines:
+                        # Success with metadata: done archive=...
+                        if line.startswith("done archive="):
+                            extract_done = True
+                            m_tid = re.search(r"title_id=([^\s]+)", line)
+                            if m_tid:
+                                extracted_title_id = m_tid.group(1)
+                            m_fp = re.search(r"final_path=([^\s]+)", line)
+                            if m_fp:
+                                extracted_final_path = m_fp.group(1)
+                            break
+
+                        # Extract result line: code=0 is success, non-zero is error
+                        if "extract_result" in line:
+                            m_code = re.search(r"code=(\d+)", line)
+                            m_reason = re.search(r"reason=([^\s]+)", line)
+                            code = int(m_code.group(1)) if m_code else -1
+                            reason = m_reason.group(1) if m_reason else "unknown"
+                            if code == 0 or reason == "success":
+                                extract_done = True
+                            else:
+                                extract_done = True
+                                extract_failed = True
+                                failure_reason = f"Extraction failed (code={code}, reason={reason})"
+                            break
+
+                        # Already installed check
+                        if line.startswith("skip archive="):
+                            extract_done = True
+                            break
+
+                        # Normalization issue (archive unpacked fine, but title id path needs Python move)
+                        if line.startswith("normalize_error"):
+                            extract_done = True
+                            break
+
+                        # Hard errors
+                        if line.startswith(("archive_error", "extract_error", "sidecar_config_error", "config_error", "UnRAR error:")):
+                            extract_done = True
+                            extract_failed = True
+                            failure_reason = line
+                            break
+
+                    if extract_done:
+                        break
+
+                    # 3. Check if archive was deleted on PS5 (unrar-ps5 delete_after=1 deletes it upon success)
+                    if poll_count % 3 == 0:
+                        try:
+                            unrar_files = ftp.nlst(unrar_base)
+                            if primary_archive_name not in unrar_files:
+                                extract_done = True
+                                break
+                        except Exception:
+                            pass
+
+                    # 4. Calculate live unpacked size, percentage, speed, and remaining time
+                    unpacked_bytes = 0
+                    try:
+                        for item in ftp.mlsd(stage_dir):
+                            n, facts = item
+                            if n in ('.', '..'): continue
+                            if facts.get('type') == 'file':
+                                unpacked_bytes += int(facts.get('size', 0))
+                            elif facts.get('type') == 'dir':
+                                try:
+                                    for sub_item in ftp.mlsd(f"{stage_dir}/{n}"):
+                                        sn, sfacts = sub_item
+                                        if sn in ('.', '..'): continue
+                                        if sfacts.get('type') == 'file':
+                                            unpacked_bytes += int(sfacts.get('size', 0))
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
+                    elapsed = max(1.0, time.monotonic() - extract_start_time)
+                    unpack_rate = unpacked_bytes / elapsed if unpacked_bytes > 0 else 0
+                    pct = min(99, int((unpacked_bytes / total_size) * 100)) if total_size and unpacked_bytes > 0 else 0
+                    rem_sec = max(0, int((total_size - unpacked_bytes) / max(1.0, unpack_rate))) if total_size and unpack_rate > 100000 else None
+
+                    speed_str = f" · {format_bytes(unpack_rate)}/s" if unpack_rate > 100000 else ""
+                    eta_str = f" · {format_duration(rem_sec)} left" if rem_sec and rem_sec > 0 else ""
+
+                    if pct > 0:
+                        clean_detail = f"Extracting on PS5 ({pct}% · {format_bytes(unpacked_bytes)} unpacked{speed_str}{eta_str})"
+                        status_str = f"Extracting on PS5 ({pct}%)"
+                    else:
+                        clean_detail = "Extracting on PS5 (Unpacking archive...)"
+                        status_str = "Extracting on PS5..."
+
+                    job["detail"] = clean_detail
+                    report("status", status_str)
+                    report("progress", {
+                        "transferred": total_size or cumulative_transferred,
+                        "total": total_size or cumulative_transferred,
+                        "upload_bps": 0,
+                        "download_bps": 0,
+                        "eta": rem_sec,
+                        "bottleneck": "PS5 SSD Unpack"
+                    })
+                    save()
+
+                if extract_failed:
+                    raise TransferError(f"PS5 unrar extraction failed: {failure_reason}")
+
+                # Extraction finished! Check if staging directory still has unnormalized content
+                report("status", "Finalizing game files on PS5...")
+                try:
+                    staged_entries = [e for e in ftp.nlst(stage_dir) if e not in (".", "..")]
+                    if staged_entries:
+                        for se in staged_entries:
+                            se_path = f"{stage_dir}/{se}"
+                            try:
+                                sub_entries = [s for s in ftp.nlst(se_path) if s not in (".", "..")]
+                                for sub in sub_entries:
+                                    if sub.endswith((".txt", ".nfo")):
+                                        continue
+                                    src_p = f"{se_path}/{sub}"
+                                    dst_p = f"{extract_loc}/{sub}"
+                                    ftp.rename(src_p, dst_p)
+                            except Exception:
+                                ftp.rename(se_path, f"{extract_loc}/{se}")
+
+                        def _rm_r(p):
+                            for item in ftp.mlsd(p):
+                                n, f = item
+                                if n in (".", ".."):
+                                    continue
+                                sub_p = f"{p}/{n}"
+                                if f.get("type") == "dir":
+                                    _rm_r(sub_p)
+                                else:
+                                    ftp.delete(sub_p)
+                            ftp.rmd(p)
+
+                        try:
+                            _rm_r(stage_dir)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+                # Clean up all uploaded parts if delete_after is enabled
+                if del_after:
+                    for f_item in files_to_upload:
+                        try:
+                            ftp.delete(f"{unrar_base}/{f_item['name']}")
+                        except Exception:
+                            pass
+
+                loc_label = extracted_final_path or extract_loc
+                tid_label = f" ({extracted_title_id})" if extracted_title_id else ""
+                payload_msg = f"Extracted to {loc_label}{tid_label} · Archive cleaned up (0 GB Mac disk)"
+                job["detail"] = payload_msg
+                report("status", payload_msg)
+                save()
+            else:
+                payload_msg = f"Archive uploaded to /data/unrar. Payload injection notice: {pe}"
+        else:
+            payload_msg = "Archive uploaded to /data/unrar. Ready for payload injection (config.ini saved)"
+
+        clean = True
+        job["transferred"] = total_size or cumulative_transferred
+        job["total"] = total_size or cumulative_transferred
+        job["detail"] = payload_msg
+        save()
+
+        report("complete", {
+            "size": total_size or cumulative_transferred,
+            "verification": f"Archive streamed to /data/unrar (0 GB Mac disk). {payload_msg}"
+        })
+        return True
+
+    finally:
+        close_ftp(ftp, token, clean)
+
+
 def transfer(job, settings, token, report, save):
     """One transfer attempt. Partial files are uniquely owned by the persisted job ID."""
     if job.get("kind") == "folder":
@@ -1775,16 +2442,36 @@ def transfer(job, settings, token, report, save):
 
     report("status", "Inspecting source")
 
-    # If explicitly marked for staged extraction or an encrypted archive
-    if job.get("decompress", True) and job.get("staged_extraction") and find_unar_tool():
-        return transfer_staged_archive(job, settings, token, report, save)
-
-    is_decomp = job.get("decompress", True)
+    extract_mode = str(job.get("extract_mode") or settings.get("extract_mode", "ps5")).lower()
+    is_decomp = job.get("decompress", True) and extract_mode != "none"
     is_arch = (
         job.get("is_archive")
         or is_archive_candidate(job.get("name", ""))
         or is_archive_candidate(job.get("source", ""))
     )
+
+    # 1. Explicit Mac local staging extraction via unar tool
+    if is_decomp and (extract_mode == "mac" or job.get("staged_extraction")) and find_unar_tool():
+        return transfer_staged_archive(job, settings, token, report, save)
+
+    # 2. PS5 on-console extraction via unrar-ps5 payload (0 GB Mac disk)
+    if is_decomp and extract_mode == "ps5" and is_arch:
+        if job.get("kind") != "multipart" and not job.get("archive_encrypted"):
+            try:
+                source = probe_source(job["kind"], job["source"], token, decompress=True)
+                if source.kind.startswith("zip_") or source.kind.startswith("archive_"):
+                    # On-the-fly streaming directly supported by zip_streamer (0 GB Mac disk)!
+                    pass
+                elif find_unrar_ps5_payload():
+                    return transfer_ps5_remote_archive(job, settings, token, report, save)
+            except Exception:
+                if find_unrar_ps5_payload():
+                    return transfer_ps5_remote_archive(job, settings, token, report, save)
+                elif find_unar_tool():
+                    return transfer_staged_archive(job, settings, token, report, save)
+                raise
+        elif find_unrar_ps5_payload():
+            return transfer_ps5_remote_archive(job, settings, token, report, save)
 
     if is_decomp and is_arch:
         try:
@@ -1793,18 +2480,22 @@ def transfer(job, settings, token, report, save):
             else:
                 source = probe_source(job["kind"], job["source"], token, decompress=True)
             if not (source.kind.startswith("zip_") or source.kind.startswith("archive_")):
-                if find_unar_tool():
+                if extract_mode == "ps5" and find_unrar_ps5_payload():
+                    return transfer_ps5_remote_archive(job, settings, token, report, save)
+                elif find_unar_tool():
                     return transfer_staged_archive(job, settings, token, report, save)
         except Exception:
-            if find_unar_tool():
+            if extract_mode == "ps5" and find_unrar_ps5_payload():
+                return transfer_ps5_remote_archive(job, settings, token, report, save)
+            elif find_unar_tool():
                 return transfer_staged_archive(job, settings, token, report, save)
-            raise
     else:
         if job.get("kind") == "multipart":
             source = probe_multipart_source(job.get("parts") or job["source"], token, target_filename=job.get("name"))
         else:
-            source = probe_source(job["kind"], job["source"], token, decompress=job.get("decompress", True))
-    if source.kind == "url" and source.location != job["source"]:
+            source = probe_source(job["kind"], job["source"], token, decompress=False)
+
+    if source.kind == "url" and source.location != job.get("source"):
         job["source"] = source.location
     if (source.kind.startswith("zip_") or source.kind.startswith("archive_")) and source.filename:
         job["name"] = source.filename
@@ -1817,6 +2508,7 @@ def transfer(job, settings, token, report, save):
         or "." not in job.get("name", "")
     ):
         job["name"] = source.filename
+
     old_identity = job.get("identity")
     link_updated = job.pop("link_updated", False)
     if old_identity:
@@ -1833,7 +2525,8 @@ def transfer(job, settings, token, report, save):
                       "is_zip": (source.kind.startswith("zip_") or source.kind.startswith("archive_")),
                       "is_archive": (source.kind.startswith("zip_") or source.kind.startswith("archive_")),
                       "archive_info": source.archive_info})
-    ftp = reader = data_socket = None
+
+    ftp = None
     clean = False
     meter = Meter()
     try:
@@ -1841,183 +2534,26 @@ def transfer(job, settings, token, report, save):
         ftp = connect_ftp(settings, token)
         target_folder = valid_folder(job.get("folder") or settings["folder"])
         ensure_folder(ftp, target_folder)
+        ftp.cwd(target_folder)
         name = valid_name(job["name"])
-        part = f"{name}.{job['id']}.ps5part"
-        existing = remote_size(ftp, name)
-        if existing is not None and not job.get("overwrite"):
-            raise TransferError("Destination file already exists. Rename this job or explicitly enable replacement in a new job.")
-        partial_size = remote_size(ftp, part)
-        offset = partial_size or 0
-        if partial_size is not None and not job.get("stage_owned"):
-            raise TransferError("Found a partial file without source history; restart this job.")
-        if offset and (source.size is None or offset > source.size):
-            raise TransferError("Partial file is larger than the source or source length is unknown. Restart the job.")
-        if offset and not source.resumable():
-            raise TransferError("This link does not provide stable resume metadata. Restart, or download to your Mac and send the local file.")
-        job["stage_owned"] = True
-        save()
-        job["transferred"] = offset
         free_space = check_ftp_storage(ftp, target_folder)
         if free_space is not None and source.size is not None:
-            needed = max(0, source.size - offset)
+            partial_size = remote_size(ftp, f"{name}.{job['id']}.ps5part") or 0
+            needed = max(0, source.size - partial_size)
             if needed > free_space:
                 raise TransferError(f"Insufficient PS5 disk space: needs {needed/1e9:.2f} GB, but only {free_space/1e9:.2f} GB is available.")
-        if source.size is None or offset < source.size or source.size == 0:
-            report("status", f"Resuming at {offset} bytes" if offset else "Transferring")
-            # REST failure is fatal: never silently truncate a resumed upload.
-            try:
-                data_socket = token.track(ftp.transfercmd("STOR " + part, rest=offset or None))
-            except ftplib.error_perm as e:
-                raise TransferError("PS5 FTP refused upload/resume. Confirm write access and REST support, or restart the job.") from e
-            try:
-                data_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2 * MIB)
-            except OSError:
-                pass
-            data_socket.settimeout(30)
 
-            def on_part_change(idx, total, part_name):
-                report("status", f"Streaming Part {idx+1}/{total} ({part_name})")
+        def on_part_change(idx, total, part_name):
+            report("status", f"Streaming Part {idx+1}/{total} ({part_name})")
 
-            reader = make_reader(source, offset, settings, token, meter, on_part_change=on_part_change)
-
-            # Pre-buffer a cushion of data (e.g. 16-64 MiB) for URL/multipart streams before sending to PS5.
-            # This prevents the initial starve-and-burst (sawtooth) cycle on cold start.
-            if source.kind in ("url", "multipart") and source.size and (source.size - offset) > 16 * MIB:
-                prebuffer_target = min(64 * MIB, max(16 * MIB, (settings["buffer_mb"] * MIB) // 4))
-                t_pre = time.monotonic()
-                report("status", "Pre-buffering pipeline…")
-                while not token.event.is_set():
-                    snap = meter.snapshot()
-                    if snap["buffered"] >= prebuffer_target or (time.monotonic() - t_pre) > 3.0:
-                        break
-                    token.wait(0.1)
-                report("status", f"Resuming at {offset} bytes" if offset else "Transferring")
-
-            started = last = time.monotonic()
-            previous = meter.snapshot()
-            hist = [(started, previous["uploaded"], previous["downloaded"])]
-            transferred = offset
-
-            q_depth = max(16, min(64, (settings["buffer_mb"] * MIB) // BLOCK // 2))
-            send_q = queue.Queue(maxsize=q_depth)
-            sender_error = [None]
-            send_done = threading.Event()
-
-            def sender_loop():
-                curr = offset
-                try:
-                    while not token.event.is_set():
-                        item = send_q.get()
-                        if item is None:
-                            send_q.task_done()
-                            break
-                        cap = settings["limit_mbps"] * 1_000_000
-                        if cap:
-                            wait = (curr - offset + len(item)) / cap - (time.monotonic() - started)
-                            if wait > 0:
-                                token.wait(wait)
-                        t = time.monotonic()
-                        data_socket.sendall(item)
-                        meter.add(uploaded=len(item), sending=time.monotonic() - t)
-                        curr += len(item)
-                        send_q.task_done()
-                except Exception as ex:
-                    sender_error[0] = ex
-                finally:
-                    send_done.set()
-
-            sender_thread = threading.Thread(target=sender_loop, daemon=True, name="ftp-async-sender")
-            sender_thread.start()
-
-            try:
-                while True:
-                    token.check()
-                    if sender_error[0]:
-                        raise sender_error[0]
-                    t = time.monotonic()
-                    block = reader.read(BLOCK)
-                    meter.add(waiting=time.monotonic() - t)
-                    if not block:
-                        break
-                    while not token.event.is_set():
-                        if sender_error[0]:
-                            raise sender_error[0]
-                        try:
-                            send_q.put(block, timeout=0.1)
-                            break
-                        except queue.Full:
-                            pass
-                    token.check()
-                    transferred += len(block)
-                    job["transferred"] = transferred
-                    now = time.monotonic()
-                    if now - last >= .4:
-                        snap = meter.snapshot()
-                        up, down = windowed_rates(hist, now, snap)
-                        capacity = settings["buffer_mb"] * MIB
-                        bottleneck = "Speed cap enabled" if settings["limit_mbps"] else (
-                            "Waiting for source" if snap["buffered"] < capacity * .25 else "PS5 / local network")
-                        report("progress", {"transferred": transferred, "total": source.size, "upload_bps": up,
-                            "download_bps": down, "buffered": snap["buffered"], "buffer_capacity": settings["buffer_mb"] * MIB,
-                            "elapsed": now - started, "eta": (source.size - transferred) / up if source.size and up else None,
-                            "bottleneck": bottleneck, "offset": offset})
-                        last, previous = now, snap
-                while not token.event.is_set():
-                    if sender_error[0]:
-                        raise sender_error[0]
-                    try:
-                        send_q.put(None, timeout=0.1)
-                        break
-                    except queue.Full:
-                        pass
-                sender_thread.join(timeout=30)
-                if sender_error[0]:
-                    raise sender_error[0]
-            finally:
-                if sender_thread.is_alive():
-                    try:
-                        send_q.put_nowait(None)
-                    except Exception:
-                        pass
-                    sender_thread.join(timeout=1.0)
-
-            if source.size is not None and transferred != source.size:
-                raise TransferError("Source byte count did not match. Incomplete file retained.")
-            reader.close()
-            reader = None
-            token.untrack(data_socket)
-            data_socket.close()
-            data_socket = None
-            ftp.voidresp()
-        token.check()
-        report("status", "Verifying PS5 file size")
-        actual = remote_size(ftp, part)
-        expected = source.size if source.size is not None else job["transferred"]
-        if actual != expected:
-            raise TransferError(f"PS5 size mismatch: expected {expected} bytes, received {actual}. Partial retained; do not use it.")
-        # Recheck local metadata after read to catch concurrent edits.
-        if source.kind == "local" and probe_source("local", source.location, token).identity() != source.identity():
-            raise TransferError("Local file changed while uploading. Partial retained; restart with a stable file.")
-        elif source.kind == "multipart":
-            for p in (source.parts or []):
-                if p.kind == "local" and probe_source("local", p.location, token).identity() != p.identity():
-                    raise TransferError(f"Local part {p.filename} changed while uploading. Partial retained; restart with a stable file.")
-        # Check again in case another client created the final name during this transfer.
-        if not job.get("overwrite") and remote_size(ftp, name) is not None:
-            raise TransferError("Destination appeared during upload. Verified partial retained to avoid replacing it.")
-        report("status", "Finalizing file")
-        try:
-            ftp.rename(part, name)
-        except ftplib.all_errors as e:
-            raise TransferError(f"Upload size verified, but rename failed. Your complete file is {part}; rename it on PS5. No file was deleted.") from e
+        expected = stream_file_to_ftp(
+            ftp, source, name, job, settings, token, report, save,
+            meter=meter, on_part_change=on_part_change
+        )
         job["transferred"] = expected
         job["total"] = expected
         clean = True
         report("complete", {"size": expected, "verification": "Remote file size verified; not a cryptographic checksum."})
     finally:
-        if reader:
-            reader.close()
-        if data_socket:
-            token.untrack(data_socket)
-            data_socket.close()
         close_ftp(ftp, token, clean)
+
