@@ -231,6 +231,15 @@ class Integration(unittest.TestCase):
         with self.assertRaises(TransferError):self.run_job(j)
         with self.assertRaises(TransferError):self.run_job(j)
         self.assertEqual(self.partial(j).read_bytes(),b'unrelated')
+    def test_zero_byte_partial_accepted(self):
+        j=self.job();self.partial(j).parent.mkdir(parents=True,exist_ok=True);self.partial(j).write_bytes(b'')
+        self.run_job(j)
+        self.assertEqual(self.dest(j).read_bytes(),PAYLOAD)
+    def test_overwrite_clears_unowned_partial(self):
+        j=self.job();self.partial(j).parent.mkdir(parents=True,exist_ok=True);self.partial(j).write_bytes(b'unrelated')
+        j['overwrite']=True
+        self.run_job(j)
+        self.assertEqual(self.dest(j).read_bytes(),PAYLOAD)
     def test_local_resume(self):
         source=self.root/'local-resume.bin';source.write_bytes(PAYLOAD);j=self.job();j.update(kind='local',source=str(source))
         j['identity']=probe_source('local',str(source),StopToken()).identity();j['stage_owned']=True
@@ -246,6 +255,34 @@ class Integration(unittest.TestCase):
                 deadline=time.monotonic()+3
                 while m.jobs[0]['state']=='queued' and time.monotonic()<deadline:time.sleep(.02)
                 self.assertEqual(m.jobs[0]['state'],'failed');self.assertIn('destination changed',m.jobs[0]['detail'])
+            finally:m.stop()
+    def test_resume_after_unowned_partial_restarts_cleanly(self):
+        with tempfile.TemporaryDirectory() as d:
+            m=Manager(d)
+            try:
+                m.configure(self.cfg)
+                m.add_jobs({'items':[{'source':self.url()}]})
+                job=m.jobs[0]
+                job['detail']='Found a partial file without source history; restart this job.'
+                job['error_info']={'message':'Found a partial file without source history; restart this job.'}
+                job['state']='failed'
+                old_id=job['id']
+                m.action('resume',job_id=old_id)
+                self.assertNotEqual(m.jobs[0]['id'],old_id)
+                self.assertEqual(m.jobs[0]['state'],'queued')
+            finally:m.stop()
+    def test_toggle_overwrite_action(self):
+        with tempfile.TemporaryDirectory() as d:
+            m=Manager(d)
+            try:
+                m.configure(self.cfg)
+                m.add_jobs({'items':[{'source':self.url()}]})
+                job=m.jobs[0]
+                self.assertFalse(job.get('overwrite',False))
+                m.action('toggle_overwrite',job_id=job['id'])
+                self.assertTrue(job['overwrite'])
+                m.action('toggle_overwrite',job_id=job['id'])
+                self.assertFalse(job['overwrite'])
             finally:m.stop()
     def test_input_injection_rejected(self):
         for value in ['../x','x\r\nDELE file','..','a/b']:

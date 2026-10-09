@@ -429,6 +429,7 @@ function row(job, index) {
   if (job.state === 'failed' || job.error_info) {
     menu += `<button data-job="${job.id}" data-action="view_error">View error report & push</button>`;
   }
+  if (!isActive) menu += `<button data-job="${job.id}" data-action="toggle_overwrite">${job.overwrite ? 'Disable replacement' : 'Enable replacement (overwrite)'}</button>`;
   if (!isActive) menu += `<button data-job="${job.id}" data-action="restart">Restart from zero</button>`;
   if (job.state !== 'completed' && job.state !== 'cancelled') menu += `<button data-job="${job.id}" data-action="cancel">Cancel transfer</button>`;
   if (!isActive && job.state !== 'completed' && index + 1 < (state.jobs || []).length) {
@@ -1391,6 +1392,7 @@ async function jobAction(action, id) {
 
   const r = await perform('action', { action, id });
   if (r && ['resume', 'restart'].includes(action)) toast('Queued. Press Start queue to begin if the queue is paused.');
+  if (r && action === 'toggle_overwrite') toast(job.overwrite ? 'Replacement disabled' : 'Replacement enabled: will overwrite existing file on PS5');
 }
 
 // Global click delegation

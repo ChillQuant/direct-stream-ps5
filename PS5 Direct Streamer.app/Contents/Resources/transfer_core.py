@@ -1891,13 +1891,23 @@ def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
         raise TransferError("Destination file already exists. Rename this job or explicitly enable replacement in a new job.")
 
     partial_size = remote_size(ftp, part)
-    offset = partial_size or 0
-    if partial_size is not None and not job.get("stage_owned"):
-        raise TransferError("Found a partial file without source history; restart this job.")
-    if offset and (source.size is None or offset > source.size):
-        raise TransferError("Partial file is larger than the source or source length is unknown. Restart the job.")
-    if offset and not source.resumable():
-        raise TransferError("This link does not provide stable resume metadata. Restart, or download to your Mac and send the local file.")
+    if job.get("overwrite") and partial_size is not None:
+        try:
+            ftp.delete(part)
+        except Exception:
+            pass
+        partial_size = None
+
+    if partial_size is not None and partial_size > 0:
+        if not job.get("stage_owned"):
+            raise TransferError("Found a partial file without source history; restart this job.")
+        if source.size is None or partial_size > source.size:
+            raise TransferError("Partial file is larger than the source or source length is unknown. Restart the job.")
+        if not source.resumable():
+            raise TransferError("This link does not provide stable resume metadata. Restart, or download to your Mac and send the local file.")
+        offset = partial_size
+    else:
+        offset = 0
     job["stage_owned"] = True
     save()
 
@@ -2060,6 +2070,11 @@ def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
 
     if not job.get("overwrite") and remote_size(ftp, name) is not None:
         raise TransferError(f"Destination appeared during upload for {name}. Verified partial retained to avoid replacing it.")
+    if job.get("overwrite") and remote_size(ftp, name) is not None:
+        try:
+            ftp.delete(name)
+        except Exception:
+            pass
 
     report("status", f"Finalizing {name}")
     try:

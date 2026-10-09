@@ -775,7 +775,11 @@ class Manager:
                         raise TransferError("Wait for the current operation to stop.")
                     if job["state"] == "completed" and action == "resume":
                         raise TransferError("This job is already complete.")
-                    if action == "restart":
+                    is_unowned_error = (
+                        "Found a partial file without source history" in str(job.get("detail", ""))
+                        or "Found a partial file without source history" in str((job.get("error_info") or {}).get("message", ""))
+                    )
+                    if action == "restart" or (action == "resume" and is_unowned_error):
                         # New partial path; never delete a potentially valuable old partial silently.
                         job["id"] = secrets.token_hex(6)
                         job["identity"] = None
@@ -783,7 +787,7 @@ class Manager:
                         job["transferred"] = 0
                         job["destination"] = None
                     job["state"] = "queued"
-                    job["detail"] = "Queued to resume" if action == "resume" else "Queued to restart from zero; old partial retained"
+                    job["detail"] = "Queued to resume" if action == "resume" and not is_unowned_error else "Queued to restart from zero; old partial retained"
                 elif action == "remove":
                     if job["id"] == self.current:
                         raise TransferError("Pause the job before removing it.")
@@ -816,6 +820,7 @@ class Manager:
                         raise TransferError("This transfer is already completed.")
                     curr = job.get("decompress", True)
                     job["decompress"] = not curr
+                    job["id"] = secrets.token_hex(6)
                     job["identity"] = None
                     job["stage_owned"] = False
                     job["transferred"] = 0
@@ -873,6 +878,7 @@ class Manager:
                     if mode not in ("ps5", "mac", "none"):
                         raise TransferError("Invalid extraction mode.")
                     job["extract_mode"] = mode
+                    job["id"] = secrets.token_hex(6)
                     job["identity"] = None
                     job["stage_owned"] = False
                     job["transferred"] = 0
@@ -891,6 +897,14 @@ class Manager:
                         job["decompress"] = True
                         job["staged_extraction"] = True
                         job["detail"] = "Extract on Mac (staging)"
+                elif action == "toggle_overwrite":
+                    if job["id"] == self.current:
+                        raise TransferError("Pause the transfer before changing replacement settings.")
+                    job["overwrite"] = not job.get("overwrite", False)
+                    if job["overwrite"]:
+                        job["detail"] = "Replacement enabled: will overwrite existing file on PS5"
+                    else:
+                        job["detail"] = "Replacement disabled: safe mode"
                 else:
                     raise TransferError("Unknown queue action.")
             self.save()
