@@ -1069,6 +1069,21 @@ class Integration(unittest.TestCase):
             finally:
                 m.stop()
 
+    def test_size_uint64_sentinel_means_missing(self):
+        from transfer_core import remote_size
+        class FakeFTP:
+            def __init__(self, size_val):
+                self._size_val = size_val
+            def size(self, path):
+                return self._size_val
+
+        # UINT64_MAX: 18446744073709551615 (returned by some PS5 FTP servers for missing files)
+        self.assertIsNone(remote_size(FakeFTP(18446744073709551615), "nope.bin"))
+        self.assertIsNone(remote_size(FakeFTP(1 << 63), "nope.bin"))
+        # Normal size returns integer
+        self.assertEqual(remote_size(FakeFTP(12345), "real.bin"), 12345)
+        self.assertEqual(remote_size(FakeFTP(0), "empty.bin"), 0)
+
 if __name__=='__main__':unittest.main()
 
 
