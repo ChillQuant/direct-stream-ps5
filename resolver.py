@@ -471,14 +471,20 @@ def detect_multipart_sequence(items: list[dict]) -> tuple[bool, str, list[dict]]
     for item in items:
         raw_name = item.get("name") or ""
         if not raw_name:
-            src = item.get("source", "")
-            raw_name = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
+            src = str(item.get("source", "")).strip()
+            if src.startswith(("http://", "https://")):
+                raw_name = urllib.parse.unquote(Path(urllib.parse.urlsplit(src).path).name)
+            else:
+                raw_name = os.path.basename(src.replace("\\", "/"))
         info = parse_multipart_info(raw_name)
         if not info:
             return False, "", items
         base, num = info
         base_names.add(base.lower())
-        parsed.append((num, item, base))
+        upd_item = dict(item)
+        if not upd_item.get("name"):
+            upd_item["name"] = raw_name
+        parsed.append((num, upd_item, base))
 
     if len(base_names) != 1:
         return False, "", items

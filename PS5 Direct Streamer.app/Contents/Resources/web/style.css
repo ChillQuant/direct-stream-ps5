@@ -2091,6 +2091,12 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 0 !important;
 }
 
+.browse-action-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .verify-action-btn {
   display: inline-flex;
   align-items: center;

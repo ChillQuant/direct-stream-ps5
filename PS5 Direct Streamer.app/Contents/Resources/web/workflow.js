@@ -125,8 +125,8 @@ window.renderWorkflow = function(s) {
     requestAnimationFrame(()=>$('completion-panel').classList.add('just-completed'));
   }
   const hostLabel = {Darwin:'Mac',Windows:'Windows PC',Linux:'Linux device'}[s.host_platform] || 'host device';
-  $('local-path').placeholder=sourceKind==='folder' ? (s.host_platform==='Windows'?'C:\\Users\\you\\Downloads\\game-folder':'/path/to/game-folder') : (s.host_platform==='Windows'?'C:\\Users\\you\\Downloads\\game.pkg':'/path/to/game.pkg');
-  $('local-path-label').textContent=sourceKind==='folder'?`Folder path on the ${hostLabel} running Direct Stream`:`File path on the ${hostLabel} running Direct Stream`;
+  $('local-path').placeholder=sourceKind==='folder' ? (s.host_platform==='Windows'?'C:\\Users\\you\\Downloads\\game-folder':'/path/to/game-folder') : (s.host_platform==='Windows'?'C:\\Users\\you\\Downloads\\game.pkg (paste multiple on separate lines)':'/path/to/game.pkg (paste multiple on separate lines)');
+  $('local-path-label').textContent=sourceKind==='folder'?`Folder path on the ${hostLabel} running Direct Stream`:`File path(s) on the ${hostLabel} running Direct Stream`;
   const signature=JSON.stringify([[...failed,...completed].map(j=>[j.id,j.state,j.detail,j.folder,j.extract_mode,j.unrar_extract_location,j.unrar_delete_after,j.total]),s.jobs.length,s.settings.folder,s.settings.unrar_extract_location]);
   if(signature===workflowSignature)return;
   workflowSignature=signature;

@@ -353,6 +353,89 @@ class TestResolver(unittest.TestCase):
         self.assertEqual(m.jobs[0]["kind"], "multipart")
         self.assertEqual(m.jobs[0]["name"], "[DLPSGAME.COM]-PPSA18216.rar")
 
+    def test_detect_multipart_sequence_local_paths(self):
+        from resolver import detect_multipart_sequence
+        # POSIX paths without explicit name field
+        posix_items = [
+            {"source": "/Users/test/Downloads/EldenRing.part2.rar"},
+            {"source": "/Users/test/Downloads/EldenRing.part1.rar"}
+        ]
+        is_mp, merged_name, sorted_items = detect_multipart_sequence(posix_items)
+        self.assertTrue(is_mp)
+        self.assertEqual(merged_name, "EldenRing.rar")
+        self.assertEqual(sorted_items[0]["name"], "EldenRing.part1.rar")
+        self.assertEqual(sorted_items[1]["name"], "EldenRing.part2.rar")
+
+        # Windows paths with backslashes
+        win_items = [
+            {"source": "D:\\Games\\Bloodborne.pkg.002"},
+            {"source": "D:\\Games\\Bloodborne.pkg.001"}
+        ]
+        is_mp, merged_name, sorted_items = detect_multipart_sequence(win_items)
+        self.assertTrue(is_mp)
+        self.assertEqual(merged_name, "Bloodborne.pkg")
+        self.assertEqual(sorted_items[0]["name"], "Bloodborne.pkg.001")
+        self.assertEqual(sorted_items[1]["name"], "Bloodborne.pkg.002")
+
+    def test_manager_local_multipart_jobs(self):
+        from ps5_streamer import Manager
+        from pathlib import Path
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        m = Manager(tmp)
+
+        file1 = Path(tmp) / "Game.part1.rar"
+        file2 = Path(tmp) / "Game.part2.rar"
+        file1.touch()
+        file2.touch()
+
+        res = m.add_jobs({
+            "kind": "local",
+            "items": [
+                {"source": str(file1)},
+                {"source": str(file2)}
+            ],
+            "combine_multipart": True,
+            "extract_mode": "ps5",
+            "decompress": True
+        })
+        self.assertEqual(res["count"], 1)
+        self.assertEqual(len(m.jobs), 1)
+        job = m.jobs[0]
+        self.assertEqual(job["kind"], "multipart")
+        self.assertEqual(job["name"], "Game.rar")
+        self.assertEqual(job["extract_mode"], "ps5")
+        self.assertEqual(len(job["parts"]), 2)
+        self.assertEqual(job["parts"][0]["name"], "Game.part1.rar")
+        self.assertEqual(job["parts"][1]["name"], "Game.part2.rar")
+
+    def test_manager_local_multiple_distinct_jobs(self):
+        from ps5_streamer import Manager
+        from pathlib import Path
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        m = Manager(tmp)
+
+        file1 = Path(tmp) / "Game1.pkg"
+        file2 = Path(tmp) / "Game2.pkg"
+        file1.touch()
+        file2.touch()
+
+        res = m.add_jobs({
+            "kind": "local",
+            "items": [
+                {"source": str(file1)},
+                {"source": str(file2)}
+            ],
+            "combine_multipart": False
+        })
+        self.assertEqual(res["count"], 2)
+        self.assertEqual(len(m.jobs), 2)
+        self.assertEqual(m.jobs[0]["kind"], "local")
+        self.assertEqual(m.jobs[0]["name"], "Game1.pkg")
+        self.assertEqual(m.jobs[1]["kind"], "local")
+        self.assertEqual(m.jobs[1]["name"], "Game2.pkg")
+
 
 if __name__ == "__main__":
     unittest.main()

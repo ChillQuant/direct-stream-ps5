@@ -380,26 +380,32 @@ class Manager:
             raise TransferError("Add between 1 and 100 files at a time.")
         combine = data.get("combine_multipart")
         is_seq, detected_name, sorted_items = detect_multipart_sequence(items)
-        if not is_seq and len(items) > 1 and kind in ("url", "multipart"):
-            tok = StopToken()
-            def _probe_item(it):
+        if not is_seq and len(items) > 1:
+            for it in items:
                 src = it.get("source", "").strip()
-                if not src:
-                    return
-                curr_name = it.get("name", "")
-                if not curr_name or not parse_multipart_info(curr_name):
-                    try:
-                        resolved = pre_resolve_url(src)
-                        info = probe_source("url", resolved, tok, decompress=False)
-                        if info.filename:
-                            it["name"] = info.filename
-                    except Exception:
-                        pass
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(items), 8)) as executor:
-                list(executor.map(_probe_item, items))
-
+                if not it.get("name") and src and not src.startswith(("http://", "https://")):
+                    it["name"] = Path(src).name
             is_seq, detected_name, sorted_items = detect_multipart_sequence(items)
+            if not is_seq and any(it.get("source", "").startswith(("http://", "https://")) for it in items):
+                tok = StopToken()
+                def _probe_item(it):
+                    src = it.get("source", "").strip()
+                    if not src or not src.startswith(("http://", "https://")):
+                        return
+                    curr_name = it.get("name", "")
+                    if not curr_name or not parse_multipart_info(curr_name):
+                        try:
+                            resolved = pre_resolve_url(src)
+                            info = probe_source("url", resolved, tok, decompress=False)
+                            if info.filename:
+                                it["name"] = info.filename
+                        except Exception:
+                            pass
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(items), 8)) as executor:
+                    list(executor.map(_probe_item, items))
+
+                is_seq, detected_name, sorted_items = detect_multipart_sequence(items)
 
         if kind == "multipart" or (combine is not False and is_seq) or (combine is True and len(items) > 1):
             use_items = sorted_items if is_seq else items
@@ -447,7 +453,9 @@ class Manager:
                 "state": "queued",
                 "detail": (f"Queued ({len(parts_list)} parts) · PS5 extraction (0 GB Mac disk)"
                            if is_multi_arch and job_extract_mode == "ps5"
-                           else f"Queued ({len(parts_list)} parts) · direct PS5 stitch"),
+                           else (f"Queued ({len(parts_list)} parts) · local staging extraction"
+                                 if is_multi_arch and job_extract_mode == "mac"
+                                 else f"Queued ({len(parts_list)} parts) · direct PS5 stitch")),
                 "total": None,
                 "transferred": 0,
                 "overwrite": bool(data.get("overwrite", False)),

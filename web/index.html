@@ -1015,11 +1015,20 @@
 
     <!-- Local Path Field -->
     <div id="local-fields" class="modal-field-block" hidden>
-      <label id="local-path-label" for="local-path">Local game file / disk image path</label>
-      <div class="input-group">
-        <input id="local-path" placeholder="/Users/you/Downloads/game.ffpfsc" spellcheck="false">
-        <button id="pick-file" type="button" class="button outline small">Browse file</button>
-        <button id="pick-folder" type="button" class="button outline small">Browse folder</button>
+      <div class="field-label-row">
+        <label id="local-path-label" for="local-path">Local game files / disk image path</label>
+        <div class="browse-action-buttons">
+          <button type="button" id="pick-file" class="verify-action-btn" title="Browse one or more game files on this computer">
+            <svg><use href="#i-file"/></svg> Browse files
+          </button>
+          <button type="button" id="pick-folder" class="verify-action-btn" title="Browse a directory containing game files">
+            <svg><use href="#i-folder"/></svg> Browse folder
+          </button>
+        </div>
+      </div>
+      <div class="input-with-icon">
+        <svg class="field-icon"><use href="#i-file"/></svg>
+        <textarea id="local-path" rows="2" placeholder="Choose local files or enter file paths. Add multiple files on separate lines." spellcheck="false"></textarea>
       </div>
     </div>
 

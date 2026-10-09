@@ -241,10 +241,10 @@ function selectKind(kind) {
   if ($('local-fields')) $('local-fields').hidden = sourceKind === 'url';
   const label = $('local-path-label');
   if (label) {
-    label.textContent = kind === 'folder' ? 'Local game directory / folder path' : 'Local game file / disk image path';
+    label.textContent = kind === 'folder' ? 'Local game directory / folder path' : 'Local game files / disk image path';
   }
   if ($('local-path')) {
-    $('local-path').placeholder = kind === 'folder' ? '/Users/you/Downloads/CUSA12345 or game directory' : '/Users/you/Downloads/game.ffpfsc';
+    $('local-path').placeholder = kind === 'folder' ? '/Users/you/Downloads/CUSA12345 or game directory' : 'Choose local files or enter paths. Add multiple files on separate lines.';
   }
   const pickFileBtn = $('pick-file');
   const pickFolderBtn = $('pick-folder');
@@ -1468,21 +1468,25 @@ function detectMultipartSequence(items) {
       raw = vMeta?.filename || raw;
     }
     if (!raw && it.source) {
-      try {
-        const u = new URL(it.source);
-        for (const p of ['filename', 'file_name', 'name', 'file', 'fn', 'title']) {
-          const v = u.searchParams.get(p);
-          if (v && v.trim()) {
-            const clean = decodeURIComponent(v.trim()).split('/').pop().split('\\').pop();
-            if (clean && clean.includes('.')) {
-              raw = clean;
-              break;
+      if (/^https?:\/\//i.test(it.source)) {
+        try {
+          const u = new URL(it.source);
+          for (const p of ['filename', 'file_name', 'name', 'file', 'fn', 'title']) {
+            const v = u.searchParams.get(p);
+            if (v && v.trim()) {
+              const clean = decodeURIComponent(v.trim()).split('/').pop().split('\\').pop();
+              if (clean && clean.includes('.')) {
+                raw = clean;
+                break;
+              }
             }
           }
+          if (!raw) raw = decodeURIComponent(u.pathname.split('/').pop());
+        } catch (e) {
+          raw = it.source.split(/[/\\]/).pop();
         }
-        if (!raw) raw = decodeURIComponent(u.pathname.split('/').pop());
-      } catch (e) {
-        raw = it.source.split('/').pop().split('\\').pop();
+      } else {
+        raw = it.source.split(/[/\\]/).pop();
       }
     }
     const info = parseMultipartInfo(raw);
@@ -1637,7 +1641,7 @@ const updateAddPreview = () => {
   if (lines.length > 1) {
     const items = lines.map(s => ({
       source: s,
-      name: getVerifiedInfo(s)?.filename || ''
+      name: isUrl ? (getVerifiedInfo(s)?.filename || '') : s.split(/[/\\]/).pop()
     }));
     const [isMulti, mergedName, sortedParts] = detectMultipartSequence(items);
     if (isMulti) {
@@ -1649,8 +1653,8 @@ const updateAddPreview = () => {
         const listEl = $('stacked-parts-list');
         if (listEl) {
           listEl.innerHTML = sortedParts.map((p, idx) => {
-            const vInfo = getVerifiedInfo(p.source);
-            const clean = p.name || vInfo?.filename || p.source.split('/').pop().split('?')[0] || p.source;
+            const vInfo = isUrl ? getVerifiedInfo(p.source) : null;
+            const clean = p.name || vInfo?.filename || p.source.split(/[/\\]/).pop().split('?')[0] || p.source;
             const sizeStr = vInfo?.size_formatted ? ` · ${vInfo.size_formatted}` : '';
             return `
               <div class="stacked-part-item">
@@ -1672,7 +1676,9 @@ const updateAddPreview = () => {
         const hint = $('archive-mode-hint');
         if (hint) {
           if (modalExtractMode === 'ps5') {
-            hint.textContent = 'Streams multi-part archive directly to PS5 /data/unrar using unrar-ps5 payload with no local disk usage space.';
+            hint.textContent = isUrl
+              ? 'Streams multi-part archive directly to PS5 /data/unrar using unrar-ps5 payload with no local disk usage space.'
+              : 'Streams multi-part local archive directly to PS5 /data/unrar using unrar-ps5 payload with no local disk usage space.';
           } else if (modalExtractMode === 'mac') {
             hint.textContent = 'Unpacks multi-part archive locally using temporary storage and streams extracted game package to PS5.';
           } else {
@@ -1723,7 +1729,7 @@ const updateAddPreview = () => {
       }
     }
   } else {
-    name = first.split('/').pop() || 'local.bin';
+    name = first.split(/[/\\]/).pop() || 'local.bin';
   }
 
   const ext = name.toLowerCase().split('?')[0].split('.').pop();
@@ -2109,7 +2115,7 @@ $('add-form').addEventListener('submit', async e => {
 
   const items = sources.map(source => ({
     source,
-    name: (sourceKind === 'folder' ? $('file-name').value.trim() : '') || getVerifiedInfo(source)?.filename || ''
+    name: (sourceKind === 'folder' ? $('file-name').value.trim() : '') || getVerifiedInfo(source)?.filename || (sourceKind !== 'url' ? source.split(/[/\\]/).pop() : '')
   }));
   const [isMulti, mergedName, sortedParts] = detectMultipartSequence(items);
   const willStitch = (sourceKind !== 'folder') && isMulti && ($('combine-multipart')?.checked !== false);
@@ -2124,7 +2130,7 @@ $('add-form').addEventListener('submit', async e => {
   try {
     const jobItems = (willStitch ? sortedParts : items).map(it => ({
       source: it.source,
-      name: it.name || getVerifiedInfo(it.source)?.filename || '',
+      name: it.name || getVerifiedInfo(it.source)?.filename || (sourceKind !== 'url' ? it.source.split(/[/\\]/).pop() : ''),
       folder: destFolder
     }));
     const r = await api('jobs', {
@@ -2353,9 +2359,11 @@ $('pick-file').addEventListener('click', async () => {
     const r = await api('pick', { type: 'file' });
     if (r.paths && r.paths.length > 0) {
       $('local-path').value = r.paths.join('\n');
+      $('local-path').dispatchEvent(new Event('input'));
       updateAddPreview();
     } else if (r.path) {
       $('local-path').value = r.path;
+      $('local-path').dispatchEvent(new Event('input'));
       updateAddPreview();
     } else if (r.picker_unsupported) {
       toast('File picker dialog not available in terminal/mobile mode. Enter or paste the file path directly.', true);
@@ -2952,6 +2960,8 @@ $('drop-overlay').addEventListener('drop', e => {
     openAdd('local');
     const names = files.map(f => f.path || f.name).join('\n');
     $('local-path').value = names;
+    $('local-path').dispatchEvent(new Event('input'));
+    updateAddPreview();
     toast(`Dropped ${files.length} file(s) into New Transfer`);
   }
 });
