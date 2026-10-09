@@ -112,6 +112,33 @@ class AuditSafetyTests(unittest.TestCase):
             finally:
                 reader.close()
 
+    def test_mark_completed_on_active_transfer_rejected(self):
+        from ps5_streamer import Manager
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                m.jobs = [{"id": "active123", "name": "game.pkg", "state": "running"}]
+                m.current = "active123"
+                with self.assertRaisesRegex(TransferError, "Pause or cancel the active transfer"):
+                    m.action("mark_completed", job_id="active123")
+                m.current = None
+                res = m.action("mark_completed", job_id="active123")
+                self.assertTrue(res["ok"])
+                self.assertEqual(m.jobs[0]["state"], "completed")
+            finally:
+                m.stop()
+
+    def test_validate_links_concurrency_lock(self):
+        from ps5_streamer import Manager
+        with tempfile.TemporaryDirectory() as d:
+            m = Manager(d)
+            try:
+                m._validating_links = True
+                res = m.action("validate_links")
+                self.assertIn("already in progress", res["message"])
+            finally:
+                m.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

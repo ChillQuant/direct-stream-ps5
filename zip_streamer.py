@@ -25,6 +25,9 @@ import zipfile
 import zlib
 from dataclasses import dataclass
 
+class Cancelled(Exception):
+    pass
+
 BLOCK = 1024 * 1024  # 1 MiB chunks
 HEADERS = {"User-Agent": "DirectStreamPS5/2.9.0"}
 
@@ -80,9 +83,9 @@ class HttpRangeStream(io.RawIOBase):
             "Range": f"bytes={start}-{end}"
         })
         with urllib.request.urlopen(req, timeout=15) as resp:
-            data = resp.read()
             if resp.status == 206:
-                return data
+                return resp.read(end - start + 1)
+            data = resp.read(end + 1)
             return data[start : end + 1]
 
     def _get_chunk(self, chunk_idx):
@@ -411,10 +414,10 @@ def get_zip_payload_offset(kind, location, header_offset, headers=None):
             "Range": f"bytes={header_offset}-{header_offset + 29}"
         })
         with urllib.request.urlopen(req, timeout=15) as resp:
-            data = resp.read()
             if resp.status == 206:
-                hdr_bytes = data[:30]
+                hdr_bytes = resp.read(30)
             else:
+                data = resp.read(header_offset + 30)
                 hdr_bytes = data[header_offset : header_offset + 30]
 
     if len(hdr_bytes) < 30:
@@ -484,6 +487,9 @@ class ZipStreamingReader:
                     resp.close()
                     raise OSError(f"Unexpected HTTP {resp.status} for ZIP payload stream.")
                 if resp.status == 200 and self.payload_offset > 0:
+                    if self.payload_offset > 16 * 1024 * 1024:
+                        resp.close()
+                        raise OSError("Server returned HTTP 200 without Range support; cannot stream ZIP payload from large offset.")
                     discarded = 0
                     while discarded < self.payload_offset:
                         skip = resp.read(min(BLOCK, self.payload_offset - discarded))
@@ -556,7 +562,7 @@ class ZipStreamingReader:
                 return b""
             self.meter.add(buffered=-len(block))
             return block
-        raise Exception("Stream closed or cancelled.")
+        raise Cancelled()
 
     def close(self):
         self.closed.set()
@@ -951,7 +957,7 @@ class ArchiveStreamingReader:
                 return b""
             self.meter.add(buffered=-len(block))
             return block
-        raise Exception("Stream closed or cancelled.")
+        raise Cancelled()
 
     def close(self):
         self.closed.set()

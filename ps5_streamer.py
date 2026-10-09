@@ -756,6 +756,8 @@ class Manager:
                 self.wake.set()
                 return {"ok": True, "merged_id": merged_job["id"], "name": target_name, "parts_count": len(use_parts)}
             elif action == "validate_links":
+                if getattr(self, "_validating_links", False):
+                    return {"ok": True, "message": "Link validation already in progress"}
                 threading.Thread(target=self._validate_queued_links, daemon=True, name="link-validator").start()
                 return {"ok": True, "message": "Link validation started in background"}
             elif action == "trigger_unrar_payload":
@@ -780,13 +782,12 @@ class Manager:
                         job["state"] = "paused" if action == "pause" else "cancelled"
                         job["detail"] = "Partial file retained on PS5, if any"
                 elif action == "mark_completed":
+                    if job["id"] == self.current:
+                        raise TransferError("Pause or cancel the active transfer before marking it complete.")
                     job["state"] = "completed"
                     job["detail"] = extra.get("detail") or "Complete · Extracted on PS5 (0 GB Mac disk)"
                     if job.get("total"):
                         job["transferred"] = job["total"]
-                    if job["id"] == self.current:
-                        self.current = None
-                        self.running = False
                 elif action in ("resume", "restart"):
                     if job["id"] == self.current:
                         raise TransferError("Wait for the current operation to stop.")
@@ -929,56 +930,60 @@ class Manager:
         return {"ok": True}
 
     def _validate_queued_links(self):
-        tok = StopToken()
-        with self.lock:
-            pending = [j for j in self.jobs if j["kind"] in ("url", "multipart") and j["state"] in ("queued", "paused")]
-        self.log("info", f"Validating {len(pending)} queued links…")
-        for j in pending:
-            try:
-                tok.check()
-                if j["kind"] == "multipart":
-                    info = validate_multipart_source(j.get("parts") or j["source"], tok)
-                    with self.lock:
-                        target = next((item for item in self.jobs if item["id"] == j["id"]), None)
-                        if target and target["id"] != self.current:
-                            if info["valid"]:
-                                if info["size"] is not None:
-                                    target["total"] = info["size"]
-                                target["detail"] = f"Verified {info['parts_count']} parts · direct PS5 stitch"
-                            else:
-                                target["detail"] = f"Part check failed: {info['error']}"
-                else:
-                    info = validate_source_url(j["source"], tok, decompress=j.get("decompress", True))
-                    with self.lock:
-                        target = next((item for item in self.jobs if item["id"] == j["id"]), None)
-                        if target and target["id"] != self.current:
-                            if info["valid"]:
-                                if info["size"] is not None:
-                                    target["total"] = info["size"]
-                                if info.get("filename") and (target["name"] in ("download.bin", "file", "view", "uc", "", j.get("name")) or not Path(target["name"]).suffix):
-                                    target["name"] = info.get("filename")
-                                if info.get("password_hint") and not target.get("archive_password"):
-                                    target["archive_password"] = info["password_hint"]
-                                if info.get("staged_extraction"):
-                                    target["staged_extraction"] = True
-                                    arch_type = (info.get("archive_type") or "Archive").upper()
-                                    target["detail"] = f"{arch_type} Archive · Staged extraction to PS5"
-                                elif info.get("is_archive") or info.get("is_zip"):
-                                    arch_type = (info.get("archive_type") or "Archive").upper()
-                                    target["detail"] = f"{arch_type} Archive · Streaming '{info.get('filename')}' directly to PS5"
+        self._validating_links = True
+        try:
+            tok = StopToken()
+            with self.lock:
+                pending = [j for j in self.jobs if j["kind"] in ("url", "multipart") and j["state"] in ("queued", "paused")]
+            self.log("info", f"Validating {len(pending)} queued links…")
+            for j in pending:
+                try:
+                    tok.check()
+                    if j["kind"] == "multipart":
+                        info = validate_multipart_source(j.get("parts") or j["source"], tok)
+                        with self.lock:
+                            target = next((item for item in self.jobs if item["id"] == j["id"]), None)
+                            if target and target["id"] != self.current:
+                                if info["valid"]:
+                                    if info["size"] is not None:
+                                        target["total"] = info["size"]
+                                    target["detail"] = f"Verified {info['parts_count']} parts · direct PS5 stitch"
                                 else:
-                                    status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
-                                    target["detail"] = f"Link verified · {status}"
-                            else:
-                                if info.get("archive_encrypted"):
-                                    target["archive_encrypted"] = True
-                                    target["detail"] = "Encrypted Archive · Password required"
+                                    target["detail"] = f"Part check failed: {info['error']}"
+                    else:
+                        info = validate_source_url(j["source"], tok, decompress=j.get("decompress", True))
+                        with self.lock:
+                            target = next((item for item in self.jobs if item["id"] == j["id"]), None)
+                            if target and target["id"] != self.current:
+                                if info["valid"]:
+                                    if info["size"] is not None:
+                                        target["total"] = info["size"]
+                                    if info.get("filename") and (target["name"] in ("download.bin", "file", "view", "uc", "", j.get("name")) or not Path(target["name"]).suffix):
+                                        target["name"] = info.get("filename")
+                                    if info.get("password_hint") and not target.get("archive_password"):
+                                        target["archive_password"] = info["password_hint"]
+                                    if info.get("staged_extraction"):
+                                        target["staged_extraction"] = True
+                                        arch_type = (info.get("archive_type") or "Archive").upper()
+                                        target["detail"] = f"{arch_type} Archive · Staged extraction to PS5"
+                                    elif info.get("is_archive") or info.get("is_zip"):
+                                        arch_type = (info.get("archive_type") or "Archive").upper()
+                                        target["detail"] = f"{arch_type} Archive · Streaming '{info.get('filename')}' directly to PS5"
+                                    else:
+                                        status = "Parallel ranges OK" if info["ranges"] else "Single-stream only"
+                                        target["detail"] = f"Link verified · {status}"
                                 else:
-                                    target["detail"] = f"Link check failed: {info['error']}"
-                self.save()
-            except Exception:
-                pass
-            time.sleep(0.1)
+                                    if info.get("archive_encrypted"):
+                                        target["archive_encrypted"] = True
+                                        target["detail"] = "Encrypted Archive · Password required"
+                                    else:
+                                        target["detail"] = f"Link check failed: {info['error']}"
+                    self.save()
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        finally:
+            self._validating_links = False
         self.log("info", "Link validation finished.")
 
     def edit_job(self, data):

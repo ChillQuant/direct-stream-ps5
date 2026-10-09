@@ -32,6 +32,7 @@ from resolver import (
     detect_multipart_sequence,
 )
 from zip_streamer import (
+    Cancelled,
     is_zip_candidate,
     is_archive_candidate,
     inspect_zip_archive,
@@ -60,9 +61,6 @@ DEFAULT_ETA_HEN_PAYLOAD_PORT = 9021
 
 class TransferError(Exception):
     """A problem that needs user action; don't blindly retry it."""
-
-class Cancelled(Exception):
-    pass
 
 class StopToken:
     def __init__(self):
@@ -537,9 +535,17 @@ class ParallelReader:
                                 redir_hops += 1
                                 redir_loc = r.headers.get("Location")
                                 if not redir_loc:
+                                    r.close()
                                     break
-                                curr_url = urllib.parse.urljoin(curr_url, redir_loc)
+                                new_url = urllib.parse.urljoin(curr_url, redir_loc)
+                                if curr_url.startswith("https:") and not new_url.startswith("https:"):
+                                    r.close()
+                                    raise TransferError("Blocked an HTTPS-to-HTTP redirect. Use a secure direct link.")
+                                old_origin = urllib.parse.urlsplit(curr_url)
+                                curr_url = new_url
                                 p = urllib.parse.urlsplit(curr_url)
+                                new_origin = p
+                                cross_origin = (old_origin.scheme, old_origin.hostname, old_origin.port) != (new_origin.scheme, new_origin.hostname, new_origin.port)
                                 path = urllib.parse.urlunsplit(("", "", p.path or "/", p.query, ""))
                                 r.close()
                                 if conn:
@@ -555,7 +561,13 @@ class ParallelReader:
                                 self.token.track(conn)
                                 with self.cv:
                                     self.connections.add(conn)
-                                headers = {**self.base_headers, "Range": f"bytes={start}-{end}"}
+                                headers = dict(self.base_headers)
+                                if cross_origin:
+                                    sensitive = {"authorization", "cookie", "proxy-authorization", "x-page-token"}
+                                    headers = {k: v for k, v in headers.items() if k.lower() not in sensitive}
+                                headers["Range"] = f"bytes={start}-{end}"
+                                if self.source.etag or self.source.modified:
+                                    headers["If-Range"] = self.source.etag or self.source.modified
                                 if "Referer" not in headers:
                                     headers["Referer"] = f"{p.scheme}://{p.hostname}/"
                                 conn.request("GET", path, headers=headers)
@@ -1332,6 +1344,7 @@ def transfer_folder(job, settings, token, report, save):
             token.untrack(data_socket)
             data_socket.close()
             data_socket = None
+            token.check()
             ftp.voidresp()
 
             token.check()
@@ -1946,6 +1959,7 @@ def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
 
     data_socket = None
     reader = None
+    transfer_success = False
 
     file_total = source.size
     display_total = total_bytes or file_total
@@ -2062,6 +2076,8 @@ def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
             sender_thread.join(timeout=30)
             if sender_error[0]:
                 raise sender_error[0]
+            token.check()
+            transfer_success = True
         finally:
             if sender_thread.is_alive():
                 try:
@@ -2076,7 +2092,13 @@ def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
                 token.untrack(data_socket)
                 data_socket.close()
                 data_socket = None
-            ftp.voidresp()
+            if transfer_success:
+                ftp.voidresp()
+            else:
+                try:
+                    ftp.voidresp()
+                except Exception:
+                    pass
 
         if source.size is not None and transferred != source.size:
             raise TransferError("Source byte count did not match. Incomplete file retained.")
@@ -2481,8 +2503,6 @@ def transfer_ps5_remote_archive(job, settings, token, report, save):
                 job["detail"] = payload_msg
                 report("status", payload_msg)
                 save()
-            else:
-                payload_msg = f"Archive uploaded to /data/unrar. Payload injection notice: {pe}"
         else:
             payload_msg = "Archive uploaded to /data/unrar. Ready for payload injection (config.ini saved)"
 
