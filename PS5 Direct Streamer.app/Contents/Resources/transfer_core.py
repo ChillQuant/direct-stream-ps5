@@ -1872,7 +1872,7 @@ def transfer_staged_archive(job, settings, token, report, save):
 
 def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
                        meter=None, hist=None, started=None, cumulative_offset=0, total_bytes=None,
-                       file_label="", on_part_change=None):
+                       file_label="", on_part_change=None, is_staging=False):
     """Streams a single SourceInfo or reader-compatible source directly to FTP in the current folder,
     handling .ps5part temporary naming, resume checks, async queue buffering, speed calculations,
     remote size verification, and final rename. Uses 0 bytes of Mac disk space."""
@@ -1887,16 +1887,29 @@ def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
 
     part = f"{name}.{job['id']}.ps5part"
     existing = remote_size(ftp, name)
-    if existing is not None and not job.get("overwrite"):
-        raise TransferError("Destination file already exists. Rename this job or explicitly enable replacement in a new job.")
+    if existing is not None:
+        if is_staging or job.get("overwrite"):
+            try:
+                ftp.delete(name)
+            except Exception:
+                pass
+            existing = None
+        else:
+            try:
+                cur_dir = ftp.pwd()
+            except Exception:
+                cur_dir = ""
+            dest_loc = f"{cur_dir}/{name}" if cur_dir else name
+            raise TransferError(f"Destination file already exists on PS5 ({dest_loc}). Rename this job or explicitly enable replacement in a new job.")
 
     partial_size = remote_size(ftp, part)
-    if job.get("overwrite") and partial_size is not None:
-        try:
-            ftp.delete(part)
-        except Exception:
-            pass
-        partial_size = None
+    if (job.get("overwrite") or is_staging) and partial_size is not None:
+        if job.get("overwrite") or not job.get("stage_owned") or not source.resumable() or (source.size is not None and partial_size > source.size):
+            try:
+                ftp.delete(part)
+            except Exception:
+                pass
+            partial_size = None
 
     if partial_size is not None and partial_size > 0:
         if not job.get("stage_owned"):
@@ -2068,9 +2081,9 @@ def stream_file_to_ftp(ftp, source, name, job, settings, token, report, save,
                 if curr_p_id.get("size") != orig_p_id.get("size"):
                     raise TransferError(f"Local part {p.filename} changed while uploading. Partial retained; restart with a stable file.")
 
-    if not job.get("overwrite") and remote_size(ftp, name) is not None:
+    if not job.get("overwrite") and not is_staging and remote_size(ftp, name) is not None:
         raise TransferError(f"Destination appeared during upload for {name}. Verified partial retained to avoid replacing it.")
-    if job.get("overwrite") and remote_size(ftp, name) is not None:
+    if (job.get("overwrite") or is_staging) and remote_size(ftp, name) is not None:
         try:
             ftp.delete(name)
         except Exception:
@@ -2118,10 +2131,20 @@ def transfer_ps5_remote_archive(job, settings, token, report, save):
         is_seq, _, sorted_parts = detect_multipart_sequence(normalized_parts)
         use_parts = sorted_parts if is_seq else normalized_parts
 
+        seen_names = set()
         for idx, p in enumerate(use_parts):
             token.check()
             info = probe_source(p["kind"], p["source"], token, decompress=False)
-            p_fname = valid_name(p.get("name") or info.filename or f"part_{idx+1}.bin")
+            base_fname = valid_name(p.get("name") or info.filename or f"part_{idx+1}.bin")
+            p_fname = base_fname
+            if p_fname in seen_names:
+                stem, ext = os.path.splitext(base_fname)
+                p_fname = valid_name(f"{stem}.part{idx+1}{ext}")
+                count = 1
+                while p_fname in seen_names:
+                    p_fname = valid_name(f"{stem}.part{idx+1}_{count}{ext}")
+                    count += 1
+            seen_names.add(p_fname)
             files_to_upload.append({"name": p_fname, "info": info, "kind": p["kind"], "source": p["source"]})
 
         primary_archive_name = files_to_upload[0]["name"]
@@ -2177,15 +2200,22 @@ def transfer_ps5_remote_archive(job, settings, token, report, save):
 
             existing = remote_size(ftp, file_name)
             if existing is not None and existing == file_size and not job.get("overwrite"):
+                report("status", f"Staged {file_name} already complete in /data/unrar ({file_idx+1}/{len(files_to_upload)})")
                 cumulative_transferred += file_size
                 continue
+
+            if existing is not None:
+                try:
+                    ftp.delete(file_name)
+                except Exception:
+                    pass
 
             report("status", f"Streaming {file_name} directly to PS5 ({file_idx+1}/{len(files_to_upload)})")
             f_transferred = stream_file_to_ftp(
                 ftp, src_info, file_name, job, settings, token, report, save,
                 meter=meter, hist=hist, started=started,
                 cumulative_offset=cumulative_transferred, total_bytes=total_size,
-                file_label=file_name
+                file_label=file_name, is_staging=True
             )
             cumulative_transferred += (f_transferred or file_size)
 

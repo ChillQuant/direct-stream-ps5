@@ -2831,7 +2831,15 @@ function openErrorDialog(job) {
   if ($('diag-app-ver')) $('diag-app-ver').textContent = err.app_version || state.version || '2.9.0';
   if ($('diag-platform')) $('diag-platform').textContent = err.platform || state?.host_platform || 'Unknown';
   if ($('diag-python')) $('diag-python').textContent = err.python || 'Python 3';
-  if ($('diag-mode')) $('diag-mode').textContent = (job.staged_extraction || (job.is_archive && job.decompress !== false)) ? 'Staged Extraction (unar)' : `${job.kind} direct stream`;
+  if ($('diag-mode')) {
+    if (job.extract_mode === 'ps5') {
+      $('diag-mode').textContent = 'PS5 on-console extraction (/data/unrar)';
+    } else if (job.staged_extraction || (job.is_archive && job.decompress !== false)) {
+      $('diag-mode').textContent = 'Staged Extraction (unar)';
+    } else {
+      $('diag-mode').textContent = `${job.kind} direct stream`;
+    }
+  }
   if ($('diag-dest')) $('diag-dest').textContent = job.folder || state.settings?.folder || '/data/homebrew';
   if ($('diag-time')) $('diag-time').textContent = err.time || new Date().toLocaleTimeString();
 
@@ -2862,8 +2870,9 @@ function generateMarkdownBugReport(job) {
     `- **Platform:** ${err.platform || state?.host_platform || 'Unknown'}`,
     `- **Python:** ${err.python || '3.x'}`,
     `- **Archive Tool (unar):** ${err.unar_available ? 'Detected' : 'Not detected'}`,
-    `- **Job Kind:** \`${job.kind}\` (Staged Extraction: ${job.staged_extraction ? 'Yes' : 'No'})`,
+    `- **Job Kind:** \`${job.kind}\` (Staged Extraction: ${job.staged_extraction ? 'Yes' : 'No'}${job.extract_mode === 'ps5' ? ' · PS5 /data/unrar' : ''})`,
     `- **PS5 Destination:** \`${job.folder || state.settings?.folder || '/data/homebrew'}\``,
+    ...(job.extract_mode === 'ps5' ? [`- **PS5 Staging Directory:** \`/data/unrar\``] : []),
     `- **Timestamp:** ${err.time || new Date().toISOString()}`,
     ``,
     `#### Python Stack Trace`,

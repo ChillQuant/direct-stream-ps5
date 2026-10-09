@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, probe_source,
@@ -952,6 +953,76 @@ class Integration(unittest.TestCase):
             self.assertIn("extract_location=/data/ShadowMount", cfg_content)
             self.assertIn("archive_password=test_pass", cfg_content)
             self.assertIn("delete_after=1", cfg_content)
+
+    def test_transfer_ps5_remote_archive_replaces_stale_staging_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            arch_path = Path(d) / "test_stale.rar"
+            arch_path.write_bytes(b"FRESH_RAR_PAYLOAD_" * 512)
+
+            unrar_dir = self.root / "data" / "unrar"
+            unrar_dir.mkdir(parents=True, exist_ok=True)
+            stale_file = unrar_dir / "test_stale.rar"
+            stale_file.write_bytes(b"STALE_INCOMPLETE_BYTES")
+
+            stale_part = unrar_dir / "test_stale.rar.test_job_stale_id.ps5part"
+            stale_part.write_bytes(b"OLD_PARTIAL_DATA")
+
+            job = {
+                "id": "test_job_stale_id",
+                "name": "test_stale.rar",
+                "source": str(arch_path),
+                "kind": "local",
+                "folder": "/data/ShadowMount",
+                "unrar_extract_location": "/data/ShadowMount",
+                "unrar_delete_after": True,
+                "unrar_auto_payload": False,
+                "overwrite": False,
+                "transferred": 0,
+                "total": None
+            }
+            tok = StopToken()
+            statuses = []
+            transfer_ps5_remote_archive(job, self.cfg, tok, lambda ev, val: statuses.append(val) if ev == "status" else None, lambda: None)
+
+            self.assertTrue(stale_file.exists())
+            self.assertEqual(stale_file.read_bytes(), arch_path.read_bytes())
+            self.assertFalse(stale_part.exists())
+
+    def test_transfer_ps5_remote_archive_multipart_disambiguation(self):
+        with tempfile.TemporaryDirectory() as d:
+            p1 = Path(d) / "p1.bin"
+            p1.write_bytes(b"PART_1_DATA_" * 128)
+            p2 = Path(d) / "p2.bin"
+            p2.write_bytes(b"PART_2_DATA_" * 128)
+
+            unrar_dir = self.root / "data" / "unrar"
+            unrar_dir.mkdir(parents=True, exist_ok=True)
+
+            job = {
+                "id": "test_job_multi_disam",
+                "name": "archive.rar",
+                "parts": [
+                    {"source": str(p1), "kind": "local", "name": "duplicate.rar"},
+                    {"source": str(p2), "kind": "local", "name": "duplicate.rar"},
+                ],
+                "kind": "multipart",
+                "folder": "/data/ShadowMount",
+                "unrar_extract_location": "/data/ShadowMount",
+                "unrar_delete_after": True,
+                "unrar_auto_payload": False,
+                "overwrite": False,
+                "transferred": 0,
+                "total": None
+            }
+            tok = StopToken()
+            transfer_ps5_remote_archive(job, self.cfg, tok, lambda ev, val: None, lambda: None)
+
+            dup1 = unrar_dir / "duplicate.rar"
+            dup2 = unrar_dir / "duplicate.part2.rar"
+            self.assertTrue(dup1.exists())
+            self.assertEqual(dup1.read_bytes(), p1.read_bytes())
+            self.assertTrue(dup2.exists())
+            self.assertEqual(dup2.read_bytes(), p2.read_bytes())
 
     def test_ps5_unrar_settings_and_actions(self):
         with tempfile.TemporaryDirectory() as d:
