@@ -1886,6 +1886,7 @@ def transfer_staged_archive(job, settings, token, report, save):
                 dest_base = "/data/pkg"
             job["kind"] = "local"
             job["source"] = payload_path
+            job["name"] = payload_name
             job["extracted_name"] = payload_name
             job["folder"] = dest_base
             job["decompress"] = False
