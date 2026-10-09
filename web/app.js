@@ -1496,6 +1496,10 @@ function detectMultipartSequence(items) {
   }
   if (baseNames.size !== 1) return [false, '', items];
   parsed.sort((a, b) => a.num - b.num);
+  const minNum = parsed[0]?.num ?? 1;
+  if (![0, 1].includes(minNum) || parsed.some((p, idx) => p.num !== minNum + idx)) {
+    return [false, '', items];
+  }
   return [true, parsed[0].base, parsed.map(p => p.item)];
 }
 
@@ -1852,7 +1856,9 @@ const resetVerifyStatus = (clearMetadata = false) => {
   }
 };
 
+let verifyGeneration = 0;
 const runVerifyLinks = async () => {
+  const generation = ++verifyGeneration;
   const raw = $('source-urls')?.value.trim() || '';
   const lines = raw.split('\n').map(x => x.trim()).filter(Boolean);
   const box = $('url-verification-status');
@@ -1890,6 +1896,7 @@ const runVerifyLinks = async () => {
 
   try {
     const res = await api('verify', { urls: lines });
+    if (generation !== verifyGeneration || $('source-urls')?.value.trim() !== raw) return false;
     if (!res || !res.results || !res.results.length) {
       throw new Error('No verification response received.');
     }
@@ -2047,6 +2054,7 @@ const runVerifyLinks = async () => {
 };
 
 $('source-urls')?.addEventListener('input', () => {
+  verifyGeneration++;
   updateAddPreview();
   const btn = $('btn-verify-links');
   if (btn) {

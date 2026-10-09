@@ -3,6 +3,8 @@
 # DIRECT STREAM FOR PLAYSTATION 5 — Android / Termux Launcher
 # ==============================================================================
 
+trap 'command -v termux-wake-unlock >/dev/null 2>&1 && termux-wake-unlock || true' EXIT
+
 # 1. Acquire WakeLock so Android won't sleep Wi-Fi during 50GB+ streaming
 if command -v termux-wake-lock >/dev/null 2>&1; then
     echo "[WakeLock] Enabling Background WakeLock..."

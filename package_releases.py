@@ -92,6 +92,12 @@ for item in [
 shutil.copytree(root / 'web', py_dir / 'web')
 shutil.copytree(root / 'tests', py_dir / 'tests')
 
+for package in (win_dir, py_dir):
+    payload = root / 'bin' / 'unrar_ps5.elf'
+    if payload.is_file():
+        (package / 'bin').mkdir(exist_ok=True)
+        shutil.copy2(payload, package / 'bin' / payload.name)
+
 # Create ZIP archives
 for folder_name in ['DIRECT-STREAM-FOR-PLAYSTATION-5-macOS', 'DIRECT-STREAM-FOR-PLAYSTATION-5-Windows', 'DIRECT-STREAM-FOR-PLAYSTATION-5-PurePython']:
     zip_path = dist / f'{folder_name}.zip'

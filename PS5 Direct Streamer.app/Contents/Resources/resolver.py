@@ -6,9 +6,12 @@ KrakenFiles, Qiwi, GoFile, Send.cm, etc.) and generic web pages, allowing users
 to paste sharing/landing page links.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
 
@@ -490,6 +493,10 @@ def detect_multipart_sequence(items: list[dict]) -> tuple[bool, str, list[dict]]
         return False, "", items
 
     parsed.sort(key=lambda x: x[0])
+    numbers = [entry[0] for entry in parsed]
+    min_num = numbers[0] if numbers else 1
+    if min_num not in (0, 1) or numbers != list(range(min_num, min_num + len(numbers))):
+        return False, "", items
     merged_name = parsed[0][2]
     sorted_items = [p[1] for p in parsed]
     return True, merged_name, sorted_items

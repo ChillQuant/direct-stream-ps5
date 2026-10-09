@@ -1,4 +1,5 @@
 """Bounded, cancellable HTTP → FTP pipeline. Python 3.9+, standard library only."""
+import concurrent.futures
 import ftplib
 import hashlib
 import http.client
@@ -159,9 +160,17 @@ class SecureRedirect(urllib.request.HTTPRedirectHandler):
             raise TransferError("Blocked an HTTPS-to-HTTP redirect. Use a secure direct link.")
         new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new_req:
+            old_origin = urllib.parse.urlsplit(req.full_url)
+            new_origin = urllib.parse.urlsplit(newurl)
+            cross_origin = (old_origin.scheme, old_origin.hostname, old_origin.port) != (new_origin.scheme, new_origin.hostname, new_origin.port)
+            sensitive = {"authorization", "cookie", "proxy-authorization", "x-page-token"}
+            if cross_origin:
+                for key in list(new_req.headers):
+                    if key.lower() in sensitive:
+                        new_req.remove_header(key)
             # Preserve critical transfer headers (Range, User-Agent, Referer, Accept, etc.) across redirect
             for k, v in req.headers.items():
-                if k.lower() not in ("host", "content-length"):
+                if k.lower() not in ("host", "content-length") and not (cross_origin and k.lower() in sensitive):
                     new_req.add_header(k, v)
             if "Referer" not in new_req.headers:
                 parsed_orig = urllib.parse.urlsplit(req.full_url)
@@ -388,11 +397,12 @@ def probe_multipart_source(parts, token, target_filename=None):
         except Exception as ex:
             errors[idx] = ex
 
-    threads = [threading.Thread(target=_probe_part, args=(i, p), daemon=True) for i, p in enumerate(parts)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=30)
+    if len(parts) > 100:
+        raise TransferError("Cannot inspect more than 100 parts at once.")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(parts))) as executor:
+        futures = [executor.submit(_probe_part, i, p) for i, p in enumerate(parts)]
+        for f in futures:
+            f.result()
 
     token.check()
     for i, err in enumerate(errors):
@@ -1436,6 +1446,10 @@ def send_ps5_payload(host, port=9021, elf_path=None, elf_bytes=None, timeout=10)
 def generate_unrar_config(filename="", archive_location="/data/unrar", extract_location="/data/homebrew",
                           password=None, delete_after=True, progress=10, threads=0, nice=-20, cpu_mask=0):
     """Generates the config.ini content for bizkut/unrar-ps5."""
+    if password and ("\r" in password or "\n" in password):
+        raise TransferError("Archive password cannot contain line breaks.")
+    if filename and ("\r" in filename or "\n" in filename or ".." in filename or filename.startswith("/")):
+        raise TransferError("Invalid archive filename for console unrar.")
     lines = [
         f"filename={filename or ''}",
         f"archive_location={archive_location}",
@@ -1806,16 +1820,16 @@ def transfer_staged_archive(job, settings, token, report, save):
             err = (stderr or "").strip() or (stdout or "").strip()
             if "password" in err.lower() or "encrypted" in err.lower():
                 job["archive_encrypted"] = True
-                hint_str = f" (tried password '{pwd}')" if pwd else ""
-                raise TransferError(f"Archive extraction failed: Password required or incorrect{hint_str}.")
+                raise TransferError("Archive extraction failed: Password required or incorrect.")
             raise TransferError(f"Archive extraction failed (code {ret}): {err[:200]}")
 
-        # Free downloaded archive files immediately before uploading payload to PS5
+        # Free downloaded archive files immediately before uploading payload to PS5 (never touch original files outside staging)
+        staging_abs = os.path.abspath(staging_dir)
         try:
-            if archive_path and os.path.isfile(archive_path):
+            if archive_path and os.path.isfile(archive_path) and os.path.abspath(archive_path).startswith(staging_abs):
                 os.remove(archive_path)
             for _, p_path in staged_part_files:
-                if os.path.isfile(p_path) and not os.path.islink(p_path):
+                if os.path.isfile(p_path) and not os.path.islink(p_path) and os.path.abspath(p_path).startswith(staging_abs):
                     try:
                         os.remove(p_path)
                     except OSError:

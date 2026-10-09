@@ -183,6 +183,15 @@ def validated_settings(raw):
     return cfg
 
 
+def redact_diagnostic(value, secrets_to_hide=()):
+    """Redact URLs, passwords, and sensitive tokens from diagnostic outputs."""
+    text = re.sub(r"https?://[^\s<>]+", "<url>", str(value))
+    for secret in secrets_to_hide:
+        if secret:
+            text = text.replace(str(secret), "<redacted>")
+    return text
+
+
 def friendly_error(e):
     if isinstance(e, TransferError):
         return str(e)
@@ -1162,8 +1171,8 @@ class Manager:
                                 self.log("warning", job["detail"])
                             token.wait(delay)
             except Exception as e:
-                tb = traceback.format_exc()
-                summary = friendly_error(e)
+                tb = redact_diagnostic(traceback.format_exc(), (self.password, job.get("archive_password")))
+                summary = redact_diagnostic(friendly_error(e), (self.password, job.get("archive_password")))
                 with self.lock:
                     if token.event.is_set():
                         job["state"] = "cancelled" if job["state"] == "cancelling" else "paused"
@@ -1172,11 +1181,14 @@ class Manager:
                         job["state"] = "failed"
                         job["detail"] = summary
                         src = job.get("source", "")
-                        safe_src = re.sub(r"(token|key|auth|sig|signature|pass)=[^&]+", r"\1=REDACTED", src, flags=re.IGNORECASE) if isinstance(src, str) else src
+                        safe_src = redact_diagnostic(
+                            src[:60] + "..." if len(src) > 60 else src,
+                            (self.password, job.get("archive_password"))
+                        ) if isinstance(src, str) else src
                         job["error_info"] = {
                             "summary": summary,
                             "type": type(e).__name__,
-                            "message": str(e),
+                            "message": redact_diagnostic(str(e), (self.password, job.get("archive_password"))),
                             "traceback": tb,
                             "time": time.strftime("%Y-%m-%d %H:%M:%S"),
                             "platform": f"{platform.system()} {platform.release()} ({platform.machine()})",

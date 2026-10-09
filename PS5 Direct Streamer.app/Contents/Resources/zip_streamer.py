@@ -7,6 +7,7 @@ in RAM without extracting onto local PC/phone disk.
 """
 
 import io
+import json
 import os
 import queue
 import re
@@ -14,6 +15,7 @@ import shutil
 import socket
 import struct
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -151,6 +153,8 @@ def get_archive_type(filename_or_url):
 
 def find_lsar_tool():
     """Find lsar archive inspector tool (bundled in app, local bin, or PATH)."""
+    if sys.platform != "darwin":
+        return shutil.which("lsar")
     res_dir = os.environ.get("RESOURCEPATH")
     if res_dir:
         p = os.path.join(res_dir, "bin", "lsar")
@@ -297,6 +301,10 @@ def select_best_member(infolist):
 
     if not candidates:
         return None
+
+    has_package = any(c[1].lower().endswith((".pkg", ".ffpfsc", ".exfat", ".ufs", ".iso", ".nsp", ".xci")) for c in candidates)
+    if not has_package and len(candidates) > 1 and any(os.path.basename(c[1]).lower() in ("eboot.bin", "param.sfo", "param.json") for c in candidates):
+        raise ValueError("Loose game folder requires full extraction, not single-member streaming.")
 
     primary_exts = (".ffpfsc", ".exfat", ".ufs", ".pkg", ".iso", ".bin", ".nsp", ".xci")
     game_files = [c for c in candidates if any(c[1].lower().endswith(ext) for ext in primary_exts)]
@@ -485,46 +493,42 @@ class ZipStreamingReader:
                 self.resource = resp
 
             r = self.resource
-            rem_compressed = self.compressed_size
-            read_chunk = 256 * 1024  # 256 KiB compressed read
-
-            if self.compress_type == 0:
-                # Stored / Uncompressed
-                while not self.closed.is_set() and rem_compressed > 0:
-                    self.token.check()
-                    take = min(BLOCK, rem_compressed)
-                    chunk = r.read(take)
-                    if not chunk:
-                        break
-                    rem_compressed -= len(chunk)
-                    self.meter.add(downloaded=len(chunk), buffered=len(chunk))
-                    self._put(chunk)
-            elif self.compress_type == 8:
-                # Deflated (raw deflate window bits -15)
-                dobj = zlib.decompressobj(-15)
-                while not self.closed.is_set() and rem_compressed > 0:
-                    self.token.check()
-                    take = min(read_chunk, rem_compressed)
-                    compressed_chunk = r.read(take)
-                    if not compressed_chunk:
-                        break
-                    rem_compressed -= len(compressed_chunk)
-                    self.meter.add(downloaded=len(compressed_chunk))
-
-                    # Decompress in chunks
-                    decompressed = dobj.decompress(compressed_chunk)
-                    if decompressed:
-                        self.meter.add(buffered=len(decompressed))
-                        self._put(decompressed)
-
-                # Flush any remaining buffer in decompressor
-                final = dobj.flush()
-                if final:
-                    self.meter.add(buffered=len(final))
-                    self._put(final)
-            else:
+            remaining = self.compressed_size
+            output_size = 0
+            crc = 0
+            decompressor = zlib.decompressobj(-15) if self.compress_type == 8 else None
+            if self.compress_type not in (0, 8):
                 raise ValueError(f"Unsupported ZIP compression type: {self.compress_type}. Supported: 0 (Stored), 8 (Deflate)")
 
+            while remaining:
+                self.token.check()
+                if self.closed.is_set():
+                    return
+                compressed = r.read(min(256 * 1024, remaining))
+                if not compressed:
+                    raise ValueError("Truncated ZIP compressed stream.")
+                remaining -= len(compressed)
+                self.meter.add(downloaded=len(compressed))
+                pending = compressed
+                while pending:
+                    self.token.check()
+                    if self.closed.is_set():
+                        return
+                    output = decompressor.decompress(pending, BLOCK) if decompressor else pending
+                    pending = decompressor.unconsumed_tail if decompressor else b""
+                    if output:
+                        output_size += len(output)
+                        if output_size > self.uncompressed_size:
+                            raise ValueError("ZIP payload exceeded declared size.")
+                        crc = zlib.crc32(output, crc)
+                        self.meter.add(buffered=len(output))
+                        self._put(output)
+
+            if decompressor and (not decompressor.eof or decompressor.unused_data):
+                raise ValueError("Invalid or incomplete ZIP deflate stream.")
+            expected_crc = self.source.archive_info.get("crc") if hasattr(self.source, "archive_info") and self.source.archive_info else None
+            if output_size != self.uncompressed_size or (expected_crc is not None and (crc & 0xffffffff) != expected_crc):
+                raise ValueError("ZIP payload size or CRC mismatch.")
             self._put(None)
         except Exception as ex:
             self.error = ex
@@ -532,6 +536,12 @@ class ZipStreamingReader:
                 self._put(None)
             except Exception:
                 pass
+        finally:
+            if self.resource:
+                try:
+                    self.resource.close()
+                except Exception:
+                    pass
 
     def read(self, size=BLOCK):
         while not self.closed.is_set():
@@ -697,12 +707,19 @@ def inspect_system_archive(kind, location, headers=None, total_size=None, passwo
             password_hint=pwd_hint,
         )
 
+    pattern_gnu = re.compile(r"^([-drwxst]+)\s+\S+/\S+\s+(\d+)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?\s+(.+)$")
     pattern_numeric = re.compile(r"^([drwxst-]{10})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([A-Za-z]{3}\s+\d+\s+[\d:]+)\s+(.+)$")
     pattern_fallback = re.compile(r"^([drwxst-]{10})\s+.*?(\d+)\s+([A-Za-z]{3}\s+\d+\s+[\d:]+)\s+(.+)$")
 
     for line in raw_output.splitlines():
         line = line.strip()
         if not line:
+            continue
+        gnu = pattern_gnu.match(line)
+        if gnu:
+            perms, size, name = gnu.groups()
+            if perms.startswith("-"):
+                entries.append({"filename": name.strip(), "uncompressed_size": int(size)})
             continue
         m = pattern_numeric.match(line)
         if m:
