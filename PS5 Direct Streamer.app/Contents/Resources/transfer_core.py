@@ -970,17 +970,23 @@ def close_ftp(ftp, token, clean=False):
 
 
 def remote_size(ftp, path):
-    try:
-        n = ftp.size(path)
-        if n is None:
-            raise TransferError("PS5 FTP did not return a file size.")
+    def checked_size(n):
+        # Some PS5 FTP servers return stat's -1 as an unsigned 64-bit
+        # SIZE response instead of 550 when the path does not exist.
+        if n in (-1, (1 << 64) - 1):
+            return None
+        if n is None or n < 0:
+            raise TransferError("PS5 FTP did not return a valid file size.")
         return n
+
+    try:
+        return checked_size(ftp.size(path))
     except ftplib.error_perm as e:
         msg = str(e)
         if "ASCII" in msg:
             try:
                 ftp.voidcmd("TYPE I")
-                return ftp.size(path)
+                return checked_size(ftp.size(path))
             except Exception:
                 pass
         if msg.startswith("550"):

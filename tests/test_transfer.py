@@ -1,5 +1,6 @@
 """Local HTTP + FTP integration tests. Install requirements-dev.txt to run."""
 import hashlib
+import ftplib
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
@@ -13,6 +14,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch, Mock
 import unittest.mock
 import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,7 +22,8 @@ from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, pr
     transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, validate_multipart_source,
     find_unar_tool, find_extracted_payload, cleanup_stale_staging_directories, transfer_staged_archive, connect_ftp, close_ftp,
     find_unrar_ps5_payload, send_ps5_payload, generate_unrar_config, fetch_ps5_unrar_log, transfer_ps5_remote_archive,
-    DEFAULT_UNRAR_DIR, DEFAULT_UNRAR_CONFIG_PATH, DEFAULT_UNRAR_LOG_PATH, DEFAULT_ETA_HEN_PAYLOAD_PORT)
+    DEFAULT_UNRAR_DIR, DEFAULT_UNRAR_CONFIG_PATH, DEFAULT_UNRAR_LOG_PATH, DEFAULT_ETA_HEN_PAYLOAD_PORT,
+    remote_size)
 from ps5_streamer import Manager, Handler, validated_settings
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
@@ -119,6 +122,45 @@ class Integration(unittest.TestCase):
     def test_parallel_upload_hash_and_finalize(self):
         j=self.job();events=self.run_job(j)
         self.assertEqual(hashlib.sha256(self.dest(j).read_bytes()).digest(),hashlib.sha256(PAYLOAD).digest());self.assertFalse(self.partial(j).exists());self.assertEqual(events[-1][0],'complete')
+    def test_ps5_missing_size_sentinel_upload_and_finalize(self):
+        original_size = ftplib.FTP.size
+        def ps5_size(ftp, path):
+            try:
+                return original_size(ftp, path)
+            except ftplib.error_perm as error:
+                if str(error).startswith('550'):
+                    return (1 << 64) - 1
+                raise
+        j = self.job()
+        with patch.object(ftplib.FTP, 'size', ps5_size):
+            events = self.run_job(j)
+        self.assertEqual(self.dest(j).read_bytes(), PAYLOAD)
+        self.assertFalse(self.partial(j).exists())
+        self.assertEqual(events[-1][0], 'complete')
+
+    def test_remote_size_ps5_sentinels_and_empty_file(self):
+        ftp = Mock()
+        for size, expected in [(-1, None), ((1 << 64) - 1, None), (0, 0), (123, 123)]:
+            with self.subTest(size=size):
+                ftp.size.return_value = size
+                self.assertEqual(remote_size(ftp, 'file'), expected)
+        ftp.size.side_effect = [ftplib.error_perm('550 SIZE not allowed in ASCII mode'), (1 << 64) - 1]
+        self.assertIsNone(remote_size(ftp, 'file'))
+        ftp.voidcmd.assert_called_once_with('TYPE I')
+
+    def test_archive_probe_failure_without_extractors_preserves_error(self):
+        j = self.job(name='archive.rar')
+        j.update(decompress=True, extract_mode='mac')
+        error = TransferError('Cannot decompress archive: original inspection failure')
+        with patch('transfer_core.find_unar_tool', return_value=None), \
+             patch('transfer_core.find_unrar_ps5_payload', return_value=None), \
+             patch('transfer_core.probe_source', side_effect=error), \
+             patch('transfer_core.connect_ftp') as connect:
+            with self.assertRaises(TransferError) as raised:
+                self.run_job(j)
+        self.assertIs(raised.exception, error)
+        connect.assert_not_called()
+
     def test_redirect_parallel(self):self.assertEqual(self.read_source('/redirect'),PAYLOAD)
     def test_no_range_fallback(self):self.assertEqual(self.read_source('/no-range'),PAYLOAD)
     def test_unknown_length(self):
