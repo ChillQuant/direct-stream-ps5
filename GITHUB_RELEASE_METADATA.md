@@ -43,16 +43,95 @@ DIRECT STREAM FOR PLAYSTATION 5 v2.9.1 — Hardware Verified & Direct Link Engin
 ```markdown
 ## DIRECT STREAM FOR PLAYSTATION 5 (v2.9.1)
 
-Direct Stream for PlayStation 5 v2.9.1 is a verified production release featuring **complete live PlayStation 5 hardware validation across 32 comprehensive testing scenarios**, an integrated **Universal Direct Download Link Capture Engine**, interactive in-app guide modals, and comprehensive statutory liability disclaimers.
+Direct Stream for PlayStation 5 v2.9.1 is a major stability and performance release resolving numerous real-world bugs reported in v2.9.0, backed by **complete live hardware validation across 32 comprehensive testing scenarios** on physical PlayStation 5 console storage.
 
 ---
 
-### Highlights at a Glance
+### All Bugs Resolved & Enhancements from v2.9.0 to v2.9.1
 
-- **Exhaustive Live Hardware Verification (32/32 Passed)**: Validated directly against physical PlayStation 5 hardware (`192.168.1.188:2121` FTP and port `9021` decompressor helper) with 100% pass rate. Confirmed zero byte leakage on console internal SSD across all single/multi-part, encrypted/unencrypted, RAM/console decompression tests.
-- **Universal Direct Link Capture Guide**: Integrated step-by-step guidance in documentation and the web dashboard explaining how to capture direct binary octet-streams from web browsers, distinguishing direct CDN streams from HTML advertisement/landing pages.
-- **Multi-Part & Encryption Architecture**: Full support for split `.pkg` stitching in RAM, encrypted ZIP/7Z/RAR archives with password scene tags (`[DLPSGAME.COM]`), and native on-console decompression via `unrar-ps5.elf`.
-- **Resilience & Collision Guards**: Byte-exact verification, FTP `REST` mid-stream resume, bandwidth limit throttling (`limit_mbps`), and default overwrite collision guards.
+#### 1. Partial File Conflict Error Loop & Overwrite/Resume Recovery
+- **The Bug in v2.9.0:** When a transfer was interrupted or retried, if an existing `.ps5part` temporary file was present on the PS5, the engine entered an infinite error loop refusing to resume or overwrite it, forcing users to open an external FTP client to manually delete the file.
+- **Fixed in v2.9.1:** Enhanced collision and resume logic to recognize legitimate `.ps5part` files, verify remote byte length against source validators, and resume seamlessly via FTP `REST` or overwrite cleanly when requested.
+
+#### 2. False Destination Collision & Stale `/data/unrar` Staging Conflicts
+- **The Bug in v2.9.0:** Multi-part archives or staged console extractions frequently threw false "Destination file already exists" collision errors. Furthermore, leftover partial files in `/data/unrar` from earlier failed runs prevented new extractions from starting.
+- **Fixed in v2.9.1:** Disambiguated part filenames in multi-part sequences; added automated cleanup of stale or incomplete archive files in `/data/unrar` before uploading; added `is_staging` flags for safe staging replacement; and included exact destination paths in error receipts.
+
+#### 3. Encrypted Archives Crash & Password Decryption
+- **The Bug in v2.9.0:** Attempting to stream password-protected or AES-encrypted archives crashed pre-flight diagnostics or raised unhandled extraction exceptions without an option to provide a password.
+- **Fixed in v2.9.1:** Added encryption candidate probing, dedicated password prompt dialogs, automatic password discovery from filename scene bracket tags (e.g. `[DLPSGAME.COM]`), and in-RAM AES-256 decryption streaming.
+
+#### 4. PS5 FTP `SIZE` uint64 Sentinel Crashes (ftps5, GoldHEN, etaHEN)
+- **The Bug in v2.9.0:** When checking file sizes before streaming, certain PS5 FTP daemons return `18446744073709551615` (UINT64_MAX) or `550` errors when querying a file that does not yet exist on the console. This caused size validation crashes and false size mismatches.
+- **Fixed in v2.9.1:** Added defensive sentinel mapping in `transfer_core.py` converting UINT64_MAX and negative values to `None`, backed by automated regression tests.
+
+#### 5. Local Multi-File & Multi-Part Archive Selection
+- **The Bug in v2.9.0:** Users could only pick a single local file at a time; selecting multi-part split sets (`.part1.rar`, `.z01`, `.7z.001`) from local disk was not supported or treated them as disjointed files.
+- **Fixed in v2.9.1:** Added multi-file local selection, automatic sequence grouping, sorting, and on-the-fly stitching of local split archives directly into a unified console package.
+
+#### 6. External LAN Access Blocked on `--host 0.0.0.0`
+- **The Bug in v2.9.0:** When starting the streamer with `--host 0.0.0.0` to control transfers from a smartphone, tablet, or another PC on the same Wi-Fi, the web dashboard rejected requests with `403 Forbidden` due to strict localhost Host/Origin security header checks.
+- **Fixed in v2.9.1:** Dynamically permits legitimate local network IP addresses in Host/Origin validation when bound to `0.0.0.0`.
+
+#### 7. Single Extracted Package Job Name Desynchronization
+- **The Bug in v2.9.0:** When unpacking an archive containing a single `.pkg` (e.g. `Game.zip` containing `CUSA12345.pkg`), the queue displayed the archive name rather than the actual package name.
+- **Fixed in v2.9.1:** Automatically updates the transfer job title to `payload_name` once identified.
+
+#### 8. FTP Socket Cleanup & Thread Leaks on Network Interruption
+- **The Bug in v2.9.0:** Pausing, cancelling, or experiencing a transient network drop left orphaned FTP sockets open and caused thread deadlocks on subsequent retries.
+- **Fixed in v2.9.1:** Added deterministic socket tracking with `token.untrack()`, graceful socket cleanup, redaction of sensitive tokens and passwords from traceback logs, and strict active-queue concurrency locks.
+
+#### 9. The Deceptive Web Landing Page Trap (Direct Binary vs HTML Webpage)
+- **The Bug in v2.9.0:** Users pasted hoster landing page URLs (Rapidgator, 1fichier, countdown pages with ads/captchas) expecting them to work. The app streamed the HTML webpage code directly to the PS5, resulting in corrupt, unplayable files.
+- **Fixed in v2.9.1:** Integrated in-app capture guidance explaining why HTML pages cannot be streamed directly, along with a 3-step browser capture guide (`Ctrl+J` / `Cmd+Shift+J` -> *Copy download link*) to extract the raw CDN binary stream (`application/octet-stream`) with zero PC SSD disk usage.
+
+#### 10. Exhaustive Live Hardware Validation (32/32 Tests on Physical PS5)
+- **The Problem in v2.9.0:** All prior testing was synthetic.
+- **Fixed in v2.9.1:** Conducted 32 live hardware tests directly against physical PlayStation 5 hardware (`192.168.1.188:2121` and port `9021`), confirming 100% pass rates across all single/multi-part, encrypted/unencrypted, RAM/console decompression combinations, and verified **0 bytes leaked on console storage**.
+
+---
+
+### Live Hardware Verification Summary (PlayStation 5 Console)
+
+| Category | Combinations Tested on PS5 Hardware | Result | Status |
+| :--- | :--- | :--- | :--- |
+| **PKG Direct Stream** | Single PKG URL streamed directly into /data/pkg | Byte-exact transfer, atomic rename | PASSED |
+| **Multi-Part PKG Stitch** | 3-part split PKG stitched on-the-fly in RAM | Unified PKG without local files | PASSED |
+| **ZIP In-RAM Extraction** | Single & multi-part, unencrypted & encrypted (DLPSGAME.COM) | Decompressed in RAM to console | PASSED |
+| **ZIP PS5 Unpack** | ZIP uploaded to /data/unrar and unpacked via unrar-ps5.elf | Port 9021 console decompression | PASSED |
+| **7Z In-RAM Extraction** | Single & multi-part, unencrypted & encrypted (DLPSGAME.COM) | Streaming LZMA decompression | PASSED |
+| **7Z PS5 Unpack** | 7Z uploaded to /data/unrar and unpacked on console | Port 9021 console decompression | PASSED |
+| **RAR Staged Extraction** | RAR archive with folder tree staged via host unar | Recursive subdirectories created | PASSED |
+| **RAR PS5 Unpack** | Single & multi-part RAR unpacked on console via payload | Unpacked on console internal SSD | PASSED |
+| **Password Auto-Discovery** | Scene bracket password extraction from [DLPSGAME.COM] | Extracted from filename brackets | PASSED |
+| **Pause & Resume** | Mid-stream pause, state preservation, FTP REST resume | Resumed from partial byte offset | PASSED |
+| **Bandwidth Throttling** | Streaming rate limit cap applied (limit_mbps=2.0) | Bandwidth throttled smoothly | PASSED |
+| **Loose Folder Upload** | Recursive directory upload (kind="folder") over FTP | Full folder tree transferred | PASSED |
+| **Error & Collision Guards** | Wrong password rejection, missing-part gap guard, collision guard | Immediate safe rejection | PASSED |
+| **Console Storage Hygiene** | SSD audit after running all 32 hardware tests | 0 bytes leaked on console | PASSED |
+
+Complete 32-row technical ledger with exact byte payloads and commands available in VALIDATION.md.
+
+---
+
+### How to Capture Direct Download Links
+
+Direct Stream connects directly to the raw binary stream (application/octet-stream, application/zip). It cannot process HTML web pages containing countdown timers, ads, or captchas.
+
+**3-Step Browser Capture Method:**
+1. Start the file download in your browser (Chrome, Edge, Firefox, or Safari).
+2. Open your browser Downloads manager (press Ctrl+J on Windows/Linux, Cmd+Shift+J on macOS).
+3. Right-click the downloading item, select **Copy download link** (or **Copy link address**), then cancel the browser download to save PC storage and paste the direct stream link into Direct Stream.
+
+**Auto-Resolvers Supported:** AkiraBox, Rootz, DataNodes, VikingFile, FileDitch, Google Drive, MediaFire, PixelDrain.
+
+---
+
+### Distribution Packages
+
+- **macOS:** `DIRECT-STREAM-FOR-PLAYSTATION-5-macOS.zip` (Native .app bundle + CLI)
+- **Windows:** `DIRECT-STREAM-FOR-PLAYSTATION-5-Windows.zip` (Batch launcher + pure Python)
+- **Pure Python:** `DIRECT-STREAM-FOR-PLAYSTATION-5-PurePython.zip` (Cross-platform standalone)
 
 ---
 
