@@ -301,11 +301,11 @@ class Integration(unittest.TestCase):
             finally:m2.stop()
     def test_api_auth_and_origin(self):
         with tempfile.TemporaryDirectory() as d:
-            server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.manager=Manager(d);server.token='test-session';t=threading.Thread(target=server.serve_forever,daemon=True);t.start()
+            server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.manager=Manager(d);server.token='test-session';server.allowed_hosts={f'127.0.0.1:{server.server_port}',f'192.168.1.10:{server.server_port}'};t=threading.Thread(target=server.serve_forever,daemon=True);t.start()
             def get(headers):
                 c=http.client.HTTPConnection('127.0.0.1',server.server_port);c.request('GET','/api/state',headers=headers);r=c.getresponse();status=r.status;r.read();c.close();return status
             try:
-                self.assertEqual(get({}),401);self.assertEqual(get({'X-Session-Token':'test-session'}),200);self.assertEqual(get({'X-Session-Token':'test-session','Origin':'https://attacker.example'}),403);self.assertEqual(get({'X-Session-Token':'test-session','Host':'attacker.example'}),403)
+                self.assertEqual(get({}),401);self.assertEqual(get({'X-Session-Token':'test-session'}),200);self.assertEqual(get({'X-Session-Token':'test-session','Host':f'192.168.1.10:{server.server_port}','Origin':f'http://192.168.1.10:{server.server_port}','X-Session-Token':'test-session'}),200);self.assertEqual(get({'X-Session-Token':'test-session','Origin':'https://attacker.example'}),403);self.assertEqual(get({'X-Session-Token':'test-session','Host':'attacker.example'}),403)
             finally:server.shutdown();server.server_close();server.manager.stop()
     def test_validate_source_url(self):
         v = validate_source_url(self.url('/file'), StopToken())
@@ -1085,5 +1085,4 @@ class Integration(unittest.TestCase):
         self.assertEqual(remote_size(FakeFTP(0), "empty.bin"), 0)
 
 if __name__=='__main__':unittest.main()
-
 

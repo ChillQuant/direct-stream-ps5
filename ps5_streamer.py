@@ -1417,12 +1417,12 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def allowed(self, auth=False):
-        expected = f"127.0.0.1:{self.server.server_port}"
-        if self.headers.get("Host") != expected:
+        host = self.headers.get("Host")
+        if host not in self.server.allowed_hosts:
             self.send(403, {"error": "Invalid host"})
             return False
         origin = self.headers.get("Origin")
-        if origin and origin != "http://" + expected:
+        if origin and origin != "http://" + host:
             self.send(403, {"error": "Cross-origin requests are not allowed"})
             return False
         if auth:
@@ -1648,11 +1648,13 @@ def main():
     server.daemon_threads = True
     server.token = secrets.token_urlsafe(32)
     server.manager = Manager(directory)
+    server.allowed_hosts = {f"127.0.0.1:{server.server_port}"}
     
     local_url = f"http://127.0.0.1:{server.server_port}/#session={server.token}"
     if args.host == "0.0.0.0":
         lan_ip = get_lan_ip()
         network_url = f"http://{lan_ip}:{server.server_port}/#session={server.token}"
+        server.allowed_hosts.add(f"{lan_ip}:{server.server_port}")
         url = local_url
         print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nLocal URL:   {local_url}\nNetwork URL: {network_url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
     else:
