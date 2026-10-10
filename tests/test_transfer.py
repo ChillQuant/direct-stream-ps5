@@ -18,7 +18,7 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, probe_source,
     transfer, valid_name, valid_folder, check_ftp_storage, validate_source_url, validate_multipart_source,
-    find_unar_tool, find_extracted_payload, cleanup_stale_staging_directories, transfer_staged_archive, connect_ftp, close_ftp,
+    find_unar_tool, find_extracted_payload, cleanup_stale_staging_directories, transfer_staged_archive, connect_ftp, close_ftp, remote_size,
     find_unrar_ps5_payload, send_ps5_payload, generate_unrar_config, fetch_ps5_unrar_log, transfer_ps5_remote_archive,
     DEFAULT_UNRAR_DIR, DEFAULT_UNRAR_CONFIG_PATH, DEFAULT_UNRAR_LOG_PATH, DEFAULT_ETA_HEN_PAYLOAD_PORT)
 from ps5_streamer import Manager, Handler, validated_settings
@@ -241,6 +241,12 @@ class Integration(unittest.TestCase):
         j['overwrite']=True
         self.run_job(j)
         self.assertEqual(self.dest(j).read_bytes(),PAYLOAD)
+    def test_size_uint64_sentinel_means_missing(self):
+        from unittest.mock import MagicMock
+        ftp = MagicMock(); ftp.size.return_value = 2**64 - 1
+        self.assertIsNone(remote_size(ftp, 'missing.bin'))
+        ftp.size.return_value = 1234
+        self.assertEqual(remote_size(ftp, 'real.bin'), 1234)
     def test_local_resume(self):
         source=self.root/'local-resume.bin';source.write_bytes(PAYLOAD);j=self.job();j.update(kind='local',source=str(source))
         j['identity']=probe_source('local',str(source),StopToken()).identity();j['stage_owned']=True

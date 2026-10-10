@@ -969,18 +969,24 @@ def close_ftp(ftp, token, clean=False):
     ftp.close()
 
 
+def _missing_if_sentinel(n):
+    # Some PS5 FTP servers answer SIZE on a missing file with "213 18446744073709551615"
+    # (uint64 -1) instead of 550. No real file is that large, so treat it as missing.
+    return None if n is not None and n >= 2**63 else n
+
+
 def remote_size(ftp, path):
     try:
         n = ftp.size(path)
         if n is None:
             raise TransferError("PS5 FTP did not return a file size.")
-        return n
+        return _missing_if_sentinel(n)
     except ftplib.error_perm as e:
         msg = str(e)
         if "ASCII" in msg:
             try:
                 ftp.voidcmd("TYPE I")
-                return ftp.size(path)
+                return _missing_if_sentinel(ftp.size(path))
             except Exception:
                 pass
         if msg.startswith("550"):
