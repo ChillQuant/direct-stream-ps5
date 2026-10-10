@@ -68,3 +68,4 @@ state.json
 session.json
 *.backup.*.app
 demo-video/renders/
+scratch/
