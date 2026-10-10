@@ -1418,7 +1418,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def allowed(self, auth=False):
         host = self.headers.get("Host")
-        if host not in self.server.allowed_hosts:
+        allowed_hosts = getattr(self.server, "allowed_hosts", None) or {f"127.0.0.1:{self.server.server_port}"}
+        if host not in allowed_hosts:
             self.send(403, {"error": "Invalid host"})
             return False
         origin = self.headers.get("Origin")
@@ -1658,6 +1659,8 @@ def main():
         url = local_url
         print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nLocal URL:   {local_url}\nNetwork URL: {network_url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
     else:
+        if args.host != "127.0.0.1":
+            server.allowed_hosts.add(f"{args.host}:{server.server_port}")
         url = f"http://{args.host}:{server.server_port}/#session={server.token}"
         print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nOpen {url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
 
