@@ -53,7 +53,6 @@ Direct Stream for PlayStation 5 v2.9.1 is a verified production release featurin
 - **Universal Direct Link Capture Guide**: Integrated step-by-step guidance in documentation and the web dashboard explaining how to capture direct binary octet-streams from web browsers, distinguishing direct CDN streams from HTML advertisement/landing pages.
 - **Multi-Part & Encryption Architecture**: Full support for split `.pkg` stitching in RAM, encrypted ZIP/7Z/RAR archives with password scene tags (`[DLPSGAME.COM]`), and native on-console decompression via `unrar-ps5.elf`.
 - **Resilience & Collision Guards**: Byte-exact verification, FTP `REST` mid-stream resume, bandwidth limit throttling (`limit_mbps`), and default overwrite collision guards.
-- **Enterprise-Grade Legal & Trademark Protection**: Clear statutory disclaimers establishing independent open-source status, strict non-affiliation with Sony Interactive Entertainment, content-neutral architecture, and end-user copyright compliance policies.
 
 ---
 
