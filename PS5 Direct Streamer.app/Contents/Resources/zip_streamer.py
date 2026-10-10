@@ -29,7 +29,7 @@ class Cancelled(Exception):
     pass
 
 BLOCK = 1024 * 1024  # 1 MiB chunks
-HEADERS = {"User-Agent": "DirectStreamPS5/2.9.0"}
+HEADERS = {"User-Agent": "DirectStreamPS5/2.9.1"}
 
 ARCHIVE_EXTENSIONS = (
     ".zip", ".zip64",

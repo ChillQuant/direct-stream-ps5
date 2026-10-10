@@ -2774,7 +2774,7 @@ $('export-log')?.addEventListener('click', () => {
 $('export-diagnostics')?.addEventListener('click', () => {
   const bundle = {
     generated_at: new Date().toISOString(),
-    version: state.version || '2.9.0',
+    version: state.version || '2.9.1',
     connection: state.connection,
     diagnostic: state.diagnostic,
     settings: {
@@ -2844,7 +2844,7 @@ function openErrorDialog(job) {
   }
   if ($('error-recommended-action')) $('error-recommended-action').textContent = `Suggested fix: ${recommendation}`;
 
-  if ($('diag-app-ver')) $('diag-app-ver').textContent = err.app_version || state.version || '2.9.0';
+  if ($('diag-app-ver')) $('diag-app-ver').textContent = err.app_version || state.version || '2.9.1';
   if ($('diag-platform')) $('diag-platform').textContent = err.platform || state?.host_platform || 'Unknown';
   if ($('diag-python')) $('diag-python').textContent = err.python || 'Python 3';
   if ($('diag-mode')) {
@@ -2882,7 +2882,7 @@ function generateMarkdownBugReport(job) {
     `**Error Type:** \`${errType}\``,
     ``,
     `#### Environment`,
-    `- **App Version:** ${err.app_version || state.version || '2.9.0'}`,
+    `- **App Version:** ${err.app_version || state.version || '2.9.1'}`,
     `- **Platform:** ${err.platform || state?.host_platform || 'Unknown'}`,
     `- **Python:** ${err.python || '3.x'}`,
     `- **Archive Tool (unar):** ${err.unar_available ? 'Detected' : 'Not detected'}`,

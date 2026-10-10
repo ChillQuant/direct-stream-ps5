@@ -27,7 +27,37 @@ ps5, playstation-5, ftp, ftp-streamer, parallel-download, direct-stream, zero-de
 
 ---
 
-## 2. GitHub Release Notes (v2.9.0 — Console Decompressor & Interface 3.2)
+## 2. GitHub Release Notes (v2.9.1 — Hardware Verified & Direct Link Engine)
+
+### Tag Version
+```text
+v2.9.1
+```
+
+### Release Title
+```text
+DIRECT STREAM FOR PLAYSTATION 5 v2.9.1 — Hardware Verified & Direct Link Engine
+```
+
+### Release Description:
+```markdown
+## DIRECT STREAM FOR PLAYSTATION 5 (v2.9.1)
+
+Direct Stream for PlayStation 5 v2.9.1 is a verified production release featuring **complete live PlayStation 5 hardware validation across 32 comprehensive testing scenarios**, an integrated **Universal Direct Download Link Capture Engine**, interactive in-app guide modals, and comprehensive statutory liability disclaimers.
+
+---
+
+### Highlights at a Glance
+
+- **Exhaustive Live Hardware Verification (32/32 Passed)**: Validated directly against physical PlayStation 5 hardware (`192.168.1.188:2121` FTP and port `9021` decompressor helper) with 100% pass rate. Confirmed zero byte leakage on console internal SSD across all single/multi-part, encrypted/unencrypted, RAM/console decompression tests.
+- **Universal Direct Link Capture Guide**: Integrated step-by-step guidance in documentation and the web dashboard explaining how to capture direct binary octet-streams from web browsers, distinguishing direct CDN streams from HTML advertisement/landing pages.
+- **Multi-Part & Encryption Architecture**: Full support for split `.pkg` stitching in RAM, encrypted ZIP/7Z/RAR archives with password scene tags (`[DLPSGAME.COM]`), and native on-console decompression via `unrar-ps5.elf`.
+- **Resilience & Collision Guards**: Byte-exact verification, FTP `REST` mid-stream resume, bandwidth limit throttling (`limit_mbps`), and default overwrite collision guards.
+- **Enterprise-Grade Legal & Trademark Protection**: Clear statutory disclaimers establishing independent open-source status, strict non-affiliation with Sony Interactive Entertainment, content-neutral architecture, and end-user copyright compliance policies.
+
+---
+
+## 3. GitHub Release Notes (v2.9.0 — Console Decompressor & Interface 3.2)
 
 ### Tag Version
 ```text

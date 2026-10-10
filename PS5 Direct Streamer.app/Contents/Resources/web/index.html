@@ -123,7 +123,7 @@
       </button>
 
       <div class="sidebar-foot">
-        <span>Direct Stream · 2.9</span>
+        <span>Direct Stream · 2.9.1</span>
         <div style="display: flex; gap: 8px; align-items: center;">
           <a href="https://github.com/ChillQuant/direct-stream-ps5/issues/new/choose" target="_blank" rel="noopener noreferrer" class="text-button" style="text-decoration: none;" title="Report an issue or submit feedback on GitHub">Report issue</a>
           <span style="opacity: 0.3;">·</span>
@@ -960,7 +960,7 @@
         <span>DIRECT STREAM</span>
       </div>
       <div class="footer-meta">
-        <span>Direct Stream <b>2.9</b><span class="ui-build">Interface 3.2</span></span>
+        <span>Direct Stream <b>2.9.1</b><span class="ui-build">Interface 3.2</span></span>
         <span>Local connection · Direct transfer</span>
       </div>
     </footer>
@@ -1001,15 +1001,27 @@
         <svg class="field-icon"><use href="#i-link"/></svg>
         <textarea id="source-urls" rows="2" placeholder="Paste a download link. Add multiple links on separate lines." spellcheck="false"></textarea>
       </div>
-      <details class="supported-hosts"><summary>Supported link services</summary><div class="resolver-tag-row">
-        <span class="resolver-label">Auto-resolvers:</span>
-        <span class="resolver-chip">AkiraBox</span>
-        <span class="resolver-chip">Rootz</span>
-        <span class="resolver-chip">DataNodes</span>
-        <span class="resolver-chip">VikingFile</span>
-        <span class="resolver-chip">FileDitch</span>
-        <span class="resolver-chip">Google Drive</span>
-      </div>
+      <details class="supported-hosts" style="margin-top: 8px;">
+        <summary style="cursor: pointer; font-weight: 500;">How to capture direct links & supported hosts</summary>
+        <div style="margin-top: 6px; padding: 8px 10px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; font-size: 11px; line-height: 1.5; color: var(--text-secondary);">
+          <strong style="color: var(--text-primary); display: block; margin-bottom: 4px;">Direct link vs web page:</strong>
+          Direct Stream sends the raw binary data stream directly over the network to your PS5. Web pages with countdown timers, interstitial ads, or human verification cannot be streamed directly.
+          <div style="margin-top: 6px;">
+            <strong style="color: var(--text-primary); display: block; margin-bottom: 2px;">Easy 3-step link capture:</strong>
+            1. Start the file download in your browser (Chrome, Edge, Firefox, or Safari).<br>
+            2. Open your browser Downloads tab (Ctrl+J or Cmd+Shift+J), right-click the item, and select <em>Copy download link</em>.<br>
+            3. Cancel the browser download to save PC storage, and paste the direct stream link here.
+          </div>
+          <div class="resolver-tag-row" style="margin-top: 8px; border-top: 1px solid var(--border-subtle); padding-top: 6px;">
+            <span class="resolver-label">Auto-resolvers:</span>
+            <span class="resolver-chip">AkiraBox</span>
+            <span class="resolver-chip">Rootz</span>
+            <span class="resolver-chip">DataNodes</span>
+            <span class="resolver-chip">VikingFile</span>
+            <span class="resolver-chip">FileDitch</span>
+            <span class="resolver-chip">Google Drive</span>
+          </div>
+        </div>
       </details><div id="url-verification-status" class="verification-status-box" hidden></div>
     </div>
 
@@ -1362,7 +1374,7 @@
     <div class="error-diagnostics-grid">
       <div class="diag-meta-item">
         <span class="diag-meta-label">App Version</span>
-        <span id="diag-app-ver" class="diag-meta-val">2.9.0</span>
+        <span id="diag-app-ver" class="diag-meta-val">2.9.1</span>
       </div>
       <div class="diag-meta-item">
         <span class="diag-meta-label">Platform</span>

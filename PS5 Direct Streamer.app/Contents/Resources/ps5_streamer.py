@@ -37,7 +37,7 @@ from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp
 from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info, get_request_headers_for_url
 from zip_streamer import is_archive_candidate, inspect_archive, EncryptedArchiveError, extract_password_hint
 
-VERSION = "2.9.0"
+VERSION = "2.9.1"
 BASE = Path(__file__).resolve().parent
 DEFAULTS = {"host": "", "port": 1337, "folder": "/data/homebrew", "username": "anonymous",
             "streams": 16, "buffer_mb": 256, "chunk_mb": 8, "limit_mbps": 0, "retries": 3,

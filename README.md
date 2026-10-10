@@ -16,7 +16,9 @@
 
 - [Why Direct Stream?](#why-direct-stream)
 - [Architecture & Data Flow](#architecture--data-flow)
-- [What is New in v2.9.0](#what-is-new-in-v290)
+- [What is New in v2.9.1](#what-is-new-in-v291)
+- [How to Capture Direct Download Links](#how-to-capture-direct-download-links)
+- [Live Hardware Verification Matrix](#live-hardware-verification-matrix)
 - [Core Features](#core-features)
 - [Supported Hosting Providers](#supported-hosting-providers)
 - [Archive Extraction Strategies](#archive-extraction-strategies)
@@ -30,6 +32,7 @@
 - [Transfer Resilience & Integrity](#transfer-resilience--integrity)
 - [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
 - [Development & Test Suite](#development--test-suite)
+- [Legal Disclaimer & Statutory Compliance](#legal-disclaimer--statutory-compliance)
 - [License](#license)
 
 ---
@@ -87,26 +90,84 @@ Traditional methods of installing games and homebrew on PlayStation 5 require mu
 
 ---
 
-## What is New in v2.9.0
+## What is New in v2.9.1
 
-Version 2.9.0 is a major milestone release that elevates performance, reliability, and user interface aesthetics:
+Version 2.9.1 delivers complete hardware-verified validation, direct link streaming enhancements, and full ecosystem alignment:
 
-1. **Native PS5 Console Decompressor (0 GB Local Disk Usage)**:
-   - Stream compressed `.rar`, `.zip`, and `.7z` archives straight into PS5 storage.
-   - Triggers the bundled `unrar_ps5.elf` payload via TCP helper port `9021` to extract archives on the console internal SSD with zero computer disk wear.
-2. **Mandatory Pre-Flight Link Verification**:
-   - Clicking **Add to queue** automatically probes URLs for server reachability, `Content-Range` chunk support, accurate file size, and archive encryption.
-   - Stops broken, expired, or 404 links before they enter the queue.
-3. **Interface 3.2 Visual Experience**:
-   - Modernized visual hierarchy with an interactive **3-Card Archive Strategy Selector**.
-   - Fully responsive layout for desktop browsers and mobile screens.
-4. **Smart Destination Routing & `/data/homebrew` Default**:
-   - Default destination updated to `/data/homebrew`.
-   - Automatic routing of filesystem dumps (`.ffpfsc`, `.exfat`, `.ufs`) to `/data/ShadowMount` and packages to `/data/pkg`.
-5. **Encrypted Archive Support**:
-   - Automatic extraction of password hints from file names with dedicated password input and secure staging.
-6. **Interactive Error Diagnostics & One-Click GitHub Reporting**:
-   - In-app error receipt inspector with sanitized system info, troubleshooting recommendations, and pre-formatted bug reporting links.
+1. **Exhaustive Live Hardware Verification (32/32 Tests Passed)**:
+   - Comprehensive matrix executed directly on physical PlayStation 5 hardware (`192.168.1.188:2121` FTP and port `9021` decompressor payload).
+   - Validated single and multi-part archives, password encryption (`DLPSGAME.COM`), RAM extraction, PS5 console decompression, on-the-fly multi-part PKG stitching, pause and resume via FTP `REST`, bandwidth throttling, collision guards, and verified **0 bytes leaked on console storage**.
+2. **Universal Direct Download Link Capture Engine**:
+   - Integrated guidance and protocol detection distinguishing direct binary octet-streams from web landing pages.
+   - Built-in link verification with automatic resolution for major cloud hosting services (AkiraBox, Rootz, DataNodes, VikingFile, FileDitch, Google Drive, MediaFire, PixelDrain).
+3. **Interface 3.2 Polish & Diagnostic Version Alignment**:
+   - Integrated quick-reference guide modal and collapsible in-app link capture instructions.
+   - Exact synchronization across Python core, macOS `.app` bundle, web dashboard, and diagnostic export bundles.
+
+---
+
+## How to Capture Direct Download Links
+
+Direct Stream for PlayStation 5 works by opening a direct, high-speed HTTP/HTTPS binary socket and piping the data immediately across your local network into the console FTP server. To make this work seamlessly, the application requires a **direct binary download link**, not an HTML webpage URL.
+
+### Understanding Direct Links vs Web Landing Pages
+
+- **Web Landing Page (Will Not Work Directly)**: A URL like `https://filesharing.com/file/12345` loads an HTML webpage with JavaScript, countdown timers, captcha security challenges, or advertisements. A console FTP server cannot interpret HTML code as a game package.
+- **Direct Download Link (Required)**: A URL pointing directly to the raw binary file stream (e.g. `https://cdn.filesharing.com/dl/package.pkg?token=abc...` or headers returning `Content-Type: application/octet-stream`).
+
+### The 3-Step Universal Browser Link Capture Method
+
+You can capture a direct download link from virtually any file hosting service using any standard web browser (Chrome, Edge, Firefox, or Safari):
+
+1. **Start the Download in Your Browser**:
+   - Visit the download page in your browser and click through the site buttons until the file actually begins downloading in your browser.
+2. **Open Your Browser Downloads Manager**:
+   - Press `Ctrl + J` on Windows/Linux, or `Cmd + Shift + J` (or `Cmd + Option + L` in Safari) on macOS to view your active downloads.
+3. **Copy the Direct Stream Address**:
+   - Right-click the downloading file in your browser's download list and click **Copy download link** (or **Copy link address**).
+4. **Paste and Stream**:
+   - Cancel or pause the download in your web browser so it does not consume your computer's internet bandwidth or SSD storage.
+   - Paste the copied link into Direct Stream for PlayStation 5 and click **Verify link** or **Add to queue**.
+
+### Browser Developer Tools Method (Advanced)
+
+For hosting services that obfuscate the download link:
+
+1. Open your browser Developer Tools by pressing `F12` (or `Cmd + Option + I` on macOS) and switch to the **Network** tab.
+2. Filter by `Fetch/XHR` or `Media`, then click the site download button.
+3. Look for the request that returns a large `Content-Length` or a `Content-Type` of `application/octet-stream`, `application/zip`, or `application/x-rar`.
+4. Right-click that request and select **Copy -> Copy URL**, then paste it into Direct Stream.
+
+### Built-In Auto-Resolvers
+
+Direct Stream includes built-in resolvers for popular hosters. For the following services, you can paste the regular sharing URL directly and the application will extract the direct stream automatically:
+
+- **MediaFire**: Standard sharing links
+- **PixelDrain**: `pixeldrain.com/u/<id>`
+- **Google Drive**: Sharing and file export URLs
+- **Internet Archive**: `archive.org/details/<item>`
+- **Rootz / AkiraBox / DataNodes / VikingFile / FileDitch**: Auto-resolved endpoints
+- **Direct URLs**: Any direct link ending in `.pkg`, `.zip`, `.rar`, `.7z`, or split parts (`.001`, `.part1.rar`, `.z01`)
+
+---
+
+## Live Hardware Verification Matrix
+
+The Direct Stream transfer engine was validated directly against physical PlayStation 5 hardware running etaHEN and ftps5. All 32 real-world testing scenarios passed with complete data integrity and zero leftover storage footprint:
+
+| Category | Combinations Tested on PS5 Hardware | Result |
+| :--- | :--- | :--- |
+| **Direct Package Streaming** | Single `.pkg` URL streaming and local package delivery | Verified byte-for-byte |
+| **Multi-Part PKG Stitching** | 3-part split PKG reassembly on-the-fly in RAM without local files | Verified unified PKG |
+| **ZIP Archive Engine** | Single & multi-part, unencrypted & AES password-protected, in-RAM and PS5 unpack | 100% Passed (6 tests) |
+| **7Z Archive Engine** | Single & multi-part, unencrypted & encrypted, streaming LZMA decompression | 100% Passed (5 tests) |
+| **RAR Archive Engine** | Staged host extraction with folder tree and on-console `unrar-ps5.elf` payload | 100% Passed (4 tests) |
+| **Automation & Intelligence** | Scene bracket password auto-discovery (`[DLPSGAME.COM]`), FTP keep-alives | Auto-discovered & verified |
+| **Resilience & Safety** | Pause and resume with FTP `REST`, speed throttling, gap detection, wrong-password abort | Fully resilient |
+| **Collision Protection** | Default existing file protection guard vs explicit overwrite replacement | Collision guarded |
+| **Console Storage Hygiene** | Complete SSD space audit after running all test combinations | 0 bytes leaked |
+
+For the complete 32-row hardware test ledger with exact byte payloads and commands, see [VALIDATION.md](VALIDATION.md).
 
 ---
 
@@ -299,6 +360,39 @@ python3 build_bundle.py
 # Package release distributions (macOS, Windows, Pure Python)
 python3 package_releases.py
 ```
+
+---
+
+## Legal Disclaimer & Statutory Compliance
+
+Please read this section carefully before using or contributing to Direct Stream for PlayStation 5.
+
+### Trademark Notice & Non-Affiliation
+Direct Stream for PlayStation 5 is an independent, community-driven open-source software project. It is **not** endorsed by, certified by, partnered with, associated with, maintained by, or in any way officially connected to Sony Interactive Entertainment Inc. (SIE), Sony Group Corporation, or any of their parent companies, subsidiaries, or affiliates. 
+
+"PlayStation", "PS5", "PS4", "DualSense", "PlayStation Studios", and all associated logos, device names, and brand marks are registered trademarks or service marks of Sony Interactive Entertainment Inc. All product names, logos, brands, and registered trademarks featured or referenced within this software or its documentation are property of their respective trademark holders. Their use in this documentation does not imply any affiliation with or endorsement by them.
+
+### Content-Neutral Architecture & Non-Hosting Policy
+Direct Stream for PlayStation 5 is strictly a content-neutral, protocol-level network transfer manager. The authors, contributors, and maintainers of this project:
+- **Do not** host, mirror, store, cache, index, provide, or distribute any copyrighted video game files, commercial software packages, system update binaries, decryption keys, license tokens, or game disk images.
+- **Do not** provide, link to, promote, or encourage websites that distribute pirated, unauthorized, or infringing digital content.
+- **Do not** bypass, disable, circumvent, or defeat any digital rights management (DRM), anti-piracy protections, encryption schemes, or technological protection measures (TPMs).
+
+### Lawful Use & Personal Backup Policy
+This tool is distributed strictly for lawful and educational purposes, including:
+1. Facilitating local network data transfers of legal, user-created homebrew applications, open-source development utilities, and public domain datasets.
+2. Managing legitimate archival backups of legally acquired physical media or digital licenses owned personally by the user, in strict compliance with applicable statutory fair use provisions, personal backup exemptions, and local intellectual property laws.
+
+### User Responsibility & Assumption of Risk
+The end-user acknowledges and agrees that:
+- It is solely the end-user's legal responsibility to verify that they possess all necessary licenses, permissions, and rights to transfer, store, and execute any software package, file, or disk image moved using this software.
+- The user is solely responsible for compliance with all applicable municipal, state, national, and international copyright laws, computer security statutes, terms of service, and end-user license agreements (EULAs).
+- Any use of this utility in violation of local laws, terms of service, or copyright acts (such as the DMCA) is strictly prohibited and outside the intended scope of this project.
+
+### Warranty Disclaimer & Limitation of Liability
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS", AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT ARE EXPRESSLY DISCLAIMED. 
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER, AUTHORS, MAINTAINERS, OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; HARDWARE CONSOLE BRICKING, SYSTEM INSTABILITY, BANNING OR RESTRICTIONS FROM NETWORK SERVICES, OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
