@@ -22,7 +22,7 @@ from transfer_core import (MIB, Meter, StopToken, TransferError, make_reader, pr
     find_unar_tool, find_extracted_payload, cleanup_stale_staging_directories, transfer_staged_archive, connect_ftp, close_ftp,
     find_unrar_ps5_payload, send_ps5_payload, generate_unrar_config, fetch_ps5_unrar_log, transfer_ps5_remote_archive,
     DEFAULT_UNRAR_DIR, DEFAULT_UNRAR_CONFIG_PATH, DEFAULT_UNRAR_LOG_PATH, DEFAULT_ETA_HEN_PAYLOAD_PORT,
-    remote_size)
+    remote_size, valid_url)
 from ps5_streamer import Manager, Handler, validated_settings
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
@@ -744,13 +744,19 @@ class Integration(unittest.TestCase):
                 job["detail"] = "Archive extraction failed: Password required"
 
                 # Set password
-                m.action("set_password", job["id"], {"password": "secret_password"})
+                with patch("ps5_streamer.find_unrar_ps5_payload", return_value=None):
+                    m.action("set_password", job["id"], {"password": "secret_password"})
                 self.assertEqual(job["archive_password"], "secret_password")
                 self.assertTrue(job["archive_encrypted"])
                 self.assertTrue(job["staged_extraction"])
                 self.assertTrue(job["decompress"])
                 self.assertEqual(job["state"], "queued")
                 self.assertIn("Password configured", job["detail"])
+
+                # With the PS5 payload available, extraction stays on the console
+                with patch("ps5_streamer.find_unrar_ps5_payload", return_value="unrar_ps5.elf"):
+                    m.action("set_password", job["id"], {"password": "secret_password"})
+                self.assertFalse(job["staged_extraction"])
 
                 # Clear password
                 m.action("set_password", job["id"], {"password": ""})
@@ -1123,6 +1129,20 @@ class Integration(unittest.TestCase):
         # Normal size returns integer
         self.assertEqual(remote_size(FakeFTP(12345), "real.bin"), 12345)
         self.assertEqual(remote_size(FakeFTP(0), "empty.bin"), 0)
+
+class ValidUrl(unittest.TestCase):
+    def test_spaces_encoded_parens_kept(self):
+        self.assertEqual(valid_url("http://h/a b/Game (USA) v1.pkg?x=1 2"),
+                         "http://h/a%20b/Game%20(USA)%20v1.pkg?x=1%202")
+
+    def test_existing_encoding_untouched(self):
+        u = "https://h/Game%20(USA).pkg?a=b%26c"
+        self.assertEqual(valid_url(u), u)
+
+    def test_rejects_bad_scheme(self):
+        with self.assertRaises(TransferError):
+            valid_url("ftp://h/f")
+
 
 if __name__=='__main__':unittest.main()
 

@@ -878,7 +878,10 @@ class Manager:
                     job["archive_password"] = pwd if pwd else None
                     if pwd:
                         job["archive_encrypted"] = True
-                        job["staged_extraction"] = True
+                        # Keep on-console extraction when the PS5 payload is available;
+                        # forced staged (local) extraction needs ~1.5x the archive size in local disk.
+                        mode = str(job.get("extract_mode") or self.settings.get("extract_mode", "ps5")).lower()
+                        job["staged_extraction"] = not (mode == "ps5" and find_unrar_ps5_payload())
                         job["decompress"] = True
                         if job["state"] in ("failed", "paused"):
                             job["state"] = "queued"
