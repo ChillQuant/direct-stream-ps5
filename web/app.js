@@ -1837,6 +1837,49 @@ const updateAddPreview = () => {
   }
 };
 
+// Tracks the most recent landing-page -> direct-link rewrite of #source-urls so it can be undone.
+let resolvedSwap = null;
+
+const refreshVerifyButtonLabel = () => {
+  const btn = $('btn-verify-links');
+  if (!btn) return;
+  const lines = $('source-urls')?.value.trim().split('\n').filter(Boolean) || [];
+  btn.innerHTML = `<svg><use href="#i-check"/></svg> ${lines.length > 1 ? `Verify ${lines.length} links` : 'Verify link'}`;
+};
+
+// Replaces each verified landing-page URL in the source box with its resolved direct link.
+// Assigns .value directly: dispatching 'input' would bump verifyGeneration and discard the
+// result card that is about to be rendered.
+const applyResolvedUrls = (lines, results) => {
+  const byUrl = new Map();
+  (results || []).forEach(r => {
+    if (r && r.ok && r.resolved_url && r.url) byUrl.set(r.url.trim(), String(r.resolved_url).trim());
+  });
+  if (!byUrl.size) return null;
+  const after = lines.map(l => byUrl.get(l.trim()) || l);
+  if (after.join('\n') === lines.join('\n')) return null;
+  const box = $('source-urls');
+  if (!box) return null;
+  resolvedSwap = { before: lines.slice(), after: after.slice() };
+  box.value = after.join('\n');
+  refreshVerifyButtonLabel();
+  updateAddPreview();
+  return resolvedSwap;
+};
+
+const revertResolvedUrls = () => {
+  if (!resolvedSwap) return;
+  const box = $('source-urls');
+  if (box) box.value = resolvedSwap.before.join('\n');
+  resolvedSwap = null;
+  refreshVerifyButtonLabel();
+  updateAddPreview();
+  const row = $('verify-resolved-row');
+  if (row) {
+    row.innerHTML = `<div class="verify-resolved-from">Reverted to the original link. It will be resolved again when the transfer starts.</div>`;
+  }
+};
+
 const resetVerifyStatus = (clearMetadata = false) => {
   const box = $('url-verification-status');
   if (box) {
@@ -1848,12 +1891,10 @@ const resetVerifyStatus = (clearMetadata = false) => {
   if (clearMetadata) {
     for (const k in verifiedMetadata) delete verifiedMetadata[k];
   }
+  resolvedSwap = null;
   const btn = $('btn-verify-links');
-  if (btn) {
-    btn.disabled = false;
-    const lines = $('source-urls')?.value.trim().split('\n').filter(Boolean) || [];
-    btn.innerHTML = `<svg><use href="#i-check"/></svg> ${lines.length > 1 ? `Verify ${lines.length} links` : 'Verify link'}`;
-  }
+  if (btn) btn.disabled = false;
+  refreshVerifyButtonLabel();
 };
 
 let verifyGeneration = 0;
@@ -1913,6 +1954,9 @@ const runVerifyLinks = async () => {
       }
     });
 
+    // Write resolved direct links back into the source box so the queued job uses them.
+    const swapped = applyResolvedUrls(lines, res.results);
+
     if (res.results.length === 1) {
       const item = res.results[0];
       if (item.ok) {
@@ -1931,8 +1975,18 @@ const runVerifyLinks = async () => {
             </div>
             <div class="verify-detail">
               <span class="verify-filename" title="${escaped(item.filename)}">${escaped(item.filename)}</span>
-              ${item.resolved_url ? `<span class="verify-resolved-note" title="${escaped(item.resolved_url)}">Direct stream resolved</span>` : ''}
+              ${item.resolved_url ? `<span class="verify-resolved-note">Direct stream resolved</span>` : ''}
             </div>
+            ${item.resolved_url ? `
+              <div class="verify-resolved-row" id="verify-resolved-row">
+                <div class="verify-resolved-head">
+                  <svg><use href="#i-check"/></svg> Direct link resolved${swapped ? ' and added to the source box' : ''}
+                </div>
+                <div class="verify-resolved-url" title="${escaped(item.resolved_url)}">${escaped(item.resolved_url)}</div>
+                <div class="verify-resolved-from" title="${escaped(item.original_url || item.url)}">Resolved from ${escaped(item.original_url || item.url)}</div>
+                ${swapped ? `<button type="button" class="verify-revert-btn" data-revert-resolved>Revert to original link</button>` : ''}
+              </div>
+            ` : ''}
             ${item.archive_encrypted ? `
               <div style="margin-top: 10px; padding: 10px 12px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 8px; font-size: 12px; color: #93c5fd; line-height: 1.45;">
                 <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
@@ -1979,6 +2033,12 @@ const runVerifyLinks = async () => {
         updateAddPreview();
         return true;
       } else {
+        // The backend raises the host hint AS the error, so show each string once.
+        const hintText = (item.resolve_hint || '').trim();
+        const rawErr = (item.error || '').trim();
+        const errText = (rawErr && rawErr !== hintText)
+          ? rawErr
+          : (hintText ? '' : 'Server rejected connection or link expired');
         box.innerHTML = `
           <div class="verify-card verify-error">
             <div class="verify-head">
@@ -1986,7 +2046,22 @@ const runVerifyLinks = async () => {
                 <svg><use href="#i-alert"/></svg> Verification failed
               </span>
             </div>
-            <div class="verify-error-msg">${escaped(item.error || 'Server rejected connection or link expired')}</div>
+            ${hintText ? `
+              <div class="verify-resolve-hint">
+                <div class="verify-resolve-hint-head">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-alert"/></svg>
+                  This host blocks automatic resolution
+                </div>
+                <div>${escaped(hintText)}</div>
+              </div>
+            ` : ''}
+            ${errText ? `<div class="verify-error-msg">${escaped(errText)}</div>` : ''}
+            ${sourceKind === 'url' ? `
+              <button type="button" class="verify-capture-btn" data-browser-resolve="${escaped(item.original_url || item.url)}">
+                <svg><use href="#i-link"/></svg> Resolve in browser
+              </button>
+              <div class="verify-capture-note">Opens the page in a browser window. Complete the check, press Download, and the direct link is captured automatically — the download itself is blocked.</div>
+            ` : ''}
           </div>
         `;
         updateAddPreview();
@@ -2018,6 +2093,7 @@ const runVerifyLinks = async () => {
                 <span class="verify-part-name" title="${escaped(r.filename || r.url)}">
                   <svg class="part-status-icon ${r.ok ? 'ok' : 'err'}"><use href="${r.ok ? '#i-check' : '#i-alert'}"/></svg>Part ${i + 1}: ${escaped(r.filename || r.url.split('/').pop().split('?')[0] || r.url)}
                 </span>
+                ${r.ok && r.resolved_url ? `<span class="verify-pill resolved" title="${escaped(r.resolved_url)}">Resolved</span>` : ''}
                 <span class="verify-pill ${r.ok ? 'size' : 'range-warn'}">
                   ${r.ok ? escaped(r.size_formatted) : 'Failed'}
                 </span>
@@ -2045,25 +2121,122 @@ const runVerifyLinks = async () => {
     }
     return false;
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      const count = lines.length;
-      btn.innerHTML = `<svg><use href="#i-check"/></svg> ${count > 1 ? `Verify ${count} links` : 'Verify link'}`;
-    }
+    if (btn) btn.disabled = false;
+    refreshVerifyButtonLabel();
   }
 };
 
 $('source-urls')?.addEventListener('input', () => {
   verifyGeneration++;
+  resolvedSwap = null;
   updateAddPreview();
-  const btn = $('btn-verify-links');
-  if (btn) {
-    const lines = $('source-urls')?.value.trim().split('\n').filter(Boolean) || [];
-    btn.innerHTML = `<svg><use href="#i-check"/></svg> ${lines.length > 1 ? `Verify ${lines.length} links` : 'Verify link'}`;
-  }
+  refreshVerifyButtonLabel();
 });
 $('local-path')?.addEventListener('input', updateAddPreview);
 $('btn-verify-links')?.addEventListener('click', runVerifyLinks);
+// --- Browser-assisted capture: the user clears the CAPTCHA, we catch the URL ---
+let captureId = null;
+let captureStop = false;
+
+const renderCaptureState = (title, body, showCancel, skipped, popups) => {
+  const box = $('url-verification-status');
+  if (!box) return;
+  const list = (skipped || []).filter(Boolean);
+  const ads = (popups || []).filter(Boolean);
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="verify-card verify-capture">
+      <div class="verify-head">
+        <span class="verify-badge capture"><span class="verify-spinner"></span> ${escaped(title)}</span>
+      </div>
+      <div class="verify-capture-body">${escaped(body)}</div>
+      ${list.length ? `
+        <div class="verify-capture-skipped">
+          Ignored ${list.length} advert download${list.length === 1 ? '' : 's'}:
+          ${list.map(n => `<code>${escaped(n)}</code>`).join(' ')}
+          — still waiting for the real file.
+        </div>` : ''}
+      ${ads.length ? `
+        <div class="verify-capture-skipped">
+          Closed ${ads.length} advert pop-up${ads.length === 1 ? '' : 's'}:
+          ${ads.map(n => `<code>${escaped(n)}</code>`).join(' ')}
+        </div>` : ''}
+      ${showCancel ? `<button type="button" class="verify-revert-btn" data-cancel-capture>Cancel</button>` : ''}
+    </div>`;
+};
+
+const cancelBrowserCapture = async () => {
+  captureStop = true;
+  if (!captureId) return;
+  try { await api('browser_resolve', { action: 'cancel', id: captureId }); } catch (_) {}
+  captureId = null;
+};
+
+const startBrowserCapture = async landingUrl => {
+  captureStop = false;
+  renderCaptureState('Opening browser…', 'A browser window is opening on the landing page.', true);
+  let res;
+  try {
+    res = await api('browser_resolve', { action: 'start', url: landingUrl });
+  } catch (err) {
+    renderCaptureState('Could not start', err.message || 'Failed to open a browser window.', false);
+    return;
+  }
+  captureId = res.id;
+  renderCaptureState('Waiting for the download link…',
+    'In the browser window: complete the check, then press Download. The link is captured automatically and the download is blocked.', true);
+
+  while (!captureStop) {
+    await new Promise(r => setTimeout(r, 1500));
+    if (captureStop) return;
+    let st;
+    try {
+      st = await api('browser_resolve', { action: 'status', id: captureId });
+    } catch (err) {
+      renderCaptureState('Capture failed', err.message || 'Lost contact with the capture window.', false);
+      captureId = null;
+      return;
+    }
+    if (st.state === 'done' && st.url) {
+      captureId = null;
+      const box = $('source-urls');
+      if (box) {
+        const lines = box.value.split('\n').map(x => x.trim());
+        const idx = lines.findIndex(l => l === landingUrl.trim());
+        if (idx >= 0) lines[idx] = st.url; else lines.push(st.url);
+        box.value = lines.filter(Boolean).join('\n');
+        resolvedSwap = null;
+        refreshVerifyButtonLabel();
+        updateAddPreview();
+      }
+      await runVerifyLinks();
+      return;
+    }
+    if (st.state === 'waiting' && ((st.skipped || []).length || (st.blocked_popups || []).length)) {
+      renderCaptureState('Waiting for the download link…',
+        'In the browser window: complete the check, then press Download. The link is captured automatically and the download is blocked.',
+        true, st.skipped, st.blocked_popups);
+    }
+    if (st.state === 'error' || st.state === 'cancelled') {
+      captureId = null;
+      renderCaptureState(st.state === 'cancelled' ? 'Capture cancelled' : 'Capture failed',
+        st.error || 'No download link was captured.', false, st.skipped, st.blocked_popups);
+      return;
+    }
+  }
+};
+
+$('url-verification-status')?.addEventListener('click', e => {
+  if (e.target.closest('[data-revert-resolved]')) { revertResolvedUrls(); return; }
+  const cap = e.target.closest('[data-browser-resolve]');
+  if (cap) { startBrowserCapture(cap.getAttribute('data-browser-resolve')); return; }
+  if (e.target.closest('[data-cancel-capture]')) {
+    cancelBrowserCapture();
+    renderCaptureState('Capture cancelled', 'The browser window was closed.', false);
+  }
+});
+
+$('add-dialog')?.addEventListener('close', () => { cancelBrowserCapture(); });
 $('add-dialog')?.addEventListener('close', () => resetVerifyStatus(true));
 
 // Forms

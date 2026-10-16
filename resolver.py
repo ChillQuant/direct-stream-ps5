@@ -21,6 +21,55 @@ SUPPORTED_EXTENSIONS = (
 )
 MEDIA_EXT_PATTERN = r'(?:pkg|ffpfsc|exfat|ufs|bin|iso|img|tar|zip|rar|7z|001)'
 PRIMARY_GAME_EXTS = (".ffpfsc", ".exfat", ".ufs", ".pkg", ".iso", ".bin")
+# Executable/installer types that are never a console payload. File hosts routinely
+# show decoy "Download" buttons that hand out adware installers instead of the file,
+# so these are refused no matter which heuristic produced them.
+# NOTE: .pkg is deliberately NOT here -- it is a PlayStation package format.
+INSTALLER_EXTS = (
+    ".exe", ".msi", ".msix", ".appx", ".dmg", ".apk", ".scr", ".bat", ".cmd",
+    ".com", ".vbs", ".ps1", ".jar", ".deb", ".rpm", ".run", ".bin.exe",
+)
+
+
+VIKINGFILE_DOMAIN = re.compile(r"(?:^|\.)(vik(?:ing|1ng)file\.[a-z]{2,})$", re.I)
+
+
+def vikingfile_root(domain: str) -> str:
+    """Return the root VikingFile domain for a host, else "".
+
+    CDN subdomains (s2.vikingfile.com) must send the root site as Referer, so the
+    matched registrable domain is returned rather than the full host.
+    """
+    if not domain:
+        return ""
+    match = VIKINGFILE_DOMAIN.search(domain.split(":")[0].strip().lower())
+    return match.group(1) if match else ""
+
+
+def is_vikingfile_domain(domain: str) -> bool:
+    """True for vikingfile.com and its mirror domains (e.g. vik1ngfile.site)."""
+    return bool(vikingfile_root(domain))
+
+
+def is_installer_url(url: str) -> bool:
+    """True if the URL points at an executable/installer rather than a payload."""
+    if not url or not isinstance(url, str):
+        return False
+    try:
+        path = urllib.parse.urlsplit(url).path.lower()
+    except Exception:
+        return False
+    return any(path.endswith(ext) for ext in INSTALLER_EXTS)
+
+
+AKIRABOX_RESERVED = (
+    "premium", "developers", "blog", "contact-us", "terms", "privacy",
+    "dmca", "login", "register", "offer", "ui", "user", "api", "f", "file",
+    "d", "download", "files", "about", "faq", "support", "pricing",
+)
+JSON_LINK_KEYS = ("url", "link", "download_url", "downloadUrl", "direct_link",
+                  "directLink", "download", "file_url", "fileUrl", "href")
+JSON_LINK_CONTAINERS = ("data", "result", "file", "response", "payload")
 
 
 def pre_resolve_url(url: str) -> str:
@@ -52,12 +101,16 @@ def pre_resolve_url(url: str) -> str:
         host, file_id = m_buzz.group(1), m_buzz.group(2)
         return f"https://{host}/{file_id}/download"
 
-    # 5. AkiraBox: https://akirabox.to/<id>/file or <id> -> https://akirabox.to/api/files/<id>/download
-    m_akira = re.match(r"^https?://(?:www\.)?(?:akirabox\.to|akirabox\.com)/([a-zA-Z0-9_-]+)(?:/(?:file|download))?/?$", url, re.I)
-    if m_akira:
-        file_id = m_akira.group(1)
-        if file_id.lower() not in ("premium", "developers", "blog", "contact-us", "terms", "privacy", "dmca", "login", "register", "offer", "ui", "user", "api"):
-            return f"https://akirabox.to/api/files/{file_id}/download"
+    # 5. AkiraBox: https://akirabox.to/<id>/file, /f/<id>, /file/<id>, /d/<id> or /<id>
+    #    -> https://akirabox.to/api/files/<id>/download (query/fragment tolerated)
+    if not re.search(r"akirabox\.[a-z]+/api/files/", url, re.I):
+        m_akira = re.match(
+            r"^https?://(?:www\.)?(?:akirabox\.to|akirabox\.com)/(?:(?:f|file|files|d|download)/)?([a-zA-Z0-9_-]+)(?:/(?:file|download))?/?(?:[?#].*)?$",
+            url, re.I)
+        if m_akira:
+            file_id = m_akira.group(1)
+            if file_id.lower() not in AKIRABOX_RESERVED:
+                return f"https://akirabox.to/api/files/{file_id}/download"
 
     # 6. FileDitch: https://fileditchfiles.st/... -> https://new.fileditch.com/...
     m_fileditch = re.match(r"^https?://(?:www\.)?fileditchfiles\.st/(?:d/|file/)?([^?#]+)", url, re.I)
@@ -204,8 +257,13 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
         m_cdn = re.search(r'href=["\'](https?://(?:storage|cdn|files)[a-zA-Z0-9.-]*akirabox\.[a-z]+/[^"\']+)["\']', html_text)
         if m_cdn:
             return m_cdn.group(1).replace("&amp;", "&")
-        m_id = re.search(r'/(?:file/)?([a-zA-Z0-9_-]+)(?:/file)?', parsed.path)
-        if m_id and m_id.group(1).lower() not in ("premium", "developers", "blog", "terms", "privacy", "dmca", "login", "register", "offer", "ui", "user", "api"):
+        # Embedded JSON payload (e.g. "download_url": "https:\/\/...") inside an inline script.
+        # Unescape JSON solidus escapes first so the URL pattern still matches.
+        m_json = re.search(r'["\'](?:download_url|downloadUrl|direct_link|directLink|link)["\']\s*:\s*["\'](https?://[^"\']+)["\']', html_text.replace(r"\/", "/"))
+        if m_json:
+            return m_json.group(1).replace("&amp;", "&")
+        m_id = re.search(r'/(?:(?:f|file|files|d|download)/)?([a-zA-Z0-9_-]+)(?:/(?:file|download))?/?$', parsed.path)
+        if m_id and m_id.group(1).lower() not in AKIRABOX_RESERVED:
             return f"https://akirabox.to/api/files/{m_id.group(1)}/download"
 
     # 12. DataNodes (datanodes.to): Extract direct storage/CDN link or file download
@@ -217,8 +275,8 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
         if m_dl:
             return m_dl.group(1).replace("&amp;", "&")
 
-    # 13. VikingFile (vikingfile.com): Extract link from script response or download button
-    if "vikingfile.com" in domain:
+    # 13. VikingFile (vikingfile.com + mirrors): Extract link from script response or download button
+    if is_vikingfile_domain(domain):
         m_link = re.search(r'["\']link["\']:\s*["\'](https?://[^"\']+)["\']', html_text)
         if m_link:
             return m_link.group(1).replace(r"\/", "/").replace("&amp;", "&")
@@ -249,6 +307,8 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
         game_links = re.findall(rf'<a[^>]*href=["\'](/[^"\']+\.{MEDIA_EXT_PATTERN}(?:\?[^"\']*)?)["\']', html_text, re.I)
         game_links = [urllib.parse.urljoin(page_url, l) for l in game_links]
 
+    game_links = [l for l in game_links if not is_installer_url(l)]
+
     if len(game_links) == 1:
         return game_links[0]
     elif len(game_links) > 1:
@@ -260,11 +320,65 @@ def extract_download_link_from_html(page_url: str, html_text: str) -> str | None
         return game_links[0]
 
     # C) Anchor with explicit download attribute
-    m_download = re.search(r'<a[^>]*download(?:\s*=\s*["\'][^"\']*["\'])?[^>]*href=["\'](https?://[^"\']+)["\']', html_text, re.I)
-    if m_download:
-        return urllib.parse.urljoin(page_url, m_download.group(1).replace("&amp;", "&"))
+    for m_download in re.finditer(r'<a[^>]*download(?:\s*=\s*["\'][^"\']*["\'])?[^>]*href=["\'](https?://[^"\']+)["\']', html_text, re.I):
+        candidate = urllib.parse.urljoin(page_url, m_download.group(1).replace("&amp;", "&"))
+        if not is_installer_url(candidate):
+            return candidate
 
     return None
+
+
+def extract_download_link_from_json(page_url: str, body_text: str) -> str | None:
+    """Inspect a JSON API response (e.g. AkiraBox /api/files/<id>/download) for a direct link."""
+    if not body_text or not isinstance(body_text, str):
+        return None
+
+    def _pick(obj, depth: int = 0):
+        if depth > 4:
+            return None
+        if isinstance(obj, str):
+            return obj if obj.startswith(("http://", "https://", "/")) else None
+        if isinstance(obj, list):
+            for entry in obj:
+                found = _pick(entry, depth + 1)
+                if found:
+                    return found
+            return None
+        if not isinstance(obj, dict):
+            return None
+        for key in JSON_LINK_KEYS:
+            val = obj.get(key)
+            if isinstance(val, str) and val.startswith(("http://", "https://", "/")):
+                return val
+        for key in JSON_LINK_CONTAINERS:
+            if key in obj:
+                found = _pick(obj[key], depth + 1)
+                if found:
+                    return found
+        return None
+
+    candidate = None
+    try:
+        import json
+        candidate = _pick(json.loads(body_text))
+    except Exception:
+        candidate = None
+
+    if not candidate:
+        # Truncated or non-standard body: fall back to a direct key scan.
+        # Unescape JSON solidus escapes first so "https:\/\/host" still matches.
+        scan_text = body_text.replace(r"\/", "/")
+        keys = "|".join(JSON_LINK_KEYS)
+        m = re.search(rf'["\'](?:{keys})["\']\s*:\s*["\']((?:https?://|/)[^"\']+)["\']', scan_text)
+        if m:
+            candidate = m.group(1)
+
+    if not candidate:
+        return None
+    candidate = candidate.replace(r"\/", "/").replace("&amp;", "&").strip()
+    if not candidate:
+        return None
+    return urllib.parse.urljoin(page_url, candidate)
 
 
 def parse_filename_from_headers(headers, fallback_url: str = "") -> str:
@@ -362,6 +476,9 @@ def get_captcha_hint_if_applicable(url: str) -> str | None:
         ),
     }
 
+    if is_vikingfile_domain(domain):
+        return hints["vikingfile.com"]
+
     for host_domain, hint in hints.items():
         if host_domain in domain:
             return hint
@@ -387,8 +504,8 @@ def get_request_headers_for_url(url: str, base_headers: dict | None = None) -> d
             headers["Referer"] = "https://datanodes.to/"
         elif "rootz.so" in domain or "alcyone.so" in domain:
             headers["Referer"] = "https://rootz.so/"
-        elif "vikingfile.com" in domain:
-            headers["Referer"] = "https://vikingfile.com/"
+        elif vikingfile_root(domain):
+            headers["Referer"] = f"https://{vikingfile_root(domain)}/"
         elif "akirabox.to" in domain or "akirabox.com" in domain:
             headers["Referer"] = "https://akirabox.to/"
         elif "fileditch" in domain:
@@ -418,6 +535,8 @@ def is_single_connection_host(url: str) -> bool:
     try:
         domain = urllib.parse.urlsplit(url).netloc.lower()
         if any(k in domain for k in ("torbox", "tb-cdn", "real-debrid", "alldebrid", "debrid-link", "premiumize", "pikpak")):
+            return True
+        if is_vikingfile_domain(domain):
             return True
         single_hosts = (
             "datanodes.to",

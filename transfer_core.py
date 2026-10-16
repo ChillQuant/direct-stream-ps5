@@ -24,6 +24,7 @@ from pathlib import Path
 from resolver import (
     pre_resolve_url,
     extract_download_link_from_html,
+    extract_download_link_from_json,
     parse_filename_from_headers,
     get_captcha_hint_if_applicable,
     get_request_headers_for_url,
@@ -194,6 +195,17 @@ def parse_range(headers, start, end, total=None):
     return n
 
 
+def declared_total_size(headers):
+    """Best-effort total size of the resource from Content-Range, else Content-Length."""
+    match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", headers.get("Content-Range", "") or "")
+    if match:
+        return int(match.group(3))
+    try:
+        return int(headers.get("Content-Length") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 @dataclass
 class SourceInfo:
     kind: str
@@ -236,7 +248,7 @@ class SourceInfo:
         return self.kind == "local" or (self.ranges and bool(self.etag or self.modified))
 
 
-def probe_source(kind, location, token, resolve_depth=0, decompress=True):
+def probe_source(kind, location, token, resolve_depth=0, decompress=True, origin=None):
     token.check()
     if kind == "multipart":
         return probe_multipart_source(location, token)
@@ -285,7 +297,9 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
         return SourceInfo("local", path, stat.st_size, True,
             fingerprint=fp, filename=filename)
     location = valid_url(location)
-    orig_url = location
+    # Keep the URL the user actually supplied across every resolution hop: host
+    # classification (single-connection, Referer) must not be lost to a CDN redirect.
+    orig_url = origin or location
     if resolve_depth == 0:
         location = pre_resolve_url(location)
     req_headers = get_request_headers_for_url(location, HEADERS)
@@ -304,7 +318,25 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
     with response:
         token.check()
         h = response.headers
-        if "text/html" in h.get("Content-Type", "").lower():
+        content_type = h.get("Content-Type", "").lower()
+        # JSON API hop (e.g. AkiraBox /api/files/<id>/download answers with a link payload
+        # instead of a redirect). Only treated as a hop for small, non-attachment responses.
+        if ("json" in content_type and resolve_depth < 3
+                and not h.get("Content-Disposition")
+                and declared_total_size(h) < 1_000_000):
+            try:
+                body = response.read(256 * 1024).decode("utf-8", errors="replace")
+                if response.status == 206 or len(body) < 2:
+                    # The probe asked for bytes=0-0 and the server honoured it; refetch in full.
+                    full_req = urllib.request.Request(location, headers=req_headers)
+                    with opener().open(full_req, timeout=20) as full_resp:
+                        body = full_resp.read(256 * 1024).decode("utf-8", errors="replace")
+                resolved = extract_download_link_from_json(response.geturl(), body)
+            except Exception:
+                resolved = None
+            if resolved and resolved != location and resolved != response.geturl():
+                return probe_source(kind, resolved, token, resolve_depth + 1, decompress=decompress, origin=orig_url)
+        if "text/html" in content_type:
             if resolve_depth < 3:
                 try:
                     html_chunk = response.read(256 * 1024).decode("utf-8", errors="replace")
@@ -312,7 +344,7 @@ def probe_source(kind, location, token, resolve_depth=0, decompress=True):
                 except Exception:
                     resolved = None
                 if resolved and resolved != location and resolved != response.geturl():
-                    return probe_source(kind, resolved, token, resolve_depth + 1, decompress=decompress)
+                    return probe_source(kind, resolved, token, resolve_depth + 1, decompress=decompress, origin=orig_url)
             hint = get_captcha_hint_if_applicable(location)
             if hint:
                 raise TransferError(hint)
