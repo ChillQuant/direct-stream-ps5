@@ -291,8 +291,11 @@ class Integration(unittest.TestCase):
             m=Manager(d)
             try:
                 m.configure(self.cfg);m.add_jobs({'items':[{'source':self.url()}]})
-                m.jobs[0]['destination']={k:self.cfg[k] for k in ('host','port','folder','username')}
-                m.configure({**self.cfg,'folder':'/other'});m.action('start')
+                m.jobs[0]['destination']={k:self.cfg[k] for k in ('host','port','username')}
+                m.jobs[0]['destination']['folder']=m.jobs[0].get('folder') or self.cfg['folder']
+                # A different console must trip the guard. (Changing only the global
+                # folder must NOT: the job carries its own folder and never followed it.)
+                m.configure({**self.cfg,'host':'127.0.0.2'});m.action('start')
                 deadline=time.monotonic()+3
                 while m.jobs[0]['state']=='queued' and time.monotonic()<deadline:time.sleep(.02)
                 self.assertEqual(m.jobs[0]['state'],'failed');self.assertIn('destination changed',m.jobs[0]['detail'])

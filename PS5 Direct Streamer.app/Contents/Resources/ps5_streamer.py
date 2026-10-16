@@ -550,7 +550,10 @@ class Manager:
                     is_arch = is_archive_candidate(name) or is_archive_candidate(src)
                     job_extract_mode = data.get("extract_mode") or (self.settings.get("extract_mode", "ps5") if is_arch else "none")
                     is_decomp = bool(data.get("decompress", True)) and job_extract_mode != "none"
-                    archive_pwd = data.get("archive_password") or extract_password_hint(src) or extract_password_hint(name) or ""
+                    user_pwd = data.get("archive_password") or ""
+                    guessed_pwd = extract_password_hint(src) or extract_password_hint(name) or ""
+                    archive_pwd = user_pwd or guessed_pwd
+                    pwd_was_guessed = bool(not user_pwd and guessed_pwd)
                     is_enc = bool(archive_pwd or data.get("archive_encrypted"))
                     staged_ext = (job_extract_mode == "mac") or bool(data.get("staged_extraction", False))
                     if is_enc and not staged_ext and not find_unrar_ps5_payload():
@@ -607,6 +610,7 @@ class Manager:
                         "extract_mode": job_extract_mode,
                         "archive_encrypted": is_enc,
                         "archive_password": archive_pwd,
+                        "archive_password_guessed": pwd_was_guessed,
                         "staged_extraction": staged_ext,
                         "unrar_extract_location": data.get("unrar_extract_location") or self.settings.get("unrar_extract_location", "/data/homebrew"),
                         "unrar_delete_after": bool(data.get("unrar_delete_after", self.settings.get("unrar_delete_after", True))),
@@ -876,6 +880,7 @@ class Manager:
                         raise TransferError("Pause the transfer before updating password.")
                     pwd = (extra or {}).get("password", "")
                     job["archive_password"] = pwd if pwd else None
+                    job["archive_password_guessed"] = False
                     if pwd:
                         job["archive_encrypted"] = True
                         job["staged_extraction"] = True
@@ -886,7 +891,13 @@ class Manager:
                         else:
                             job["detail"] = "Password configured"
                     else:
-                        job["detail"] = "Password cleared"
+                        # Clearing is the fix when the archive has no password, so
+                        # re-queue instead of leaving the job sitting on failed.
+                        if job["state"] in ("failed", "paused"):
+                            job["state"] = "queued"
+                            job["detail"] = "Password cleared · Queued to retry"
+                        else:
+                            job["detail"] = "Password cleared"
                 elif action == "set_extract_mode":
                     if job["id"] == self.current:
                         raise TransferError("Pause the transfer before changing extraction settings.")
@@ -1136,7 +1147,11 @@ class Manager:
                     self.running = False
                     continue
                 cfg = {**self.settings, "password": self.password}
-                destination = {k: cfg[k] for k in ("host", "port", "folder", "username")}
+                # Compare against the folder this job actually targets. Recording the
+                # global folder failed any job with its own destination (e.g. /mnt/usb0)
+                # as soon as the global default changed, which it never followed.
+                destination = {k: cfg[k] for k in ("host", "port", "username")}
+                destination["folder"] = job.get("folder") or cfg["folder"]
                 if job.get("destination") and job["destination"] != destination:
                     job["state"] = "failed"
                     job["detail"] = "PS5 destination changed. Restore the original settings to resume, or Restart for this destination."

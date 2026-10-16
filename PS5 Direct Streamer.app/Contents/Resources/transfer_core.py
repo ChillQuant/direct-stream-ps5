@@ -1482,6 +1482,43 @@ def send_ps5_payload(host, port=9021, elf_path=None, elf_bytes=None, timeout=10)
     return True
 
 
+UNRAR_EXIT_CODES = {
+    0: "success",
+    1: "finished with warnings",
+    2: "a fatal error occurred",
+    3: "checksum error — the uploaded archive is damaged or incomplete",
+    4: "the archive is locked",
+    5: "the console could not write the extracted files (disk full or read-only?)",
+    6: "the console could not open the archive",
+    7: "the payload was given bad options",
+    8: "the console ran out of memory",
+    9: "the console could not create the output files",
+    10: "no files matched inside the archive",
+    11: "wrong archive password",
+}
+
+
+def describe_unrar_failure(code, reason=""):
+    """Turn an unrar exit code into something the user can act on.
+
+    The raw form ("code=11, reason=bad") hid the single most common cause, and the
+    dashboard decides whether to offer its archive-password dialog by matching the
+    failure text — so an unreadable message also withheld the fix.
+    """
+    try:
+        code = int(code)
+    except (TypeError, ValueError):
+        code = -1
+    meaning = UNRAR_EXIT_CODES.get(code)
+    if code == 11:
+        return ("PS5 extraction failed: wrong archive password. Enter the correct "
+                "password on this transfer and resume it — the archive is still on the "
+                "console, so nothing is uploaded again; only the extraction is retried.")
+    if meaning:
+        return f"PS5 extraction failed: {meaning} (unrar code {code})."
+    return f"PS5 extraction failed (code={code}, reason={reason or 'unknown'})."
+
+
 def generate_unrar_config(filename="", archive_location="/data/unrar", extract_location="/data/homebrew",
                           password=None, delete_after=True, progress=10, threads=0, nice=-20, cpu_mask=0):
     """Generates the config.ini content for bizkut/unrar-ps5."""
@@ -2390,7 +2427,7 @@ def transfer_ps5_remote_archive(job, settings, token, report, save):
                             else:
                                 extract_done = True
                                 extract_failed = True
-                                failure_reason = f"Extraction failed (code={code}, reason={reason})"
+                                failure_reason = describe_unrar_failure(code, reason)
                             break
 
                         # Already installed check
@@ -2471,7 +2508,13 @@ def transfer_ps5_remote_archive(job, settings, token, report, save):
                     save()
 
                 if extract_failed:
-                    raise TransferError(f"PS5 unrar extraction failed: {failure_reason}")
+                    note = ""
+                    if ("password" in failure_reason.lower()
+                            and job.get("archive_password_guessed")):
+                        note = (" The password was guessed from the file name "
+                                f"(\"{job.get('archive_password')}\"); if this archive is "
+                                "not protected, clear the password and retry.")
+                    raise TransferError(f"PS5 unrar extraction failed: {failure_reason}{note}")
 
                 # Extraction finished! Check if staging directory still has unnormalized content
                 report("status", "Finalizing game files on PS5...")

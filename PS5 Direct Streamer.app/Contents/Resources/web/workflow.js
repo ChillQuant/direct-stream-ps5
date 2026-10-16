@@ -153,7 +153,7 @@ document.addEventListener('click',async e=>{
 });
 $('recovery-password-form').addEventListener('submit',async e=>{
   e.preventDefault();const button=e.submitter;button.disabled=true;
-  try{await api('action',{action:'set_password',id:recoveryPasswordJob,password:$('recovery-password-input').value});await api('action',{action:'resume',id:recoveryPasswordJob});$('recovery-password-dialog').close();toast('Password saved. Start the queue when you’re ready.');await poll();}catch(err){$('recovery-password-error').textContent=err.message;}finally{button.disabled=false;}
+  try{await api('action',{action:'set_password',id:recoveryPasswordJob,password:$('recovery-password-input').value});await api('action',{action:'resume',id:recoveryPasswordJob});$('recovery-password-dialog').close();toast($('recovery-password-input').value.trim()?'Password saved. Start the queue when you’re ready.':'Password cleared. Start the queue when you’re ready.');await poll();}catch(err){$('recovery-password-error').textContent=err.message;}finally{button.disabled=false;}
 });
 window.workflowDisconnected=function(){if(setupTesting){setupTesting=false;$('setup-result-title').textContent='The app connection was lost.';$('setup-result-copy').textContent='Reopen Direct Stream, then test again. No connection result is available yet.';$('setup-edit').disabled=false;$('setup-finish').hidden=true;}};
 
