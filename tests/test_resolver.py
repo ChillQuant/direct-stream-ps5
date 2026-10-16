@@ -2,6 +2,7 @@ import unittest
 from resolver import (
     pre_resolve_url,
     extract_download_link_from_html,
+    extract_download_link_from_json,
     parse_filename_from_headers,
     get_captcha_hint_if_applicable,
 )
@@ -168,6 +169,96 @@ class TestResolver(unittest.TestCase):
 
         url2 = "https://cdn.example.com/download/hash123?name=stellar_ru_sound.pkg"
         self.assertEqual(parse_filename_from_headers({}, fallback_url=url2), "stellar_ru_sound.pkg")
+
+    def test_akirabox_pre_resolve_url_forms(self):
+        target = "https://akirabox.to/api/files/k0embkKZW3Vb/download"
+        for url in (
+            "https://akirabox.to/k0embkKZW3Vb/file",
+            "https://akirabox.to/k0embkKZW3Vb",
+            "https://www.akirabox.to/k0embkKZW3Vb/",
+            "https://akirabox.to/f/k0embkKZW3Vb",
+            "https://akirabox.to/file/k0embkKZW3Vb",
+            "https://akirabox.to/d/k0embkKZW3Vb",
+            "https://akirabox.to/k0embkKZW3Vb/file?utm_source=x",
+            "https://akirabox.to/k0embkKZW3Vb/download#top",
+            "https://akirabox.com/k0embkKZW3Vb/file",
+        ):
+            self.assertEqual(pre_resolve_url(url), target, url)
+
+    def test_akirabox_pre_resolve_skips_reserved_and_api_paths(self):
+        for url in (
+            "https://akirabox.to/premium",
+            "https://akirabox.to/login",
+            "https://akirabox.to/dmca",
+        ):
+            self.assertEqual(pre_resolve_url(url), url, url)
+
+        already = "https://akirabox.to/api/files/k0embkKZW3Vb/download"
+        self.assertEqual(pre_resolve_url(already), already)
+
+    def test_akirabox_html_embedded_json_link(self):
+        html = '<html><script>window.__DATA__ = {"download_url": "https:\/\/storage1.akirabox.to/dl/Game.pkg?t=9"};</script></html>'
+        res = extract_download_link_from_html("https://akirabox.to/k0embkKZW3Vb/file", html)
+        self.assertEqual(res, "https://storage1.akirabox.to/dl/Game.pkg?t=9")
+
+    def test_json_api_link_extraction(self):
+        page = "https://akirabox.to/api/files/k0embkKZW3Vb/download"
+
+        self.assertEqual(
+            extract_download_link_from_json(page, '{"url": "https://storage1.akirabox.to/a/Game.pkg?t=1"}'),
+            "https://storage1.akirabox.to/a/Game.pkg?t=1",
+        )
+        self.assertEqual(
+            extract_download_link_from_json(page, '{"data": {"link": "/dl/abc"}}'),
+            "https://akirabox.to/dl/abc",
+        )
+        self.assertEqual(
+            extract_download_link_from_json(page, '{"result":{"files":[{"direct_link":"https://cdn.x.to/g.iso"}]}}'),
+            "https://cdn.x.to/g.iso",
+        )
+        # Truncated body with JSON-escaped solidus still resolves via the regex fallback
+        self.assertEqual(
+            extract_download_link_from_json(page, r'{"data": {"download_url": "https:\/\/cdn.x.to\/f.pkg"'),
+            "https://cdn.x.to/f.pkg",
+        )
+        self.assertIsNone(extract_download_link_from_json(page, '{"status":"ok","message":"queued"}'))
+        self.assertIsNone(extract_download_link_from_json(page, "not json at all"))
+        self.assertIsNone(extract_download_link_from_json(page, ""))
+
+    def test_vikingfile_mirror_domains(self):
+        from resolver import (is_vikingfile_domain, is_single_connection_host,
+                              get_captcha_hint_if_applicable, get_request_headers_for_url)
+
+        for host in ("vikingfile.com", "www.vikingfile.com", "vik1ngfile.site",
+                     "s1.vik1ngfile.site", "vikingfile.to"):
+            self.assertTrue(is_vikingfile_domain(host), host)
+        # Look-alikes must not be accepted
+        for host in ("notvikingfile.evil.com", "vikingfile.com.evil.net", "example.com"):
+            self.assertFalse(is_vikingfile_domain(host), host)
+
+        mirror = "https://vik1ngfile.site/f/RYiUWIkchn"
+        self.assertTrue(is_single_connection_host(mirror))
+        self.assertEqual(get_request_headers_for_url(mirror).get("Referer"),
+                         "https://vik1ngfile.site/")
+        hint = get_captcha_hint_if_applicable(mirror)
+        self.assertIsNotNone(hint)
+        self.assertIn("VikingFile", hint)
+
+    def test_installer_links_are_never_returned(self):
+        from resolver import is_installer_url
+
+        for u in ("https://x.to/setup.exe", "https://x.to/a.msi",
+                  "https://x.to/app.apk", "https://x.to/x.dmg"):
+            self.assertTrue(is_installer_url(u), u)
+        # .pkg is a PlayStation package, not an installer
+        for u in ("https://x.to/Game.pkg", "https://x.to/Game.rar",
+                  "https://x.to/d/Game.iso?t=1"):
+            self.assertFalse(is_installer_url(u), u)
+
+        html = ('<a download href="https://ads.example.com/installer.exe">Download</a>'
+                '<a download href="https://cdn.x.to/Game.rar">Get</a>')
+        self.assertEqual(extract_download_link_from_html("https://host.tld/f/abc", html),
+                         "https://cdn.x.to/Game.rar")
 
     def test_captcha_hint(self):
         hint = get_captcha_hint_if_applicable("https://1fichier.com/?abc123xyz")

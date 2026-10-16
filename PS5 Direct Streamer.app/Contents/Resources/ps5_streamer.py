@@ -34,7 +34,14 @@ from transfer_core import (Cancelled, Meter, StopToken, TransferError, close_ftp
     find_unar_tool, cleanup_stale_staging_directories, MIB, HEADERS,
     find_unrar_ps5_payload, send_ps5_payload, generate_unrar_config, fetch_ps5_unrar_log,
     DEFAULT_UNRAR_DIR, DEFAULT_UNRAR_CONFIG_PATH, DEFAULT_UNRAR_LOG_PATH, DEFAULT_ETA_HEN_PAYLOAD_PORT)
-from resolver import pre_resolve_url, detect_multipart_sequence, parse_multipart_info, get_request_headers_for_url
+from browser_capture import CaptureSession, find_browser
+from resolver import (
+    pre_resolve_url,
+    detect_multipart_sequence,
+    parse_multipart_info,
+    get_request_headers_for_url,
+    get_captcha_hint_if_applicable,
+)
 from zip_streamer import is_archive_candidate, inspect_archive, EncryptedArchiveError, extract_password_hint
 
 VERSION = "2.9.1"
@@ -285,6 +292,7 @@ class Manager:
         self.password = ""
         self.jobs = []
         self.logs = []
+        self.captures = {}
         self.running = False
         self.current = None
         self.token = None
@@ -998,6 +1006,53 @@ class Manager:
             self.save()
         return {"ok": True}
 
+    def browser_resolve(self, data):
+        """Open a real browser window so the user can clear a CAPTCHA, then
+        capture the direct download URL the host hands out."""
+        action = str(data.get("action") or "start").strip()
+
+        if action == "start":
+            raw = str(data.get("url") or "").strip()
+            if not raw:
+                raise TransferError("Enter the landing page link first.")
+            target = valid_url(pre_resolve_url(raw)) if raw.startswith(("http://", "https://")) else ""
+            if not target:
+                raise TransferError("Enter a valid http(s) link.")
+            if not find_browser():
+                raise TransferError(
+                    "No Chrome, Edge, Brave or Chromium installation was found. Install one, "
+                    "or copy the direct link from your browser's Downloads tab instead.")
+            with self.lock:
+                # Drop finished sessions and cap concurrent windows.
+                for sid in [k for k, v in self.captures.items()
+                            if v.snapshot()["state"] in ("done", "error", "cancelled")
+                            and time.time() - v.started_at > 300]:
+                    self.captures.pop(sid, None)
+                if sum(1 for v in self.captures.values()
+                       if v.snapshot()["state"] == "waiting") >= 2:
+                    raise TransferError("A browser capture window is already open. Finish or cancel it first.")
+                sid = secrets.token_hex(8)
+                # Navigate to the ORIGINAL page: the pre-resolved API endpoint is
+                # what the CAPTCHA blocks, the landing page is what the user solves.
+                session = CaptureSession(raw)
+                self.captures[sid] = session
+            session.start()
+            snap = session.snapshot()
+            if snap["state"] == "error":
+                raise TransferError(snap["error"])
+            return {"ok": True, "id": sid, **snap}
+
+        sid = str(data.get("id") or "").strip()
+        with self.lock:
+            session = self.captures.get(sid)
+        if not session:
+            raise TransferError("That capture session is no longer active. Start it again.")
+        if action == "cancel":
+            session.cancel()
+        elif action != "status":
+            raise TransferError("Unknown capture action.")
+        return {"ok": True, "id": sid, **session.snapshot()}
+
     def verify_links(self, data):
         raw_urls = data.get("urls")
         if not raw_urls:
@@ -1058,6 +1113,7 @@ class Manager:
                 can_ps5_unrar = bool(find_unrar_ps5_payload())
                 results.append({
                     "url": src,
+                    "original_url": src,
                     "resolved_url": direct_url if direct_url != src else None,
                     "ok": True,
                     "filename": fn_clean,
@@ -1079,8 +1135,10 @@ class Manager:
                 overall_ok = False
                 results.append({
                     "url": src,
+                    "original_url": src,
                     "ok": False,
                     "error": str(e),
+                    "resolve_hint": get_captcha_hint_if_applicable(src),
                 })
 
         return {
@@ -1391,6 +1449,23 @@ class Manager:
         self.save()
 
 
+def build_allowed_hosts(port, extra_host=None):
+    """Host header values the dashboard will answer to.
+
+    The socket still binds 127.0.0.1 only; this allowlist is the DNS-rebinding
+    guard. All three loopback spellings are accepted because users type whichever
+    they please, but any other Host value is rejected.
+    """
+    hosts = {
+        f"127.0.0.1:{port}",
+        f"localhost:{port}",
+        f"[::1]:{port}",
+    }
+    if extra_host:
+        hosts.add(f"{extra_host}:{port}")
+    return hosts
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "PS5Transfer/2"
 
@@ -1406,7 +1481,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if extra_headers:
             for hk, hv in extra_headers.items():
                 self.send_header(hk, hv)
@@ -1570,6 +1645,8 @@ class Handler(BaseHTTPRequestHandler):
                     result = {"paths": paths, "path": paths[0] if paths else "", "picker_unsupported": picker_unsupported and not paths}
             elif route == "/api/verify":
                 result = m.verify_links(data)
+            elif route == "/api/browser_resolve":
+                result = m.browser_resolve(data)
             elif route == "/api/send_payload":
                 host = safe_text(data.get("host") or m.settings.get("host", ""), "PS5 IP", 253)
                 if not host:
@@ -1649,18 +1726,18 @@ def main():
     server.daemon_threads = True
     server.token = secrets.token_urlsafe(32)
     server.manager = Manager(directory)
-    server.allowed_hosts = {f"127.0.0.1:{server.server_port}"}
+    server.allowed_hosts = build_allowed_hosts(server.server_port)
     
     local_url = f"http://127.0.0.1:{server.server_port}/#session={server.token}"
     if args.host == "0.0.0.0":
         lan_ip = get_lan_ip()
         network_url = f"http://{lan_ip}:{server.server_port}/#session={server.token}"
-        server.allowed_hosts.add(f"{lan_ip}:{server.server_port}")
+        server.allowed_hosts |= build_allowed_hosts(server.server_port, lan_ip)
         url = local_url
         print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nLocal URL:   {local_url}\nNetwork URL: {network_url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
     else:
         if args.host != "127.0.0.1":
-            server.allowed_hosts.add(f"{args.host}:{server.server_port}")
+            server.allowed_hosts |= build_allowed_hosts(server.server_port, args.host)
         url = f"http://{args.host}:{server.server_port}/#session={server.token}"
         print(f"DIRECT STREAM FOR PLAYSTATION 5 {VERSION}\nOpen {url}\nUse Quit app in the dashboard to stop the background process.", flush=True)
 
