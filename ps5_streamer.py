@@ -300,7 +300,7 @@ class Manager:
 
     def _load(self):
         try:
-            state = json.loads(self.path.read_text())
+            state = json.loads(self.path.read_text(encoding="utf-8"))
             self.settings = validated_settings(state.get("settings", {}))
             self.settings.pop("password", None)
             self.jobs = state.get("jobs", [])
@@ -324,7 +324,7 @@ class Manager:
         except FileNotFoundError:
             if self.directory == Path.home() / ".ps5-transfer":
                 try:
-                    old = json.loads((Path.home() / ".ps5_streamer.json").read_text())
+                    old = json.loads((Path.home() / ".ps5_streamer.json").read_text(encoding="utf-8"))
                     self.settings.update({"host": str(old.get("ip", "")), "port": int(old.get("port", 1337)),
                                           "folder": old.get("dir", DEFAULTS["folder"])})
                     self.settings = validated_settings(self.settings)
@@ -1638,7 +1638,7 @@ def main():
     lockfile = _lock_instance(directory)
     if lockfile is None:
         try:
-            session = json.loads((directory / "session.json").read_text())
+            session = json.loads((directory / "session.json").read_text(encoding="utf-8"))
             if not args.no_browser:
                 open_browser(session["url"])
             print("DIRECT STREAM FOR PLAYSTATION 5 is already running.", flush=True)
